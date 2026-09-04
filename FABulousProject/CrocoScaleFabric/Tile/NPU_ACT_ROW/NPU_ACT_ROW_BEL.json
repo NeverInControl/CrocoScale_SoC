@@ -1,0 +1,137 @@
+{
+  "creator": "Yosys 0.63+161 (git sha1 5fd39ff3e, clang++ 18.1.8 -fPIC -O3)",
+  "modules": {
+    "NPU_ACT_ROW_BEL": {
+      "attributes": {
+        "top": 1,
+        "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:3.1-32.10"
+      },
+      "ports": {
+        "NPU_ACT_WE": {
+          "direction": "output",
+          "bits": [ 2 ]
+        },
+        "NPU_ACT_ADDR": {
+          "direction": "output",
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10, 11 ]
+        },
+        "NPU_ACT_WDATA": {
+          "direction": "output",
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ]
+        },
+        "NPU_ACT_RDATA": {
+          "direction": "input",
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27 ]
+        },
+        "NPU_WEIGHT_IN": {
+          "direction": "output",
+          "bits": [ 28, 29, 30, 31, 32, 33, 34, 35 ]
+        },
+        "FAB_ACT_WE": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "FAB_ACT_ADDR": {
+          "direction": "input",
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10, 11 ]
+        },
+        "FAB_ACT_WDATA": {
+          "direction": "input",
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ]
+        },
+        "FAB_ACT_RDATA": {
+          "direction": "output",
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27 ]
+        },
+        "FAB_WEIGHT_IN": {
+          "direction": "input",
+          "bits": [ 28, 29, 30, 31, 32, 33, 34, 35 ]
+        }
+      },
+      "cells": {
+      },
+      "netnames": {
+        "FAB_ACT_ADDR": {
+          "hide_name": 0,
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10, 11 ],
+          "attributes": {
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:17.23-17.35"
+          }
+        },
+        "FAB_ACT_RDATA": {
+          "hide_name": 0,
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27 ],
+          "attributes": {
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:19.23-19.36"
+          }
+        },
+        "FAB_ACT_WDATA": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:18.23-18.36"
+          }
+        },
+        "FAB_ACT_WE": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:16.23-16.33"
+          }
+        },
+        "FAB_WEIGHT_IN": {
+          "hide_name": 0,
+          "bits": [ 28, 29, 30, 31, 32, 33, 34, 35 ],
+          "attributes": {
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:20.23-20.36"
+          }
+        },
+        "NPU_ACT_ADDR": {
+          "hide_name": 0,
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10, 11 ],
+          "attributes": {
+            "EXTERNAL": 1,
+            "FABulous": 1,
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:8.48-8.60"
+          }
+        },
+        "NPU_ACT_RDATA": {
+          "hide_name": 0,
+          "bits": [ 20, 21, 22, 23, 24, 25, 26, 27 ],
+          "attributes": {
+            "EXTERNAL": 1,
+            "FABulous": 1,
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:10.48-10.61"
+          }
+        },
+        "NPU_ACT_WDATA": {
+          "hide_name": 0,
+          "bits": [ 12, 13, 14, 15, 16, 17, 18, 19 ],
+          "attributes": {
+            "EXTERNAL": 1,
+            "FABulous": 1,
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:9.48-9.61"
+          }
+        },
+        "NPU_ACT_WE": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "EXTERNAL": 1,
+            "FABulous": 1,
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:7.48-7.58"
+          }
+        },
+        "NPU_WEIGHT_IN": {
+          "hide_name": 0,
+          "bits": [ 28, 29, 30, 31, 32, 33, 34, 35 ],
+          "attributes": {
+            "EXTERNAL": 1,
+            "FABulous": 1,
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v:11.48-11.61"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+# ==============================================================================
+# CrocoScale SoC — .gitignore
+# ==============================================================================
+
+# AI Scratchpad & Notes (kept local, never published to git)
+gemini.md
+.gemini/
+.agents/
+
+# VS Code Artifacts & Local Workspace Configuration
+.vscode/
+*.code-workspace
+
+# Vivado Projects, Temporary Files, Databases & Logs
+*.jou
+*.log
+*.pb
+*.str
+*.vds
+*.dcp
+*.wdb
+.Xil/
+hd_visual/
+vivado_project/
+*.runs/
+*.gen/
+*.sim/
+*.cache/
+*.hw/
+*.ip_user_files/
+
+# Simulation Waveforms & Dumps
+*.vcd
+*.fst
+*.ghw
+dump.vcd
+*.out
+a.out
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+pyenv/
+
+# C / C++ / Build Output
+*.o
+*.obj
+*.exe
+*.so
+*.dll
+build/
+
+# OS Artifacts & Editor Backups
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+

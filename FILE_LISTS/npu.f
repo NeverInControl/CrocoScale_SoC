@@ -1,0 +1,9 @@
+RTL/eFPGA_Subsystem/NPU_complex/sram/sram_bank.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_prng_16bit.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer_lane.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/pe.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/npu_crossbar.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/systolic_array.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/NPU_TOP/npu_top.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_complex_TOP/npu_wrapper.sv

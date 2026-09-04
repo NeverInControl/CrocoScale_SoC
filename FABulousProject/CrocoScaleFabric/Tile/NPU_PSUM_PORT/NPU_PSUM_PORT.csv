@@ -1,0 +1,5 @@
+SuperTILE,NPU_PSUM_PORT,,,,,,,,,,,,,,,,,
+NPU_PSUM_PORT0,NPU_PSUM_PORT1,,,,,,,,,,,,,,,,,
+BEL,./NPU_PSUM_PORT_BEL.v,,,,,,,,
+MATRIX,./NPU_PSUM_PORT_switch_matrix.list,,,,,,,,,,,,,,,,,
+EndSuperTILE,,,,,,,,,,,,,,,,,,
