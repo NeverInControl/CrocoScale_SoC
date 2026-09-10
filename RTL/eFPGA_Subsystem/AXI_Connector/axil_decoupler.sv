@@ -2,7 +2,7 @@
 
 module axil_decoupler_bidir (
     input  wire        clk_i,
-    input  wire        rst_i,
+    input  wire        rstn_i,
 
     input  wire        decouple_req_i,
     input  wire        force_decouple_i,
@@ -107,24 +107,42 @@ module axil_decoupler_bidir (
     reg h2f_b_pending, h2f_r_pending;
     reg f2h_b_pending, f2h_r_pending;
 
-    always @(posedge clk_i) begin
-        if (rst_i) begin
-            h2f_b_pending <= 0; h2f_r_pending <= 0;
-            f2h_b_pending <= 0; f2h_r_pending <= 0;
+    always_ff @(posedge clk_i or negedge rstn_i) begin
+        if (!rstn_i) begin
+            h2f_b_pending <= 1'b0;
+            h2f_r_pending <= 1'b0;
+            f2h_b_pending <= 1'b0;
+            f2h_r_pending <= 1'b0;
         end else begin
             // Host -> Fabric Tracking
-            if (h2f_s_axil_awvalid && h2f_s_axil_awready) h2f_b_pending <= 1;
-            else if (h2f_s_axil_bvalid && h2f_s_axil_bready) h2f_b_pending <= 0;
+            case ({h2f_s_axil_awvalid & h2f_s_axil_awready, h2f_s_axil_bvalid & h2f_s_axil_bready})
+                2'b10: h2f_b_pending <= 1'b1;
+                2'b01: h2f_b_pending <= 1'b0;
+                2'b11: h2f_b_pending <= 1'b1;
+                default: ;
+            endcase
 
-            if (h2f_s_axil_arvalid && h2f_s_axil_arready) h2f_r_pending <= 1;
-            else if (h2f_s_axil_rvalid && h2f_s_axil_rready) h2f_r_pending <= 0;
+            case ({h2f_s_axil_arvalid & h2f_s_axil_arready, h2f_s_axil_rvalid & h2f_s_axil_rready})
+                2'b10: h2f_r_pending <= 1'b1;
+                2'b01: h2f_r_pending <= 1'b0;
+                2'b11: h2f_r_pending <= 1'b1;
+                default: ;
+            endcase
             
             // Fabric -> Host Tracking
-            if (f2h_s_axil_awvalid && f2h_s_axil_awready) f2h_b_pending <= 1;
-            else if (f2h_s_axil_bvalid && f2h_s_axil_bready) f2h_b_pending <= 0;
+            case ({f2h_s_axil_awvalid & f2h_s_axil_awready, f2h_s_axil_bvalid & f2h_s_axil_bready})
+                2'b10: f2h_b_pending <= 1'b1;
+                2'b01: f2h_b_pending <= 1'b0;
+                2'b11: f2h_b_pending <= 1'b1;
+                default: ;
+            endcase
 
-            if (f2h_s_axil_arvalid && f2h_s_axil_arready) f2h_r_pending <= 1;
-            else if (f2h_s_axil_rvalid && f2h_s_axil_rready) f2h_r_pending <= 0;
+            case ({f2h_s_axil_arvalid & f2h_s_axil_arready, f2h_s_axil_rvalid & f2h_s_axil_rready})
+                2'b10: f2h_r_pending <= 1'b1;
+                2'b01: f2h_r_pending <= 1'b0;
+                2'b11: f2h_r_pending <= 1'b1;
+                default: ;
+            endcase
         end
     end
 
@@ -133,8 +151,8 @@ module axil_decoupler_bidir (
     assign dma_active_o  = f2h_b_pending | f2h_r_pending | f2h_s_axil_awvalid | f2h_s_axil_arvalid;
     wire is_safe         = (~host_active_o) & (~dma_active_o);
 
-    always @(posedge clk_i) begin
-        if (rst_i) decoupled_reg <= 1'b0;
+    always_ff @(posedge clk_i or negedge rstn_i) begin
+        if (!rstn_i) decoupled_reg <= 1'b0;
         else if (force_decouple_i) decoupled_reg <= 1'b1;
         else if (decouple_req_i) begin
             if (is_safe) decoupled_reg <= 1'b1;

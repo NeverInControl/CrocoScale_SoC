@@ -56,8 +56,6 @@ RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_IO/S_IO_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_term_RAM_IO/S_term_RAM_IO_switch_matrix.v
-RTL/eFPGA_Subsystem/FABulous/Tile/W_IO/W_IO_ConfigMem.v
-RTL/eFPGA_Subsystem/FABulous/Tile/W_IO/W_IO_switch_matrix.v
 
 # --- Tile Tops ---
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_0/AXIL_S_IO_W_0.v
@@ -84,7 +82,6 @@ RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO/RAM_IO.v
 RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_IO/S_IO.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_term_RAM_IO/S_term_RAM_IO.v
-RTL/eFPGA_Subsystem/FABulous/Tile/W_IO/W_IO.v
 
 # --- Fabric Assembly ---
 RTL/eFPGA_Subsystem/FABulous/Fabric/ConfigFSM.v

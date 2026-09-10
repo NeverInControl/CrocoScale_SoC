@@ -351,6 +351,8 @@ module tb_npu_im2col;
         logic swap_val;
         bit init_bank_b;
         logic signed [7:0] w_slice[8][8];
+        string mem_dir;
+        int fd;
 
         num_ty       = (CONV_H + 15) / 16;
         num_tx       = (CONV_W + 15) / 16;
@@ -371,12 +373,38 @@ module tb_npu_im2col;
         $display("   SRAM Bank Architecture   : 6-Bank Orthogonal Act Mapping (0..5), Dual Ping-Pong PSUM");
         $display("=====================================================================================\n");
 
+        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
+        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            fd = $fopen("im2col_conv3x3_act.mem", "r");
+            if (fd != 0) begin
+                $fclose(fd);
+                mem_dir = "./";
+            end else begin
+                fd = $fopen("../GoldenReference/im2col_conv3x3_act.mem", "r");
+                if (fd != 0) begin
+                    $fclose(fd);
+                    mem_dir = "../GoldenReference/";
+                end else begin
+                    fd = $fopen("TEST_RTL/NPU/GoldenReference/im2col_conv3x3_act.mem", "r");
+                    if (fd != 0) begin
+                        $fclose(fd);
+                        mem_dir = "TEST_RTL/NPU/GoldenReference/";
+                    end else begin
+                        mem_dir = "./";
+                    end
+                end
+            end
+        end
+        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
+            mem_dir = {mem_dir, "/"};
+        end
+
         // Load reference test vectors
-        $readmemh("im2col_conv3x3_act.mem",       fmap_in);
-        $readmemh("im2col_conv3x3_w.mem",         w1_flat);
-        $readmemh("im2col_conv3x3_b.mem",         b1_flat);
-        $readmemh("im2col_conv3x3_cfg.mem",       p1_cfg);
-        $readmemh("im2col_conv3x3_out_quant.mem", gold_l1);
+        $readmemh({mem_dir, "im2col_conv3x3_act.mem"},       fmap_in);
+        $readmemh({mem_dir, "im2col_conv3x3_w.mem"},         w1_flat);
+        $readmemh({mem_dir, "im2col_conv3x3_b.mem"},         b1_flat);
+        $readmemh({mem_dir, "im2col_conv3x3_cfg.mem"},       p1_cfg);
+        $readmemh({mem_dir, "im2col_conv3x3_out_quant.mem"}, gold_l1);
 
         compute_golden_psum_l1();
 

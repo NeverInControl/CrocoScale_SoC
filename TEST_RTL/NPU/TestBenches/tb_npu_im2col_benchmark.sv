@@ -459,6 +459,8 @@ module tb_npu_im2col_benchmark;
         bit row_active_arr [8];
 
         int dma_schedule [144];
+        string mem_dir;
+        int fd;
 
         num_ty       = (CONV_H + 15) / 16;
         num_tx       = (CONV_W + 15) / 16;
@@ -490,19 +492,45 @@ module tb_npu_im2col_benchmark;
         $display("   Pipelining Architecture  : 9-Cycle Wavefront Staggering + Zero-Stall Background DMA");
         $display("=====================================================================================\n");
 
+        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
+        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            fd = $fopen("bench_im2col_act.mem", "r");
+            if (fd != 0) begin
+                $fclose(fd);
+                mem_dir = "./";
+            end else begin
+                fd = $fopen("../GoldenReference/bench_im2col_act.mem", "r");
+                if (fd != 0) begin
+                    $fclose(fd);
+                    mem_dir = "../GoldenReference/";
+                end else begin
+                    fd = $fopen("TEST_RTL/NPU/GoldenReference/bench_im2col_act.mem", "r");
+                    if (fd != 0) begin
+                        $fclose(fd);
+                        mem_dir = "TEST_RTL/NPU/GoldenReference/";
+                    end else begin
+                        mem_dir = "./";
+                    end
+                end
+            end
+        end
+        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
+            mem_dir = {mem_dir, "/"};
+        end
+
         // Verify test vectors exist
-        check_file_exists("bench_im2col_act.mem");
-        check_file_exists("bench_im2col_w.mem");
-        check_file_exists("bench_im2col_b.mem");
-        check_file_exists("bench_im2col_cfg.mem");
-        check_file_exists("bench_im2col_out_quant.mem");
+        check_file_exists({mem_dir, "bench_im2col_act.mem"});
+        check_file_exists({mem_dir, "bench_im2col_w.mem"});
+        check_file_exists({mem_dir, "bench_im2col_b.mem"});
+        check_file_exists({mem_dir, "bench_im2col_cfg.mem"});
+        check_file_exists({mem_dir, "bench_im2col_out_quant.mem"});
 
         // Load reference test vectors
-        $readmemh("bench_im2col_act.mem",       fmap_in);
-        $readmemh("bench_im2col_w.mem",         w1_flat);
-        $readmemh("bench_im2col_b.mem",         b1_flat);
-        $readmemh("bench_im2col_cfg.mem",       p1_cfg);
-        $readmemh("bench_im2col_out_quant.mem", gold_l1);
+        $readmemh({mem_dir, "bench_im2col_act.mem"},       fmap_in);
+        $readmemh({mem_dir, "bench_im2col_w.mem"},         w1_flat);
+        $readmemh({mem_dir, "bench_im2col_b.mem"},         b1_flat);
+        $readmemh({mem_dir, "bench_im2col_cfg.mem"},       p1_cfg);
+        $readmemh({mem_dir, "bench_im2col_out_quant.mem"}, gold_l1);
 
         compute_golden_psum_l1();
 

@@ -86,6 +86,8 @@ module bridge_soc_to_fabric_slave (
                         end
                     end
                 end
+
+                default: ;
             endcase
         end
     end
@@ -101,7 +103,7 @@ module bridge_soc_to_fabric_slave (
     assign fab_wstrb   = cfg_wb_enable ? wb_sel_reg  : soc_wstrb;
     assign fab_wvalid  = cfg_wb_enable ? (state == WB_WRITE || state == WB_READ) : soc_wvalid;
     
-    assign fab_araddr  = cfg_wb_enable ? wb_addr_reg : soc_araddr; // Changed to route addr correctly on reads
+    assign fab_araddr  = cfg_wb_enable ? wb_addr_reg : soc_araddr; // Route address on Wishbone read cycles
     assign fab_arprot  = cfg_wb_enable ? 3'b000      : soc_arprot;
     assign fab_arvalid = cfg_wb_enable ? 1'b0        : soc_arvalid;
     

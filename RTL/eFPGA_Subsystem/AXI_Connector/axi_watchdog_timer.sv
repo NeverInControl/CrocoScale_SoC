@@ -39,6 +39,7 @@ module watchdog_timer #(
         else case ({(ctrl_awvalid_i & ctrl_awready_i & ctrl_wvalid_i & ctrl_wready_i), (ctrl_bvalid_i & ctrl_bready_i)})
             2'b10: ctrl_b_owed <= ctrl_b_owed + 1;
             2'b01: if (ctrl_b_owed > 0) ctrl_b_owed <= ctrl_b_owed - 1;
+            default: ;
         endcase
     end
 
@@ -65,6 +66,7 @@ module watchdog_timer #(
         else case ({(ctrl_arvalid_i & ctrl_arready_i), (ctrl_rvalid_i & ctrl_rready_i)})
             2'b10: ctrl_r_owed <= ctrl_r_owed + 1;
             2'b01: if (ctrl_r_owed > 0) ctrl_r_owed <= ctrl_r_owed - 1;
+            default: ;
         endcase
     end
 

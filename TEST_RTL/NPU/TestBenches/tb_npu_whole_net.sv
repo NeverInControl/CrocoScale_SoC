@@ -735,26 +735,54 @@ module tb_npu_whole_net;
     initial begin
         longint net_start, l_start;
         logic signed [7:0] in_zp, zp_l1, zp_l2, zp_l3, zp_l4;
+        string mem_dir;
+        int fd;
 
         $display("=====================================================================================");
         $display("   NPU 5-LAYER WHOLE-NETWORK REGRESSION (64x64 -> Stride-2 -> 32x32 -> SiLU)         ");
         $display("=====================================================================================");
 
-        check_file_exists("wholenet_in.mem");
-        check_file_exists("wholenet_l1_w.mem");    check_file_exists("wholenet_l1_b.mem");   check_file_exists("wholenet_l1_cfg.mem"); check_file_exists("wholenet_l1_gold.mem");
-        check_file_exists("wholenet_l2_w.mem");    check_file_exists("wholenet_l2_b.mem");   check_file_exists("wholenet_l2_cfg.mem"); check_file_exists("wholenet_l2_gold.mem");
-        check_file_exists("wholenet_l3_w.mem");    check_file_exists("wholenet_l3_b.mem");   check_file_exists("wholenet_l3_cfg.mem"); check_file_exists("wholenet_l3_gold.mem");
-        check_file_exists("wholenet_l4_w.mem");    check_file_exists("wholenet_l4_b.mem");   check_file_exists("wholenet_l4_cfg.mem"); check_file_exists("wholenet_l4_gold.mem");
-        check_file_exists("wholenet_l5_w.mem");    check_file_exists("wholenet_l5_b.mem");   check_file_exists("wholenet_l5_cfg.mem"); check_file_exists("wholenet_l5_gold.mem");
-        check_file_exists("wholenet_l5_lut.mem");
+        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
+        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            fd = $fopen("wholenet_in.mem", "r");
+            if (fd != 0) begin
+                $fclose(fd);
+                mem_dir = "./";
+            end else begin
+                fd = $fopen("../GoldenReference/wholenet_in.mem", "r");
+                if (fd != 0) begin
+                    $fclose(fd);
+                    mem_dir = "../GoldenReference/";
+                end else begin
+                    fd = $fopen("TEST_RTL/NPU/GoldenReference/wholenet_in.mem", "r");
+                    if (fd != 0) begin
+                        $fclose(fd);
+                        mem_dir = "TEST_RTL/NPU/GoldenReference/";
+                    end else begin
+                        mem_dir = "./";
+                    end
+                end
+            end
+        end
+        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
+            mem_dir = {mem_dir, "/"};
+        end
 
-        $readmemh("wholenet_in.mem",      fmap_in);
-        $readmemh("wholenet_l1_w.mem",    w1_flat);  $readmemh("wholenet_l1_b.mem",  b1_flat);  $readmemh("wholenet_l1_cfg.mem",  cfg1); $readmemh("wholenet_l1_gold.mem", gold_l1);
-        $readmemh("wholenet_l2_w.mem",    w2_flat);  $readmemh("wholenet_l2_b.mem",  b2_flat);  $readmemh("wholenet_l2_cfg.mem",  cfg2); $readmemh("wholenet_l2_gold.mem", gold_l2);
-        $readmemh("wholenet_l3_w.mem",    w3_flat);  $readmemh("wholenet_l3_b.mem",  b3_flat);  $readmemh("wholenet_l3_cfg.mem",  cfg3); $readmemh("wholenet_l3_gold.mem", gold_l3);
-        $readmemh("wholenet_l4_w.mem",    w4_flat);  $readmemh("wholenet_l4_b.mem",  b4_flat);  $readmemh("wholenet_l4_cfg.mem",  cfg4); $readmemh("wholenet_l4_gold.mem", gold_l4);
-        $readmemh("wholenet_l5_w.mem",    w5_flat);  $readmemh("wholenet_l5_b.mem",  b5_flat);  $readmemh("wholenet_l5_cfg.mem",  cfg5); $readmemh("wholenet_l5_gold.mem", gold_l5);
-        $readmemh("wholenet_l5_lut.mem",  lut_silu);
+        check_file_exists({mem_dir, "wholenet_in.mem"});
+        check_file_exists({mem_dir, "wholenet_l1_w.mem"});    check_file_exists({mem_dir, "wholenet_l1_b.mem"});   check_file_exists({mem_dir, "wholenet_l1_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l1_gold.mem"});
+        check_file_exists({mem_dir, "wholenet_l2_w.mem"});    check_file_exists({mem_dir, "wholenet_l2_b.mem"});   check_file_exists({mem_dir, "wholenet_l2_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l2_gold.mem"});
+        check_file_exists({mem_dir, "wholenet_l3_w.mem"});    check_file_exists({mem_dir, "wholenet_l3_b.mem"});   check_file_exists({mem_dir, "wholenet_l3_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l3_gold.mem"});
+        check_file_exists({mem_dir, "wholenet_l4_w.mem"});    check_file_exists({mem_dir, "wholenet_l4_b.mem"});   check_file_exists({mem_dir, "wholenet_l4_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l4_gold.mem"});
+        check_file_exists({mem_dir, "wholenet_l5_w.mem"});    check_file_exists({mem_dir, "wholenet_l5_b.mem"});   check_file_exists({mem_dir, "wholenet_l5_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l5_gold.mem"});
+        check_file_exists({mem_dir, "wholenet_l5_lut.mem"});
+
+        $readmemh({mem_dir, "wholenet_in.mem"},      fmap_in);
+        $readmemh({mem_dir, "wholenet_l1_w.mem"},    w1_flat);  $readmemh({mem_dir, "wholenet_l1_b.mem"},  b1_flat);  $readmemh({mem_dir, "wholenet_l1_cfg.mem"},  cfg1); $readmemh({mem_dir, "wholenet_l1_gold.mem"}, gold_l1);
+        $readmemh({mem_dir, "wholenet_l2_w.mem"},    w2_flat);  $readmemh({mem_dir, "wholenet_l2_b.mem"},  b2_flat);  $readmemh({mem_dir, "wholenet_l2_cfg.mem"},  cfg2); $readmemh({mem_dir, "wholenet_l2_gold.mem"}, gold_l2);
+        $readmemh({mem_dir, "wholenet_l3_w.mem"},    w3_flat);  $readmemh({mem_dir, "wholenet_l3_b.mem"},  b3_flat);  $readmemh({mem_dir, "wholenet_l3_cfg.mem"},  cfg3); $readmemh({mem_dir, "wholenet_l3_gold.mem"}, gold_l3);
+        $readmemh({mem_dir, "wholenet_l4_w.mem"},    w4_flat);  $readmemh({mem_dir, "wholenet_l4_b.mem"},  b4_flat);  $readmemh({mem_dir, "wholenet_l4_cfg.mem"},  cfg4); $readmemh({mem_dir, "wholenet_l4_gold.mem"}, gold_l4);
+        $readmemh({mem_dir, "wholenet_l5_w.mem"},    w5_flat);  $readmemh({mem_dir, "wholenet_l5_b.mem"},  b5_flat);  $readmemh({mem_dir, "wholenet_l5_cfg.mem"},  cfg5); $readmemh({mem_dir, "wholenet_l5_gold.mem"}, gold_l5);
+        $readmemh({mem_dir, "wholenet_l5_lut.mem"},  lut_silu);
 
         zp_l1 = $signed(cfg1[0][29:22]);
         zp_l2 = $signed(cfg2[0][29:22]);

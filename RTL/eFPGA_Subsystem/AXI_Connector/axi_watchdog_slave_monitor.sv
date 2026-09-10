@@ -38,10 +38,12 @@ module axi_watchdog_slave_monitor #(
             case ({(awvalid & awready), (bvalid & bready)})
                 2'b10: b_owed <= b_owed + 1;
                 2'b01: if (b_owed > 0) b_owed <= b_owed - 1;
+                default: ;
             endcase
             case ({(arvalid & arready), (rvalid & rready & rlast)})
                 2'b10: r_owed <= r_owed + 1;
                 2'b01: if (r_owed > 0) r_owed <= r_owed - 1;
+                default: ;
             endcase
         end
     end

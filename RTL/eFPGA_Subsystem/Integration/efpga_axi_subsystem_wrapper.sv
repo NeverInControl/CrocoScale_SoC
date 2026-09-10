@@ -131,7 +131,8 @@ module efpga_axi_subsystem_wrapper #(
     // =========================================================================
     // 1. Single eFPGA Fabric Instance
     // =========================================================================
-    eFPGA_top fabric_inst (
+`ifdef ASIC_MACROS
+    eFPGA_top_macro fabric_inst (
         // --- Clocks and Resets ---
         .CLK                 (clk_i),
         .resetn              (rstn_i & ~efpga_soft_reset_i),
@@ -216,6 +217,93 @@ module efpga_axi_subsystem_wrapper #(
         .NPU_WE              (npu_we),
         .NPU_WEIGHT_IN       (npu_weight_in)
     );
+`else
+    eFPGA_top fabric_inst (
+        // --- Clocks and Resets ---
+        .CLK                 (clk_i),
+        .resetn              (rstn_i & ~efpga_soft_reset_i),
+        
+        // --- Configuration Interface ---
+        .SelfWriteData       (efpga_config_data_i),
+        .SelfWriteStrobe     (efpga_config_we_i),
+        .ComActive           (efpga_com_active_o),
+        .Rx                  (1'b1),
+        .s_clk               (1'b0),
+        .s_data              (1'b0),
+        .ReceiveLED          (),
+
+        // --- Generic RAM_IO Wires (East Edge: X=11, Y=1..2) ---
+        .RAM_A_O             (ram_a_o),
+        .RAM_C_O             (ram_c_o),
+        .RAM_D_O             (ram_d_o),
+        .RAM_D_I             (ram_d_i),
+        .Config_accessC      (),
+
+        // --- General Purpose UIO (North & South Edges) ---
+        .UIO_TOP_UIN         (uio_top_uin),
+        .UIO_TOP_UOUT        (uio_top_uout),
+        .UIO_BOT_UIN         (uio_bot_uin),
+        .UIO_BOT_UOUT        (uio_bot_uout),
+
+        // --- Slot 0: AXI-Lite Slave (Control from SoC) ---
+        .AXIL_S_SOC_AWADDR   (ctrl_m_awaddr [9:0]),
+        .AXIL_S_SOC_AWVALID  (ctrl_m_awvalid[0]),
+        .AXIL_S_SOC_AWREADY  (ctrl_m_awready[0]),
+        .AXIL_S_SOC_WDATA    (ctrl_m_wdata  [31:0]),
+        .AXIL_S_SOC_WSTRB    (ctrl_m_wstrb  [3:0]),
+        .AXIL_S_SOC_WVALID   (ctrl_m_wvalid [0]),
+        .AXIL_S_SOC_WREADY   (ctrl_m_wready [0]),
+        .AXIL_S_SOC_BRESP    (ctrl_m_bresp  [1:0]),
+        .AXIL_S_SOC_BVALID   (ctrl_m_bvalid [0]),
+        .AXIL_S_SOC_BREADY   (ctrl_m_bready [0]),
+        .AXIL_S_SOC_ARADDR   (ctrl_m_araddr [9:0]),
+        .AXIL_S_SOC_ARVALID  (ctrl_m_arvalid[0]),
+        .AXIL_S_SOC_ARREADY  (ctrl_m_arready[0]),
+        .AXIL_S_SOC_RDATA    (ctrl_m_rdata  [31:0]),
+        .AXIL_S_SOC_RRESP    (ctrl_m_rresp  [1:0]),
+        .AXIL_S_SOC_RVALID   (ctrl_m_rvalid [0]),
+        .AXIL_S_SOC_RREADY   (ctrl_m_rready [0]),
+
+        // --- Slot 0: AXI-Full Master (DMA to SoC) ---
+        .AXI_M_SOC_AWADDR    (dma_s_awaddr  [31:0]),
+        .AXI_M_SOC_AWLEN     (dma_s_awlen   [7:0]),
+        .AXI_M_SOC_AWSIZE    (dma_s_arsize  [2:0]),
+        .AXI_M_SOC_AWBURST   (dma_s_awburst [1:0]),
+        .AXI_M_SOC_AWVALID   (dma_s_awvalid [0]),
+        .AXI_M_SOC_AWREADY   (dma_s_awready [0]),
+        .AXI_M_SOC_WDATA     (dma_s_wdata   [31:0]),
+        .AXI_M_SOC_WSTRB     (dma_s_wstrb   [3:0]),
+        .AXI_M_SOC_WLAST     (dma_s_wlast   [0]),
+        .AXI_M_SOC_WVALID    (dma_s_wvalid  [0]),
+        .AXI_M_SOC_WREADY    (dma_s_wready  [0]),
+        .AXI_M_SOC_BRESP     (dma_s_bresp   [1:0]),
+        .AXI_M_SOC_BVALID    (dma_s_bvalid  [0]),
+        .AXI_M_SOC_BREADY    (dma_s_bready  [0]),
+        .AXI_M_SOC_ARADDR    (dma_s_araddr  [31:0]),
+        .AXI_M_SOC_ARLEN     (dma_s_arlen   [7:0]),
+        .AXI_M_SOC_ARSIZE    (dma_s_arsize  [2:0]),
+        .AXI_M_SOC_ARBURST   (dma_s_arburst [1:0]),
+        .AXI_M_SOC_ARVALID   (dma_s_arvalid [0]),
+        .AXI_M_SOC_ARREADY   (dma_s_arready [0]),
+        .AXI_M_SOC_RDATA     (dma_s_rdata   [31:0]),
+        .AXI_M_SOC_RRESP     (dma_s_rresp   [1:0]),
+        .AXI_M_SOC_RLAST     (dma_s_rlast   [0]),
+        .AXI_M_SOC_RVALID    (dma_s_rvalid  [0]),
+        .AXI_M_SOC_RREADY    (dma_s_rready  [0]),
+
+        // --- Dedicated NPU Hard Interface Ports ---
+        .NPU_ACT_ADDR        (npu_act_addr),
+        .NPU_ACT_RDATA       (npu_act_rdata),
+        .NPU_ACT_WDATA       (npu_act_wdata),
+        .NPU_ACT_WE          (npu_act_we),
+        .NPU_ADDR            (npu_addr),
+        .NPU_RDATA           (npu_rdata),
+        .NPU_READ_BANK_SEL   (npu_read_bank_sel),
+        .NPU_WDATA           (npu_wdata),
+        .NPU_WE              (npu_we),
+        .NPU_WEIGHT_IN       (npu_weight_in)
+    );
+`endif
 
     // =========================================================================
     // 2. Single NPU Core Instance

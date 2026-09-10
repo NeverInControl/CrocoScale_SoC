@@ -284,7 +284,18 @@ module efpga_subsystem_top #(
     // =========================================================================
     // eFPGA Subsystem Wrapper (Guarded against Icarus Verilog Combinational Loops)
     // =========================================================================
-`ifndef __ICARUS__
+`ifdef __ICARUS__
+    `ifndef EXCLUDE_FPGA
+        `define EXCLUDE_FPGA
+    `endif
+`endif
+`ifdef EXCLUDE_EFPGA
+    `ifndef EXCLUDE_FPGA
+        `define EXCLUDE_FPGA
+    `endif
+`endif
+
+`ifndef EXCLUDE_FPGA
     efpga_axi_subsystem_wrapper #(
         .NUM_SLOTS(NUM_SLOTS),
         .AXI_ID_WIDTH(AXI_ID_WIDTH)

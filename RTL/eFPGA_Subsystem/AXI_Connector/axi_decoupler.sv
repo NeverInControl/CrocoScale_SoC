@@ -99,6 +99,7 @@ module axi_decoupler #(
                 2'b10: ctrl_aw_pending <= 1'b1;
                 2'b01: ctrl_aw_pending <= 1'b0;
                 2'b11: ctrl_aw_pending <= 1'b1; // Safely absorbs overlapping handshakes
+                default: ;
             endcase
             
             // Data Write Tracker
@@ -106,6 +107,7 @@ module axi_decoupler #(
                 2'b10: ctrl_w_pending <= 1'b1;
                 2'b01: ctrl_w_pending <= 1'b0;
                 2'b11: ctrl_w_pending <= 1'b1;
+                default: ;
             endcase
             
             // Address Read Tracker
@@ -113,6 +115,7 @@ module axi_decoupler #(
                 2'b10: ctrl_ar_pending <= 1'b1;
                 2'b01: ctrl_ar_pending <= 1'b0;
                 2'b11: ctrl_ar_pending <= 1'b1;
+                default: ;
             endcase
         end
     end
@@ -137,6 +140,7 @@ module axi_decoupler #(
             2'b10: w_beats_owed <= w_beats_owed + {8'b0, dma_m_axi_awlen} + 1;
             2'b01: if (w_beats_owed > 0) w_beats_owed <= w_beats_owed - 1;
             2'b11: w_beats_owed <= w_beats_owed + {8'b0, dma_m_axi_awlen}; 
+            default: ;
         endcase
     end
 
@@ -146,6 +150,7 @@ module axi_decoupler #(
             2'b10: b_resp_owed <= b_resp_owed + 1;
             2'b01: if (b_resp_owed > 0) b_resp_owed <= b_resp_owed - 1;
             2'b11: b_resp_owed <= b_resp_owed;
+            default: ;
         endcase
     end
 
@@ -155,6 +160,7 @@ module axi_decoupler #(
             2'b10: r_bursts_owed <= r_bursts_owed + 1;
             2'b01: if (r_bursts_owed > 0) r_bursts_owed <= r_bursts_owed - 1;
             2'b11: r_bursts_owed <= r_bursts_owed;
+            default: ;
         endcase
     end
 
@@ -233,15 +239,11 @@ module axi_decoupler #(
     assign ctrl_m_axil_arprot  = ctrl_s_axil_arprot;
 
     // ===================================================================
-    // THE DMA GHOST LATCHES (Fixes Mid-Handshake VALID Drops)
+    // DMA PIPELINE ISOLATION REGISTERS (Clean Async-Reset Implementation)
     // ===================================================================
     // If a Force Decouple triggers while VALID is high and READY is low, 
-    // these registers latch the payload and safely hold VALID high to the 
+    // these registers hold the payload and safely preserve VALID high to the 
     // crossbar until READY arrives, preventing an AXI protocol violation.
-    
-    // ===================================================================
-    // THE DMA GHOST REGISTERS (Clean Async-Reset Implementation)
-    // ===================================================================
 
     // --- AW Channel Ghost ---
     reg                    ghost_awvalid;
@@ -355,11 +357,11 @@ module axi_decoupler #(
     // ===================================================================
     // DMA FLUSHER & FABRIC FIREWALL
     // ===================================================================
-    // Valid Muxing: Ghost Latches preserve handshakes, otherwise raw input.
+    // Valid Muxing: Isolation registers preserve handshakes, otherwise raw input.
     assign dma_m_axi_awvalid = effective_decouple ? ghost_awvalid : dma_s_axi_awvalid;
     assign dma_m_axi_arvalid = effective_decouple ? ghost_arvalid : dma_s_axi_arvalid;
     
-    // The W-Channel mixes the Ghost Latch (for the orphaned beat) and the Flusher
+    // The W-Channel mixes the isolation register (for the orphaned beat) and the flusher
     assign dma_m_axi_wvalid  = effective_decouple ? (ghost_wvalid | (w_beats_owed > 0)) : dma_s_axi_wvalid;
     
     // B and R Responses are caught by the flusher

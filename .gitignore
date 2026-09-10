@@ -2,14 +2,17 @@
 # CrocoScale SoC — .gitignore
 # ==============================================================================
 
-# AI Scratchpad & Notes (kept local, never published to git)
+# AI Scratchpad, Workspace & Notes (kept local, never published to git)
 gemini.md
+gemini_workspace/
+workspace/
 .gemini/
 .agents/
 
 # VS Code Artifacts & Local Workspace Configuration
 .vscode/
 *.code-workspace
+*.workspace
 
 # Vivado Projects, Temporary Files, Databases & Logs
 *.jou

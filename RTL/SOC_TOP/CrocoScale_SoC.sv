@@ -19,10 +19,11 @@ module crocoscale_soc #(
     logic [31:0] con_gpio_out;
     assign gpio_o = con_gpio_out[7:0];
     
-    // 1. Safe Clock Generation (ASIC/FPGA compatible)
+`ifdef VIVADO
+    // Emulation clock divider (100 MHz to 10 MHz) and global clock buffer for Digilent Nexys Video
     logic [2:0] clk_div = 0;
     logic       clk_10mhz_unbuf = 0;
-    logic       clk_10mhz; // Buffered clock
+    logic       clk_10mhz;
 
     always_ff @(posedge clk_i) begin
         if (clk_div == 3'd4) begin
@@ -33,16 +34,23 @@ module crocoscale_soc #(
         end
     end
 
-    // Force clock onto dedicated global routing tree
     BUFG clk_bufg (
         .I(clk_10mhz_unbuf),
         .O(clk_10mhz)
     );
+`else
+    // ASIC and Simulation: clk_i directly drives the internal system clock
+    wire clk_10mhz = clk_i;
+`endif
 
     // ===========================================================================
     // 2. Global Reset Synchronizer (Async Assert, Sync De-assert)
     // ===========================================================================
+`ifdef VIVADO
     (* ASYNC_REG = "TRUE" *) logic rst_sync_0, rst_sync_1;
+`else
+    logic rst_sync_0, rst_sync_1;
+`endif
     
     always_ff @(posedge clk_10mhz or negedge rstn_i) begin
         if (!rstn_i) begin

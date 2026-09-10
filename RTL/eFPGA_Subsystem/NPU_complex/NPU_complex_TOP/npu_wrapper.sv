@@ -69,6 +69,41 @@ module npu_wrapper #(
     wire signed [NUM_PSUM_BANKS-1:0][PSUM_WIDTH-1:0]      npu_psum_wdata;
     wire signed [NUM_PSUM_BANKS-1:0][PSUM_WIDTH-1:0]      psum_sram_rdata;
 
+`ifdef ASIC_MACROS
+    npu_core_macro npu_logic_core (
+        .clk_i              (clk_i),
+        .rst_n              (rst_n),
+        .array_en           (array_en),
+        .psum_systolic_en   (psum_systolic_en),
+        .psum_lut_en        (psum_lut_en),
+        .crossbar_sel       (crossbar_sel),
+        .weight_shift_in    (weight_shift_in),
+        .weight_shift_en    (weight_shift_en),
+        .swap_weights       (swap_weights),
+        .quant_shift_in     (quant_shift_in),
+        .quant_shift_en     (quant_shift_en),
+        .stochastic_round_en(stochastic_round_en),
+        .lfsr_data_out      (lfsr_data_out),
+        .psum_skew_en       (psum_skew_en),
+        .compute_bank_swap  (compute_bank_swap),
+        .psum_A_addr        (psum_A_addr),
+        .psum_A_we          (psum_A_we),
+        .psum_A_wdata       (psum_A_wdata),
+        .psum_A_read_bank_sel(psum_A_read_bank_sel),
+        .psum_A_rdata       (psum_A_rdata),
+        .psum_B_addr        (psum_B_addr),
+        .psum_B_we          (psum_B_we),
+        .psum_B_wdata       (psum_B_wdata),
+        .psum_B_read_bank_sel(psum_B_read_bank_sel),
+        .psum_B_rdata       (psum_B_rdata),
+        .act_sram_rdata     (act_sram_rdata),
+        .psum_sram_rdata    (psum_sram_rdata),
+        .psum_sram_we       (npu_psum_we),
+        .psum_sram_addr     (npu_psum_addr),
+        .psum_sram_wdata    (npu_psum_wdata),
+        .out_act            (out_act)
+    );
+`else
     npu_top #(
         .ARRAY_HEIGHT    (ARRAY_HEIGHT),
         .ARRAY_WIDTH     (ARRAY_WIDTH),
@@ -113,6 +148,7 @@ module npu_wrapper #(
         .psum_sram_wdata    (npu_psum_wdata),
         .out_act            (out_act)
     );
+`endif
 
     genvar i;
     generate

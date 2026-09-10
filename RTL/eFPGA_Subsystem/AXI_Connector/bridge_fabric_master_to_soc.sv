@@ -94,6 +94,8 @@ module bridge_fabric_master_to_soc #(
                         m_state <= IDLE;
                     end
                 end
+
+                default: ;
             endcase
         end
     end

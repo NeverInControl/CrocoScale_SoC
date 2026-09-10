@@ -122,7 +122,7 @@ module efpga_manager #(
     
     // Watchdog MODULE Enables [19:16]
     logic [NUM_SLOTS-1:0] wdog_en_dm, wdog_en_cs, wdog_en_ds, wdog_en_cm;
-    // Watchdog FAULT Latches [20:16]
+    // Watchdog FAULT Status Flags [20:16]
     logic [NUM_SLOTS-1:0] wdog_dm_pr_flag, wdog_dm_to_flag, wdog_cs_pr_flag, wdog_cs_to_flag, wdog_soc_flag;
     
     // TRIMMED PMP STORAGE REGISTERS
@@ -138,21 +138,6 @@ module efpga_manager #(
     assign wb_s_enable_o      = wb_s_enable_reg;
     assign wb_m_enable_o      = wb_m_enable_reg;
     
-    genvar i, r;
-    generate
-        for (i = 0; i < NUM_SLOTS; i++) begin : gen_pmp_out
-            for (r = 0; r < NUM_REGIONS; r++) begin : gen_pmp_out_r
-                assign pmp_base_o[i][r]  = { {(32-MAX_ADDRESS_WIDTH){1'b0}}, pmp_base_addr_reg[i][r], {(ADDR_SHIFT-2){1'b0}}, pmp_base_cfg_reg[i][r] };
-                assign pmp_limit_o[i][r] = { {(32-MAX_ADDRESS_WIDTH){1'b0}}, pmp_limit_addr_reg[i][r], {(ADDR_SHIFT-2){1'b0}}, pmp_limit_cfg_reg[i][r] };
-            end
-            
-            assign decoupler_force_o[i] = dec_force_reg[i] | 
-                                          wdog_dm_pr_flag[i] | wdog_dm_to_flag[i] | wdog_cs_pr_flag[i] | wdog_cs_to_flag[i] | wdog_soc_flag[i] |
-                                          slot_pmp_r_violation_i[i] | pmp_r_flag_reg[i] |
-                                          slot_pmp_w_violation_i[i] | pmp_w_flag_reg[i];
-        end
-    endgenerate
-
     // Watchdog MASKED Combinational Aggregation
     logic [NUM_SLOTS-1:0] raw_dm_pr, raw_dm_to, raw_cs_pr, raw_cs_to, raw_soc;
     always_comb begin
@@ -167,6 +152,22 @@ module efpga_manager #(
                            ((slot_wdog_ds_to_w_i[j] | slot_wdog_ds_to_r_i[j] | slot_wdog_ds_pr_w_i[j] | slot_wdog_ds_pr_r_i[j]) & wdog_en_ds[j]);
         end
     end
+
+    genvar i, r;
+    generate
+        for (i = 0; i < NUM_SLOTS; i++) begin : gen_pmp_out
+            for (r = 0; r < NUM_REGIONS; r++) begin : gen_pmp_out_r
+                assign pmp_base_o[i][r]  = { {(32-MAX_ADDRESS_WIDTH){1'b0}}, pmp_base_addr_reg[i][r], {(ADDR_SHIFT-2){1'b0}}, pmp_base_cfg_reg[i][r] };
+                assign pmp_limit_o[i][r] = { {(32-MAX_ADDRESS_WIDTH){1'b0}}, pmp_limit_addr_reg[i][r], {(ADDR_SHIFT-2){1'b0}}, pmp_limit_cfg_reg[i][r] };
+            end
+            
+            assign decoupler_force_o[i] = dec_force_reg[i] | 
+                                          raw_dm_pr[i] | raw_dm_to[i] | raw_cs_pr[i] | raw_cs_to[i] | raw_soc[i] |
+                                          wdog_dm_pr_flag[i] | wdog_dm_to_flag[i] | wdog_cs_pr_flag[i] | wdog_cs_to_flag[i] | wdog_soc_flag[i] |
+                                          slot_pmp_r_violation_i[i] | pmp_r_flag_reg[i] |
+                                          slot_pmp_w_violation_i[i] | pmp_w_flag_reg[i];
+        end
+    endgenerate
 
     wire axi_write_en = (s_axil_awvalid && s_axil_wvalid && !axi_awready && !axi_wready && !axi_bvalid);
     
@@ -185,6 +186,28 @@ module efpga_manager #(
                 if (s_axil_wstrb[2] && s_axil_wdata[20]) clr_soc[aw_slot_idx]   = 1'b1;
             end
         end
+    end
+
+    // PMP Register Address Decoding & Write Byte-Strobe Staging
+    wire [11:0] pmp_aw_offset     = (local_awaddr[11:0] & 12'hFFC) - 12'h014;
+    wire [7:0]  pmp_aw_region_idx = pmp_aw_offset[10:3];
+
+    wire [11:0] pmp_ar_offset     = (local_araddr[11:0] & 12'hFFC) - 12'h014;
+    wire [7:0]  pmp_ar_region_idx = pmp_ar_offset[10:3];
+
+    logic [31:0] pmp_w_curr_val;
+    logic [31:0] pmp_w_next_val;
+
+    always_comb begin
+        pmp_w_curr_val = 32'b0;
+        if (ENABLE_PMP && (aw_slot_idx < NUM_SLOTS) && (pmp_aw_region_idx < NUM_REGIONS)) begin
+            pmp_w_curr_val = (pmp_aw_offset[2] == 1'b0) ? pmp_base_o[aw_slot_idx][pmp_aw_region_idx]
+                                                        : pmp_limit_o[aw_slot_idx][pmp_aw_region_idx];
+        end
+        pmp_w_next_val[7:0]   = s_axil_wstrb[0] ? s_axil_wdata[7:0]   : pmp_w_curr_val[7:0];
+        pmp_w_next_val[15:8]  = s_axil_wstrb[1] ? s_axil_wdata[15:8]  : pmp_w_curr_val[15:8];
+        pmp_w_next_val[23:16] = s_axil_wstrb[2] ? s_axil_wdata[23:16] : pmp_w_curr_val[23:16];
+        pmp_w_next_val[31:24] = s_axil_wstrb[3] ? s_axil_wdata[31:24] : pmp_w_curr_val[31:24];
     end
 
     // AXI WRITE State Machine
@@ -208,7 +231,7 @@ module efpga_manager #(
         end else begin
             efpga_config_we_o <= 1'b0; com_active_q <= efpga_com_active_i;
             
-            // Fault Latches
+            // Fault Status Flags (Sticky Registers)
             for (int j = 0; j < NUM_SLOTS; j++) begin
                 if (raw_dm_pr[j]) wdog_dm_pr_flag[j] <= 1'b1; else if (clr_dm_pr[j]) wdog_dm_pr_flag[j] <= 1'b0;
                 if (raw_dm_to[j]) wdog_dm_to_flag[j] <= 1'b1; else if (clr_dm_to[j]) wdog_dm_to_flag[j] <= 1'b0;
@@ -227,57 +250,45 @@ module efpga_manager #(
                     case (local_awaddr[11:0] & 12'hFFC) 
                         12'h004: if (s_axil_wstrb[0]) begin soft_reset_reg <= s_axil_wdata[0]; user_design_loaded_reg <= s_axil_wdata[2]; end
                         12'h008: begin config_count_reg <= config_count_reg + 1; efpga_config_data_o <= s_axil_wdata; efpga_config_we_o <= 1'b1; user_design_loaded_reg <= 1'b1; end
+                        default: ;
                     endcase
                 end else begin
                     if (aw_slot_idx < NUM_SLOTS) begin
                         if ((local_awaddr[11:0] & 12'hFFC) < 12'h014) begin
                             case (local_awaddr[11:0] & 12'hFFC)
                                 12'h000: begin 
-                                    if (s_axil_wstrb[0]) begin dec_req_reg[aw_slot_idx] <= s_axil_wdata[0]; dec_force_reg[aw_slot_idx] <= s_axil_wdata[1]; end
-                                    if (s_axil_wstrb[1]) begin
-                                        if (ENABLE_PMP) pmp_g_en_reg[aw_slot_idx] <= s_axil_wdata[8];
-                                    end
-                                    // Hardware Discovery: MODULE Enables
-                                    if (s_axil_wstrb[2]) begin 
-                                        if (ENABLE_WDOG_DMA_MASTER)  wdog_en_dm[aw_slot_idx] <= s_axil_wdata[16];
-                                        if (ENABLE_WDOG_CTRL_SLAVE)  wdog_en_cs[aw_slot_idx] <= s_axil_wdata[17];
-                                        if (ENABLE_WDOG_DMA_SLAVE)   wdog_en_ds[aw_slot_idx] <= s_axil_wdata[18];
-                                        if (ENABLE_WDOG_CTRL_MASTER) wdog_en_cm[aw_slot_idx] <= s_axil_wdata[19];
-                                    end
-                                    if (s_axil_wstrb[3]) begin 
-                                        if (ENABLE_BRIDGE_CTRL) wb_s_enable_reg[aw_slot_idx] <= s_axil_wdata[24]; 
-                                        if (ENABLE_BRIDGE_DMA)  wb_m_enable_reg[aw_slot_idx] <= s_axil_wdata[25]; 
-                                    end
+                                     if (s_axil_wstrb[0]) begin dec_req_reg[aw_slot_idx] <= s_axil_wdata[0]; dec_force_reg[aw_slot_idx] <= s_axil_wdata[1]; end
+                                     if (s_axil_wstrb[1]) begin
+                                         if (ENABLE_PMP) pmp_g_en_reg[aw_slot_idx] <= s_axil_wdata[8];
+                                     end
+                                     // Hardware Discovery: MODULE Enables
+                                     if (s_axil_wstrb[2]) begin 
+                                         if (ENABLE_WDOG_DMA_MASTER)  wdog_en_dm[aw_slot_idx] <= s_axil_wdata[16];
+                                         if (ENABLE_WDOG_CTRL_SLAVE)  wdog_en_cs[aw_slot_idx] <= s_axil_wdata[17];
+                                         if (ENABLE_WDOG_DMA_SLAVE)   wdog_en_ds[aw_slot_idx] <= s_axil_wdata[18];
+                                         if (ENABLE_WDOG_CTRL_MASTER) wdog_en_cm[aw_slot_idx] <= s_axil_wdata[19];
+                                     end
+                                     if (s_axil_wstrb[3]) begin 
+                                         if (ENABLE_BRIDGE_CTRL) wb_s_enable_reg[aw_slot_idx] <= s_axil_wdata[24]; 
+                                         if (ENABLE_BRIDGE_DMA)  wb_m_enable_reg[aw_slot_idx] <= s_axil_wdata[25]; 
+                                     end
                                 end
                                 12'h00C: begin 
-                                    if (s_axil_wstrb[0]) slot_o_top_reg[aw_slot_idx][7:0]   <= s_axil_wdata[7:0];
-                                    if (s_axil_wstrb[1]) slot_o_top_reg[aw_slot_idx][15:8]  <= s_axil_wdata[15:8];
-                                    if (s_axil_wstrb[2]) slot_o_top_reg[aw_slot_idx][23:16] <= s_axil_wdata[23:16];
-                                    if (s_axil_wstrb[3]) slot_o_top_reg[aw_slot_idx][31:24] <= s_axil_wdata[31:24];
+                                     if (s_axil_wstrb[0]) slot_o_top_reg[aw_slot_idx][7:0]   <= s_axil_wdata[7:0];
+                                     if (s_axil_wstrb[1]) slot_o_top_reg[aw_slot_idx][15:8]  <= s_axil_wdata[15:8];
+                                     if (s_axil_wstrb[2]) slot_o_top_reg[aw_slot_idx][23:16] <= s_axil_wdata[23:16];
+                                     if (s_axil_wstrb[3]) slot_o_top_reg[aw_slot_idx][31:24] <= s_axil_wdata[31:24];
                                 end
+                                default: ;
                             endcase
                         end else if (decoupler_is_decoupled_i[aw_slot_idx] && ENABLE_PMP) begin
-                            automatic logic [11:0] pmp_offset = (local_awaddr[11:0] & 12'hFFC) - 12'h014;
-                            automatic logic [7:0]  region_idx = pmp_offset[10:3];
-                            
-                            if (region_idx < NUM_REGIONS) begin
-                                automatic logic [31:0] current_val, next_val;
-                                if (pmp_offset[2] == 1'b0) begin
-                                    current_val = pmp_base_o[aw_slot_idx][region_idx];
-                                    next_val[7:0]   = s_axil_wstrb[0] ? s_axil_wdata[7:0]   : current_val[7:0];
-                                    next_val[15:8]  = s_axil_wstrb[1] ? s_axil_wdata[15:8]  : current_val[15:8];
-                                    next_val[23:16] = s_axil_wstrb[2] ? s_axil_wdata[23:16] : current_val[23:16];
-                                    next_val[31:24] = s_axil_wstrb[3] ? s_axil_wdata[31:24] : current_val[31:24];
-                                    pmp_base_addr_reg[aw_slot_idx][region_idx] <= next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
-                                    pmp_base_cfg_reg[aw_slot_idx][region_idx]  <= next_val[1:0];
+                            if (pmp_aw_region_idx < NUM_REGIONS) begin
+                                if (pmp_aw_offset[2] == 1'b0) begin
+                                    pmp_base_addr_reg[aw_slot_idx][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
+                                    pmp_base_cfg_reg[aw_slot_idx][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
                                 end else begin
-                                    current_val = pmp_limit_o[aw_slot_idx][region_idx];
-                                    next_val[7:0]   = s_axil_wstrb[0] ? s_axil_wdata[7:0]   : current_val[7:0];
-                                    next_val[15:8]  = s_axil_wstrb[1] ? s_axil_wdata[15:8]  : current_val[15:8];
-                                    next_val[23:16] = s_axil_wstrb[2] ? s_axil_wdata[23:16] : current_val[23:16];
-                                    next_val[31:24] = s_axil_wstrb[3] ? s_axil_wdata[31:24] : current_val[31:24];
-                                    pmp_limit_addr_reg[aw_slot_idx][region_idx] <= next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
-                                    pmp_limit_cfg_reg[aw_slot_idx][region_idx]  <= next_val[1:0];
+                                    pmp_limit_addr_reg[aw_slot_idx][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
+                                    pmp_limit_cfg_reg[aw_slot_idx][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
                                 end
                             end
                         end
@@ -327,12 +338,9 @@ module efpga_manager #(
                                 default: axi_rdata <= 32'hBAD00001; 
                             endcase
                         end else if (ENABLE_PMP) begin
-                            automatic logic [11:0] pmp_offset = (local_araddr[11:0] & 12'hFFC) - 12'h014;
-                            automatic logic [7:0]  region_idx = pmp_offset[10:3];
-                            
-                            if (region_idx < NUM_REGIONS) begin
-                                if (pmp_offset[2] == 1'b0) axi_rdata <= pmp_base_o[ar_slot_idx][region_idx];
-                                else                       axi_rdata <= pmp_limit_o[ar_slot_idx][region_idx];
+                            if (pmp_ar_region_idx < NUM_REGIONS) begin
+                                if (pmp_ar_offset[2] == 1'b0) axi_rdata <= pmp_base_o[ar_slot_idx][pmp_ar_region_idx];
+                                else                          axi_rdata <= pmp_limit_o[ar_slot_idx][pmp_ar_region_idx];
                             end else begin
                                 axi_rdata <= 32'hBAD00002;
                             end
