@@ -71,7 +71,15 @@ module efpga_axi_subsystem_wrapper #(
     input  logic                              efpga_soft_reset_i,
     output logic                              efpga_com_active_o,
     output logic [NUM_SLOTS-1:0][31:0]        slot_i_top_o,
-    input  logic [NUM_SLOTS-1:0][31:0]        slot_o_top_i
+    input  logic [NUM_SLOTS-1:0][31:0]        slot_o_top_i,
+
+    // --- External PMOD Padring Interface (24 Wires) ---
+    input  logic [7:0]                        pmod_io_i,
+    output logic [7:0]                        pmod_io_o,
+    output logic [7:0]                        pmod_io_oe_o,
+
+    // --- Fabric User Interrupts (4 Lines) ---
+    output logic [3:0]                        efpga_usr_irq_o
 );
 
     // =========================================================================
@@ -121,8 +129,18 @@ module efpga_axi_subsystem_wrapper #(
     // =========================================================================
     // South-West: Debug I/O (Slot 0)
     assign uio_bot_uin[31:0]   = slot_o_top_i[0];    // DEBUG_OUT (Manager -> eFPGA)
-    assign uio_bot_uin[199:32] = '0;                 // Unused South inputs
     assign slot_i_top_o[0]     = uio_bot_uout[31:0]; // DEBUG_IN  (eFPGA -> Manager)
+
+    // South: PMOD Padring Interface (24 Wires)
+    assign uio_bot_uin[39:32]  = pmod_io_i;          // External PMOD In -> eFPGA
+    assign pmod_io_o           = uio_bot_uout[39:32]; // eFPGA -> PMOD Out
+    assign pmod_io_oe_o        = uio_bot_uout[47:40]; // eFPGA -> PMOD Direction/OE
+
+    // South: Fabric User Interrupts (4 Lines)
+    assign efpga_usr_irq_o     = uio_bot_uout[51:48]; // eFPGA -> SoC IRQ lines
+
+    // Remaining South inputs tied off
+    assign uio_bot_uin[199:40] = '0;                 // Unused South inputs
 
     // North-East: Requantizer Output Stream (NPU -> eFPGA)
     assign uio_top_uin[55:0]   = '0;                 // North-West inputs reserved

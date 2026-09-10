@@ -71,7 +71,10 @@ module efpga_connector #(
     output logic        efpga_soft_reset_o,
     input  logic        efpga_com_active_i,
     (* keep = "true", mark_debug = "true" *) input  logic [NUM_SLOTS-1:0][31:0] slot_i_top_i,
-    (* keep = "true", mark_debug = "true" *) output logic [NUM_SLOTS-1:0][31:0] slot_o_top_o
+    (* keep = "true", mark_debug = "true" *) output logic [NUM_SLOTS-1:0][31:0] slot_o_top_o,
+
+    // Fault Interrupt Output
+    output logic [NUM_SLOTS-1:0] fault_irq_o
 );
 
     // ===================================================================
@@ -128,7 +131,8 @@ module efpga_connector #(
         .slot_wdog_ds_to_w_i(wdog_ds_to_w), .slot_wdog_ds_to_r_i(wdog_ds_to_r), .slot_wdog_ds_pr_w_i(wdog_ds_pr_w), .slot_wdog_ds_pr_r_i(wdog_ds_pr_r),
         
         .pmp_g_en_o(p_g_en), .pmp_base_o(p_base), .pmp_limit_o(p_limit),
-        .wb_s_enable_o(slot_wb_s_en), .wb_m_enable_o(slot_wb_m_en)
+        .wb_s_enable_o(slot_wb_s_en), .wb_m_enable_o(slot_wb_m_en),
+        .slot_fault_irq_o(fault_irq_o)
     );
 
     // ===================================================================

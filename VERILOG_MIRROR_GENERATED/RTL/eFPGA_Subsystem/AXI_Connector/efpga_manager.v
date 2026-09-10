@@ -53,7 +53,8 @@ module efpga_manager (
 	pmp_base_o,
 	pmp_limit_o,
 	wb_s_enable_o,
-	wb_m_enable_o
+	wb_m_enable_o,
+	slot_fault_irq_o
 );
 	reg _sv2v_0;
 	parameter signed [31:0] NUM_SLOTS = 1;
@@ -123,6 +124,7 @@ module efpga_manager (
 	output wire [((NUM_SLOTS * NUM_REGIONS) * 32) - 1:0] pmp_limit_o;
 	output wire [NUM_SLOTS - 1:0] wb_s_enable_o;
 	output wire [NUM_SLOTS - 1:0] wb_m_enable_o;
+	output wire [NUM_SLOTS - 1:0] slot_fault_irq_o;
 	localparam signed [31:0] ADDR_SHIFT = (PAGE_GRANULARITY ? 12 : 2);
 	localparam signed [31:0] COMP_WIDTH = MAX_ADDRESS_WIDTH - ADDR_SHIFT;
 	wire [15:0] local_awaddr = s_axil_awaddr[15:0];
@@ -205,6 +207,7 @@ module efpga_manager (
 				assign pmp_limit_o[((i * NUM_REGIONS) + r) * 32+:32] = {{32 - MAX_ADDRESS_WIDTH {1'b0}}, pmp_limit_addr_reg[((i * NUM_REGIONS) + r) * COMP_WIDTH+:COMP_WIDTH], {ADDR_SHIFT - 2 {1'b0}}, pmp_limit_cfg_reg[((i * NUM_REGIONS) + r) * 2+:2]};
 			end
 			assign decoupler_force_o[i] = (((((((((((((dec_force_reg[i] | raw_dm_pr[i]) | raw_dm_to[i]) | raw_cs_pr[i]) | raw_cs_to[i]) | raw_soc[i]) | wdog_dm_pr_flag[i]) | wdog_dm_to_flag[i]) | wdog_cs_pr_flag[i]) | wdog_cs_to_flag[i]) | wdog_soc_flag[i]) | slot_pmp_r_violation_i[i]) | pmp_r_flag_reg[i]) | slot_pmp_w_violation_i[i]) | pmp_w_flag_reg[i];
+			assign slot_fault_irq_o[i] = (((((pmp_r_flag_reg[i] | pmp_w_flag_reg[i]) | wdog_dm_to_flag[i]) | wdog_dm_pr_flag[i]) | wdog_cs_to_flag[i]) | wdog_cs_pr_flag[i]) | wdog_soc_flag[i];
 		end
 	endgenerate
 	wire axi_write_en = (((s_axil_awvalid && s_axil_wvalid) && !axi_awready) && !axi_wready) && !axi_bvalid;

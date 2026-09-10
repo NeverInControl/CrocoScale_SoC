@@ -454,7 +454,16 @@ module crocoscale_soc #(
         .m_axi_dma_rresp    (s_axi_rresp[1*2 +: NUM_SLOTS*2]),
         .m_axi_dma_rlast    (s_axi_rlast[1 +: NUM_SLOTS]),
         .m_axi_dma_rvalid   (s_axi_rvalid[1 +: NUM_SLOTS]),
-        .m_axi_dma_rready   (s_axi_rready[1 +: NUM_SLOTS])
+        .m_axi_dma_rready   (s_axi_rready[1 +: NUM_SLOTS]),
+
+        // External Padring PMOD Interface (24 Wires)
+        .pmod_io_i          (8'd0),
+        .pmod_io_o          (),
+        .pmod_io_oe_o       (),
+
+        // Interrupt Lines to CPU / SoC (5 Lines)
+        .efpga_usr_irq_o    (),
+        .efpga_fault_irq_o  ()
     );
 
 endmodule

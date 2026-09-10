@@ -92,7 +92,10 @@ module efpga_manager #(
     
     // --- Wishbone Bridge Enables ---
     output logic [NUM_SLOTS-1:0] wb_s_enable_o,
-    output logic [NUM_SLOTS-1:0] wb_m_enable_o 
+    output logic [NUM_SLOTS-1:0] wb_m_enable_o,
+
+    // --- Fault Interrupt Line ---
+    output logic [NUM_SLOTS-1:0] slot_fault_irq_o
 );
 
     localparam int ADDR_SHIFT = PAGE_GRANULARITY ? 12 : 2;
@@ -166,6 +169,10 @@ module efpga_manager #(
                                           wdog_dm_pr_flag[i] | wdog_dm_to_flag[i] | wdog_cs_pr_flag[i] | wdog_cs_to_flag[i] | wdog_soc_flag[i] |
                                           slot_pmp_r_violation_i[i] | pmp_r_flag_reg[i] |
                                           slot_pmp_w_violation_i[i] | pmp_w_flag_reg[i];
+
+            assign slot_fault_irq_o[i]   = pmp_r_flag_reg[i]  | pmp_w_flag_reg[i]  |
+                                          wdog_dm_to_flag[i] | wdog_dm_pr_flag[i] |
+                                          wdog_cs_to_flag[i] | wdog_cs_pr_flag[i] | wdog_soc_flag[i];
         end
     endgenerate
 

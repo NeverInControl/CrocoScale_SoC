@@ -134,7 +134,8 @@ module efpga_connector (
 	efpga_soft_reset_o,
 	efpga_com_active_i,
 	slot_i_top_i,
-	slot_o_top_o
+	slot_o_top_o,
+	fault_irq_o
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] NUM_REGIONS = 2;
@@ -288,6 +289,7 @@ module efpga_connector (
 	input wire efpga_com_active_i;
 	(* keep = "true", mark_debug = "true" *) input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
 	(* keep = "true", mark_debug = "true" *) output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
+	output wire [NUM_SLOTS - 1:0] fault_irq_o;
 	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_req;
 	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_force;
 	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_is_dec;
@@ -384,7 +386,8 @@ module efpga_connector (
 		.pmp_base_o(p_base),
 		.pmp_limit_o(p_limit),
 		.wb_s_enable_o(slot_wb_s_en),
-		.wb_m_enable_o(slot_wb_m_en)
+		.wb_m_enable_o(slot_wb_m_en),
+		.slot_fault_irq_o(fault_irq_o)
 	);
 	genvar _gv_i_1;
 	generate

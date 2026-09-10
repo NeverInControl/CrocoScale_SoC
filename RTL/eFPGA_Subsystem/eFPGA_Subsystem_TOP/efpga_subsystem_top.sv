@@ -93,7 +93,20 @@ module efpga_subsystem_top #(
     input  logic [NUM_SLOTS*2-1:0]              m_axi_dma_rresp,
     input  logic [NUM_SLOTS-1:0]                m_axi_dma_rlast,
     input  logic [NUM_SLOTS-1:0]                m_axi_dma_rvalid,
-    output logic [NUM_SLOTS-1:0]                m_axi_dma_rready
+    output logic [NUM_SLOTS-1:0]                m_axi_dma_rready,
+
+    // =========================================================================
+    // 4. External Padring PMOD Interface (24 Wires)
+    // =========================================================================
+    input  logic [7:0]                          pmod_io_i,
+    output logic [7:0]                          pmod_io_o,
+    output logic [7:0]                          pmod_io_oe_o,
+
+    // =========================================================================
+    // 5. Interrupt Lines to CPU / SoC (5 Lines)
+    // =========================================================================
+    output logic [3:0]                          efpga_usr_irq_o,
+    output logic [NUM_SLOTS-1:0]                efpga_fault_irq_o
 );
 
     // =========================================================================
@@ -278,7 +291,8 @@ module efpga_subsystem_top #(
         .efpga_soft_reset_o  (efpga_soft_reset),
         .efpga_com_active_i  (efpga_com_active),
         .slot_i_top_i        (slot_i_top_arr),
-        .slot_o_top_o        (slot_o_top_arr)
+        .slot_o_top_o        (slot_o_top_arr),
+        .fault_irq_o         (efpga_fault_irq_o)
     );
 
     // =========================================================================
@@ -364,7 +378,12 @@ module efpga_subsystem_top #(
         .efpga_soft_reset_i  (efpga_soft_reset),
         .efpga_com_active_o  (efpga_com_active),
         .slot_i_top_o        (slot_i_top_arr),
-        .slot_o_top_i        (slot_o_top_arr)
+        .slot_o_top_i        (slot_o_top_arr),
+
+        .pmod_io_i           (pmod_io_i),
+        .pmod_io_o           (pmod_io_o),
+        .pmod_io_oe_o        (pmod_io_oe_o),
+        .efpga_usr_irq_o     (efpga_usr_irq_o)
     );
 `else
     assign axil_ctrl_m_awready = {NUM_SLOTS{1'b1}};
@@ -403,6 +422,10 @@ module efpga_subsystem_top #(
 
     assign efpga_com_active    = 1'b0;
     assign slot_i_top_arr      = slot_o_top_arr;
+
+    assign pmod_io_o           = '0;
+    assign pmod_io_oe_o        = '0;
+    assign efpga_usr_irq_o     = '0;
 `endif
 
 endmodule
