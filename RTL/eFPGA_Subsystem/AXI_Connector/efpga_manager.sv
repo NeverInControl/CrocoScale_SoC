@@ -39,7 +39,7 @@
 
 module efpga_manager #(
     parameter int NUM_SLOTS = 1,
-    parameter int NUM_REGIONS = 4,
+    parameter int NUM_REGIONS = 2,
     parameter logic [31:0] HW_VERSION = 32'hFAB00001,
     parameter bit PAGE_GRANULARITY = 1'b1,
     parameter int MAX_ADDRESS_WIDTH = 32,

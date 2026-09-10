@@ -57,7 +57,7 @@ module efpga_manager (
 );
 	reg _sv2v_0;
 	parameter signed [31:0] NUM_SLOTS = 1;
-	parameter signed [31:0] NUM_REGIONS = 4;
+	parameter signed [31:0] NUM_REGIONS = 2;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter [0:0] PAGE_GRANULARITY = 1'b1;
 	parameter signed [31:0] MAX_ADDRESS_WIDTH = 32;

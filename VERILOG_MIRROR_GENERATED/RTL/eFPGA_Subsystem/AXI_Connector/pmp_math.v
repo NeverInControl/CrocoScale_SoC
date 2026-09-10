@@ -15,7 +15,7 @@ module pmp_math (
 	violation_r_o,
 	violation_w_o
 );
-	parameter signed [31:0] NUM_REGIONS = 4;
+	parameter signed [31:0] NUM_REGIONS = 2;
 	parameter [0:0] PAGE_GRANULARITY = 1'b1;
 	parameter signed [31:0] MAX_ADDRESS_WIDTH = 32;
 	input wire g_en_i;

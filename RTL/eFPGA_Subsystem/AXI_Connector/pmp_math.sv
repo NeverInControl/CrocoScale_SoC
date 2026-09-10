@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module pmp_math #(
-    parameter int NUM_REGIONS       = 4,
+    parameter int NUM_REGIONS       = 2,
     parameter bit PAGE_GRANULARITY  = 1'b1, // 1 = 4KB Aligned Pages, 0 = Exact Word Granularity
     parameter int MAX_ADDRESS_WIDTH = 32
 )(
