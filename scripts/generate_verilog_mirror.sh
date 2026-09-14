@@ -7,10 +7,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SRC_RTL="${REPO_ROOT}/RTL"
 SRC_MACROS="${REPO_ROOT}/MACROS"
+SRC_SOFT_LOGIC="${REPO_ROOT}/SOFT_LOGIC"
+SRC_TEST="${REPO_ROOT}/TEST"
 SRC_FLISTS="${REPO_ROOT}/FILE_LISTS"
 OUT_DIR="${REPO_ROOT}/VERILOG_MIRROR_GENERATED"
 OUT_RTL="${OUT_DIR}/RTL"
 OUT_MACROS="${OUT_DIR}/MACROS"
+OUT_SOFT_LOGIC="${OUT_DIR}/SOFT_LOGIC"
+OUT_TEST="${OUT_DIR}/TEST"
 OUT_FLISTS="${OUT_DIR}/FILE_LISTS"
 
 # Ensure ~/.local/bin is in PATH for tools such as sv2v
@@ -54,7 +58,7 @@ IVERILOG_BIN="$(command -v iverilog)"
 
 # Clean and prepare output directory structure
 rm -rf "${OUT_DIR}"
-mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_FLISTS}"
+mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
 
 # Document auto-generated nature of the mirror directory
 cat << 'EOF' > "${OUT_DIR}/README.md"
@@ -66,6 +70,8 @@ cat << 'EOF' > "${OUT_DIR}/README.md"
 > All manual hardware modifications must be made to the golden source files:
 > - SystemVerilog RTL: `RTL/*.sv`
 > - ASIC Subsystem Macros: `MACROS/*.sv` and `MACROS/*.v`
+> - eFPGA Soft-Logic: `SOFT_LOGIC/*.sv`
+> - Verification & Testbenches: `TEST/`
 > - VHDL CPU Complex: `RTL/CPU/*.vhd` and `RTL/Integration/neorv32_axi_wrapper.vhd`
 >
 > Any manual edits made inside this directory will be overwritten on the next generation run.
@@ -126,6 +132,66 @@ if [[ -d "${SRC_MACROS}" ]]; then
     echo "MACROS SystemVerilog transpilation complete."
 fi
 
+# Recreate SOFT_LOGIC directory hierarchy in output mirror
+if [[ -d "${SRC_SOFT_LOGIC}" ]]; then
+    find "${SRC_SOFT_LOGIC}" -type d | while read -r dir; do
+        rel_dir="${dir#"${SRC_SOFT_LOGIC}"}"
+        if [[ -n "${rel_dir}" ]]; then
+            mkdir -p "${OUT_SOFT_LOGIC}${rel_dir}"
+        fi
+    done
+
+    # Passthrough static Verilog source files, headers, and docs in SOFT_LOGIC
+    find "${SRC_SOFT_LOGIC}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.md" \) | while read -r src_file; do
+        rel_path="${src_file#"${SRC_SOFT_LOGIC}/"}"
+        mkdir -p "$(dirname "${OUT_SOFT_LOGIC}/${rel_path}")"
+        cp -p "${src_file}" "${OUT_SOFT_LOGIC}/${rel_path}"
+    done
+
+    # Transpile SystemVerilog sources in SOFT_LOGIC via sv2v
+    echo "Transpiling SOFT_LOGIC SystemVerilog sources via sv2v (${SV2V_BIN})..."
+    find "${SRC_SOFT_LOGIC}" -type f -name "*.sv" | while read -r sv_file; do
+        rel_path="${sv_file#"${SRC_SOFT_LOGIC}/"}"
+        out_v="${OUT_SOFT_LOGIC}/${rel_path%.sv}.v"
+        mkdir -p "$(dirname "${out_v}")"
+        "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+        echo "Transpiled Soft Logic: ${rel_path} -> $(basename "${out_v}")"
+    done
+    echo "SOFT_LOGIC SystemVerilog transpilation complete."
+fi
+
+# Recreate TEST directory hierarchy in output mirror
+if [[ -d "${SRC_TEST}" ]]; then
+    find "${SRC_TEST}" -type d | while read -r dir; do
+        rel_dir="${dir#"${SRC_TEST}"}"
+        if [[ -n "${rel_dir}" ]]; then
+            mkdir -p "${OUT_TEST}${rel_dir}"
+        fi
+    done
+
+    # Passthrough static files, vectors, reference models, and docs in TEST
+    find "${SRC_TEST}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.mem" -o -name "*.hex" -o -name "*.csv" -o -name "*.py" -o -name "*.md" \) | while read -r src_file; do
+        rel_path="${src_file#"${SRC_TEST}/"}"
+        mkdir -p "$(dirname "${OUT_TEST}/${rel_path}")"
+        cp -p "${src_file}" "${OUT_TEST}/${rel_path}"
+    done
+
+    # Transpile or mirror SystemVerilog testbenches via sv2v
+    echo "Transpiling TEST SystemVerilog sources via sv2v (${SV2V_BIN})..."
+    find "${SRC_TEST}" -type f -name "*.sv" | while read -r sv_file; do
+        rel_path="${sv_file#"${SRC_TEST}/"}"
+        out_v="${OUT_TEST}/${rel_path%.sv}.v"
+        mkdir -p "$(dirname "${out_v}")"
+        if "${SV2V_BIN}" "${sv_file}" > "${out_v}" 2>/dev/null; then
+            echo "Transpiled Testbench: ${rel_path} -> $(basename "${out_v}")"
+        else
+            cp -p "${sv_file}" "${out_v}"
+            echo "Mirrored Testbench:   ${rel_path} -> $(basename "${out_v}") (preserved for simulation)"
+        fi
+    done
+    echo "TEST SystemVerilog transpilation complete."
+fi
+
 # Synthesize VHDL NeoRV32 CPU complex into a standalone Verilog module via Yosys GHDL
 VHDL_PKG="${SRC_RTL}/CPU/core/neorv32_package.vhd"
 VHDL_TOP="neorv32_axi_wrapper"
@@ -183,12 +249,12 @@ lec_skipped=0
 inc_dirs=()
 while IFS= read -r dir; do
     inc_dirs+=("-I" "${dir}")
-done < <(find "${SRC_RTL}" "${SRC_MACROS}" -type d ! -path "*/CPU*")
+done < <(find "${SRC_RTL}" "${SRC_MACROS}" "${SRC_SOFT_LOGIC}" -type d ! -path "*/CPU*")
 
 iv_lib_args=()
 while IFS= read -r dir; do
     iv_lib_args+=("-y" "${dir}" "-I" "${dir}")
-done < <(find "${OUT_RTL}" "${OUT_MACROS}" -type d)
+done < <(find "${OUT_RTL}" "${OUT_MACROS}" "${OUT_SOFT_LOGIC}" -type d)
 
 shared_models=()
 while IFS= read -r f; do
@@ -199,6 +265,10 @@ while IFS= read -r sv_file; do
     if [[ "${sv_file}" == "${SRC_MACROS}"* ]]; then
         rel_path="MACROS/${sv_file#"${SRC_MACROS}/"}"
         v_file="${OUT_MACROS}/${sv_file#"${SRC_MACROS}/"}"
+        v_file="${v_file%.sv}.v"
+    elif [[ "${sv_file}" == "${SRC_SOFT_LOGIC}"* ]]; then
+        rel_path="SOFT_LOGIC/${sv_file#"${SRC_SOFT_LOGIC}/"}"
+        v_file="${OUT_SOFT_LOGIC}/${sv_file#"${SRC_SOFT_LOGIC}/"}"
         v_file="${v_file%.sv}.v"
     else
         rel_path="RTL/${sv_file#"${SRC_RTL}/"}"
@@ -251,7 +321,7 @@ while IFS= read -r sv_file; do
         rm -f "${tier2_log}"
     fi
     rm -f "${tier1_log}"
-done < <(find "${SRC_RTL}" "${SRC_MACROS}" -type f -name "*.sv" | sort)
+done < <(find "${SRC_RTL}" "${SRC_MACROS}" "${SRC_SOFT_LOGIC}" -type f -name "*.sv" | sort)
 
 echo ""
 echo "Verification Summary:"
@@ -275,5 +345,23 @@ echo "Running automated Icarus Verilog linter on ASIC macros..."
     "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/macros.f -o /dev/null
 )
 echo "Icarus Verilog lint check passed: ASIC macros elaboration successful."
+
+# Automated post-generation Icarus Verilog lint check on eFPGA soft-logic
+echo "Running automated Icarus Verilog linter on eFPGA soft-logic..."
+(
+    cd "${OUT_DIR}"
+    "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/soft_logic.f -o /dev/null
+)
+echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
+
+# Automated post-generation Icarus Verilog simulation of soft logic controller testbench
+echo "Running automated verification simulation on mirrored soft-logic controller..."
+(
+    cd "${OUT_DIR}"
+    "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_soft_controller.f -s tb_npu_soft_controller -o /tmp/sim_soft_ctrl.vvp
+    vvp /tmp/sim_soft_ctrl.vvp > /dev/null
+    rm -f /tmp/sim_soft_ctrl.vvp
+)
+echo "Icarus Verilog test passed: Mirrored eFPGA soft-logic NPU controller simulation successful."
 
 echo "Verilog mirror generation complete at: ${OUT_DIR}"

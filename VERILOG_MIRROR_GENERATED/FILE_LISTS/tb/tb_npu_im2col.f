@@ -1,3 +1,3 @@
 -f ../npu.f
-TEST_RTL/NPU/TestBenches/tb_npu_im2col.v
+TEST/NPU/TestBenches/tb_npu_im2col.v
 

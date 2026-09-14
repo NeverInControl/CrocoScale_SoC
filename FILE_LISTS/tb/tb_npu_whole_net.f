@@ -1,2 +1,2 @@
 -f ../npu.f
-TEST_RTL/NPU/TestBenches/tb_npu_whole_net.sv
+TEST/NPU/TestBenches/tb_npu_whole_net.sv

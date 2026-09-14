@@ -1,0 +1,272 @@
+module tb_npu_soft_regs;
+	reg clk;
+	reg rst_n;
+	reg [31:0] s_axil_awaddr;
+	reg [2:0] s_axil_awprot;
+	reg s_axil_awvalid;
+	wire s_axil_awready;
+	reg [31:0] s_axil_wdata;
+	reg [3:0] s_axil_wstrb;
+	reg s_axil_wvalid;
+	wire s_axil_wready;
+	wire [1:0] s_axil_bresp;
+	wire s_axil_bvalid;
+	reg s_axil_bready;
+	reg [31:0] s_axil_araddr;
+	reg [2:0] s_axil_arprot;
+	reg s_axil_arvalid;
+	wire s_axil_arready;
+	wire [31:0] s_axil_rdata;
+	wire [1:0] s_axil_rresp;
+	wire s_axil_rvalid;
+	reg s_axil_rready;
+	wire start_pulse_o;
+	wire soft_reset_o;
+	wire [31:0] act_base_o;
+	wire [31:0] weight_base_o;
+	wire [31:0] out_base_o;
+	wire [31:0] bias_base_o;
+	wire [31:0] quant_param_o;
+	wire [31:0] config_o;
+	wire [3:0] usr_irq_o;
+	reg fsm_busy_i;
+	reg fsm_done_i;
+	reg irq_pulse_i;
+	initial clk = 0;
+	always #(5) clk = ~clk;
+	npu_soft_regs dut(
+		.clk_i(clk),
+		.rst_n(rst_n),
+		.s_axil_awaddr(s_axil_awaddr),
+		.s_axil_awprot(s_axil_awprot),
+		.s_axil_awvalid(s_axil_awvalid),
+		.s_axil_awready(s_axil_awready),
+		.s_axil_wdata(s_axil_wdata),
+		.s_axil_wstrb(s_axil_wstrb),
+		.s_axil_wvalid(s_axil_wvalid),
+		.s_axil_wready(s_axil_wready),
+		.s_axil_bresp(s_axil_bresp),
+		.s_axil_bvalid(s_axil_bvalid),
+		.s_axil_bready(s_axil_bready),
+		.s_axil_araddr(s_axil_araddr),
+		.s_axil_arprot(s_axil_arprot),
+		.s_axil_arvalid(s_axil_arvalid),
+		.s_axil_arready(s_axil_arready),
+		.s_axil_rdata(s_axil_rdata),
+		.s_axil_rresp(s_axil_rresp),
+		.s_axil_rvalid(s_axil_rvalid),
+		.s_axil_rready(s_axil_rready),
+		.start_pulse_o(start_pulse_o),
+		.soft_reset_o(soft_reset_o),
+		.act_base_o(act_base_o),
+		.weight_base_o(weight_base_o),
+		.out_base_o(out_base_o),
+		.bias_base_o(bias_base_o),
+		.quant_param_o(quant_param_o),
+		.config_o(config_o),
+		.usr_irq_o(usr_irq_o),
+		.fsm_busy_i(fsm_busy_i),
+		.fsm_done_i(fsm_done_i),
+		.irq_pulse_i(irq_pulse_i)
+	);
+	task automatic axil_write;
+		input reg [31:0] addr;
+		input reg [31:0] data;
+		begin
+			@(posedge clk)
+				;
+			#(1)
+				;
+			s_axil_awaddr = addr;
+			s_axil_awvalid = 1'b1;
+			s_axil_wdata = data;
+			s_axil_wstrb = 4'hf;
+			s_axil_wvalid = 1'b1;
+			s_axil_bready = 1'b1;
+			fork
+				begin
+					while (!s_axil_awready) @(posedge clk)
+						;
+					#(1)
+						;
+					s_axil_awvalid = 1'b0;
+				end
+				begin
+					while (!s_axil_wready) @(posedge clk)
+						;
+					#(1)
+						;
+					s_axil_wvalid = 1'b0;
+				end
+			join
+			while (!s_axil_bvalid) @(posedge clk)
+				;
+			@(posedge clk)
+				;
+			#(1)
+				;
+			s_axil_bready = 1'b0;
+		end
+	endtask
+	task automatic axil_read;
+		input reg [31:0] addr;
+		output reg [31:0] data;
+		begin
+			@(posedge clk)
+				;
+			#(1)
+				;
+			s_axil_araddr = addr;
+			s_axil_arvalid = 1'b1;
+			s_axil_rready = 1'b0;
+			while (!s_axil_arready) @(posedge clk)
+				;
+			#(1)
+				;
+			s_axil_arvalid = 1'b0;
+			while (!s_axil_rvalid) @(posedge clk)
+				;
+			#(1)
+				;
+			data = s_axil_rdata;
+			s_axil_rready = 1'b1;
+			@(posedge clk)
+				;
+			#(1)
+				;
+			s_axil_rready = 1'b0;
+		end
+	endtask
+	reg signed [31:0] errors = 0;
+	reg [31:0] rdata;
+	initial begin
+		$display("\n==========================================================");
+		$display(">>> Starting Unit Test: npu_soft_regs (AXI-Lite CSR) <<<");
+		$display("==========================================================");
+		rst_n = 0;
+		s_axil_awaddr = 1'sb0;
+		s_axil_awprot = 1'sb0;
+		s_axil_awvalid = 1'sb0;
+		s_axil_wdata = 1'sb0;
+		s_axil_wstrb = 1'sb0;
+		s_axil_wvalid = 1'sb0;
+		s_axil_bready = 1'sb0;
+		s_axil_araddr = 1'sb0;
+		s_axil_arprot = 1'sb0;
+		s_axil_arvalid = 1'sb0;
+		s_axil_rready = 1'sb0;
+		fsm_busy_i = 1'sb0;
+		fsm_done_i = 1'sb0;
+		irq_pulse_i = 1'sb0;
+		#(30)
+			;
+		@(negedge clk)
+			;
+		rst_n = 1;
+		#(30)
+			;
+		$display("[Test 1] Checking reset defaults...");
+		axil_read(32'h00000008, rdata);
+		if (rdata !== 32'h00001000) begin
+			$display("   [ERROR] ACT_BASE expected 0x00001000, got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_read(32'h00000004, rdata);
+		if (rdata !== 32'h00000000) begin
+			$display("   [ERROR] STATUS expected 0x0, got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		$display("[Test 2] Testing MMIO register write and readback...");
+		axil_write(32'h00000008, 32'ha0001234);
+		axil_read(32'h00000008, rdata);
+		if ((rdata !== 32'ha0001234) || (act_base_o !== 32'ha0001234)) begin
+			$display("   [ERROR] ACT_BASE write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_write(32'h0000000c, 32'hb0005678);
+		axil_read(32'h0000000c, rdata);
+		if ((rdata !== 32'hb0005678) || (weight_base_o !== 32'hb0005678)) begin
+			$display("   [ERROR] WEIGHT_BASE write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_write(32'h00000010, 32'hc0009abc);
+		axil_read(32'h00000010, rdata);
+		if ((rdata !== 32'hc0009abc) || (out_base_o !== 32'hc0009abc)) begin
+			$display("   [ERROR] OUT_BASE write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_write(32'h00000014, 32'hd0001357);
+		axil_read(32'h00000014, rdata);
+		if ((rdata !== 32'hd0001357) || (bias_base_o !== 32'hd0001357)) begin
+			$display("   [ERROR] BIAS_BASE write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_write(32'h00000018, 32'h400f0001);
+		axil_read(32'h00000018, rdata);
+		if ((rdata !== 32'h400f0001) || (quant_param_o !== 32'h400f0001)) begin
+			$display("   [ERROR] QUANT_PARAM write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axil_write(32'h0000001c, 32'h00000001);
+		axil_read(32'h0000001c, rdata);
+		if ((rdata !== 32'h00000001) || (config_o !== 32'h00000001)) begin
+			$display("   [ERROR] CONFIG write/read mismatch: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		$display("[Test 3] Testing START pulse generation and self-clearing...");
+		axil_write(32'h00000000, 32'h00000001);
+		axil_read(32'h00000000, rdata);
+		if (rdata[0] !== 1'b0) begin
+			$display("   [ERROR] CTRL[0] (START) did not self-clear! Value: 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		$display("[Test 4] Testing hardware status tracking...");
+		fsm_busy_i = 1'b1;
+		fsm_done_i = 1'b0;
+		#(10)
+			;
+		axil_read(32'h00000004, rdata);
+		if (rdata !== 32'h00000001) begin
+			$display("   [ERROR] STATUS expected busy=1, done=0 (0x1), got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		fsm_busy_i = 1'b0;
+		fsm_done_i = 1'b1;
+		#(10)
+			;
+		axil_read(32'h00000004, rdata);
+		if (rdata !== 32'h00000002) begin
+			$display("   [ERROR] STATUS expected busy=0, done=1 (0x2), got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		$display("[Test 5] Testing sticky IRQ latching and Write-1-to-Clear...");
+		@(posedge clk)
+			;
+		irq_pulse_i <= 1'b1;
+		@(posedge clk)
+			;
+		irq_pulse_i <= 1'b0;
+		#(20)
+			;
+		axil_read(32'h00000020, rdata);
+		if (rdata[0] !== 1'b1) begin
+			$display("   [ERROR] IRQ_STATUS expected 1 after pulse, got %0d", rdata[0]);
+			errors = errors + 1;
+		end
+		axil_write(32'h00000020, 32'h00000001);
+		axil_read(32'h00000020, rdata);
+		if (rdata[0] !== 1'b0) begin
+			$display("   [ERROR] IRQ_STATUS did not clear on W1C, got %0d", rdata[0]);
+			errors = errors + 1;
+		end
+		$display("----------------------------------------------------------");
+		if (errors == 0)
+			$display(">>> SUCCESS: npu_soft_regs Unit Test Passed 100%%! <<<");
+		else
+			$display(">>> FAILURE: %0d Errors Detected in npu_soft_regs! <<<", errors);
+		$display("==========================================================\n");
+		#(50)
+			;
+		$finish;
+	end
+endmodule

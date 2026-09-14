@@ -504,10 +504,10 @@ module tb_npu_im2col_benchmark;
                     $fclose(fd);
                     mem_dir = "../GoldenReference/";
                 end else begin
-                    fd = $fopen("TEST_RTL/NPU/GoldenReference/bench_im2col_act.mem", "r");
+                    fd = $fopen("TEST/NPU/GoldenReference/bench_im2col_act.mem", "r");
                     if (fd != 0) begin
                         $fclose(fd);
-                        mem_dir = "TEST_RTL/NPU/GoldenReference/";
+                        mem_dir = "TEST/NPU/GoldenReference/";
                     end else begin
                         mem_dir = "./";
                     end

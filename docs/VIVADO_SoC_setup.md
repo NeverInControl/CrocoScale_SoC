@@ -120,7 +120,7 @@ Rather than copying `.mem` files into the Vivado project or hardcoding machine-s
 1. Command-line plusarg: `+MEM_DIR=<path>`
 2. Local working directory: `./` (standard when running directly inside `GoldenReference/`)
 3. Relative path: `../GoldenReference/` (standard when running from `TestBenches/`)
-4. Root path: `TEST_RTL/NPU/GoldenReference/` (standard when running from repo root)
+4. Root path: `TEST/NPU/GoldenReference/` (standard when running from repo root)
 
 ### Dynamic Vivado Integration (Zero Git Leaks):
 In Vivado, pass the path dynamically to XSim by querying the repository layout at runtime:

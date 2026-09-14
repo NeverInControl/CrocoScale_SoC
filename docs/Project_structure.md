@@ -12,8 +12,8 @@
 * **`FILE_LISTS/`**: Hierarchical file lists (`*.f`).
   * Provides isolated build scopes for individual subsystems (`npu.f`, `efpga_subsystem.f`, `soc.f`, `fabulous.f`).
 * **`scripts/`**: Project automation, transpilation runners, and verification scripts.
-* **`docs/`**: Architectural documentation, Vivado FPGA emulation guides, and toolchain setup instructions.
-* **`TEST_RTL/`**: Testbenches, verification suites, and software golden reference models.
+* **`SOFT_LOGIC/`**: eFPGA soft-logic accelerators and controllers (e.g. NPU soft-logic controller).
+* **`TEST/`**: Testbenches, verification suites, and software golden reference models.
 
 ---
 

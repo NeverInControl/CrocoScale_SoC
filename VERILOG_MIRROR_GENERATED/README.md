@@ -6,6 +6,8 @@
 > All manual hardware modifications must be made to the golden source files:
 > - SystemVerilog RTL: `RTL/*.sv`
 > - ASIC Subsystem Macros: `MACROS/*.sv` and `MACROS/*.v`
+> - eFPGA Soft-Logic: `SOFT_LOGIC/*.sv`
+> - Verification & Testbenches: `TEST/`
 > - VHDL CPU Complex: `RTL/CPU/*.vhd` and `RTL/Integration/neorv32_axi_wrapper.vhd`
 >
 > Any manual edits made inside this directory will be overwritten on the next generation run.
