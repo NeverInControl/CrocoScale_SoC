@@ -347,16 +347,18 @@ module tb_npu_soft_controller;
         s_axil_wdata   = data;
         s_axil_wstrb   = 4'hF;
         s_axil_wvalid  = 1'b1;
-        s_axil_bready  = 1'b1;
+        s_axil_bready  = 1'b0;
 
         fork
             begin
                 while (!s_axil_awready) @(posedge clk);
+                @(posedge clk);
                 #1;
                 s_axil_awvalid = 1'b0;
             end
             begin
                 while (!s_axil_wready) @(posedge clk);
+                @(posedge clk);
                 #1;
                 s_axil_wvalid = 1'b0;
             end
@@ -364,8 +366,10 @@ module tb_npu_soft_controller;
 
         while (!s_axil_bvalid) @(posedge clk);
         #1;
-        s_axil_bready = 1'b0;
+        s_axil_bready = 1'b1;
         @(posedge clk);
+        #1;
+        s_axil_bready = 1'b0;
     endtask
 
     task automatic axil_read(input logic [31:0] addr, output logic [31:0] data);
@@ -376,6 +380,7 @@ module tb_npu_soft_controller;
         s_axil_rready  = 1'b0;
 
         while (!s_axil_arready) @(posedge clk);
+        @(posedge clk);
         #1;
         s_axil_arvalid = 1'b0;
 

@@ -82,10 +82,12 @@ module tb_npu_soft_regs;
 			s_axil_wdata = data;
 			s_axil_wstrb = 4'hf;
 			s_axil_wvalid = 1'b1;
-			s_axil_bready = 1'b1;
+			s_axil_bready = 1'b0;
 			fork
 				begin
 					while (!s_axil_awready) @(posedge clk)
+						;
+					@(posedge clk)
 						;
 					#(1)
 						;
@@ -94,6 +96,8 @@ module tb_npu_soft_regs;
 				begin
 					while (!s_axil_wready) @(posedge clk)
 						;
+					@(posedge clk)
+						;
 					#(1)
 						;
 					s_axil_wvalid = 1'b0;
@@ -101,6 +105,9 @@ module tb_npu_soft_regs;
 			join
 			while (!s_axil_bvalid) @(posedge clk)
 				;
+			#(1)
+				;
+			s_axil_bready = 1'b1;
 			@(posedge clk)
 				;
 			#(1)
@@ -120,6 +127,8 @@ module tb_npu_soft_regs;
 			s_axil_arvalid = 1'b1;
 			s_axil_rready = 1'b0;
 			while (!s_axil_arready) @(posedge clk)
+				;
+			@(posedge clk)
 				;
 			#(1)
 				;
@@ -259,6 +268,134 @@ module tb_npu_soft_regs;
 			$display("   [ERROR] IRQ_STATUS did not clear on W1C, got %0d", rdata[0]);
 			errors = errors + 1;
 		end
+		$display("[Test 6] Testing AXI-Lite Asynchronous W arriving 5 cycles before AW...");
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_wdata = 32'hdeadbeef;
+		s_axil_wstrb = 4'hf;
+		s_axil_wvalid = 1'b1;
+		s_axil_bready = 1'b0;
+		while (!s_axil_wready) @(posedge clk)
+			;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_wvalid = 1'b0;
+		s_axil_wdata = 32'hcafebabe;
+		repeat (5) @(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_awaddr = 32'h00000008;
+		s_axil_awvalid = 1'b1;
+		while (!s_axil_awready) @(posedge clk)
+			;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_awvalid = 1'b0;
+		while (!s_axil_bvalid) @(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_bready = 1'b1;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_bready = 1'b0;
+		axil_read(32'h00000008, rdata);
+		if (rdata !== 32'hdeadbeef) begin
+			$display("   [ERROR] ACT_BASE expected 0xDEADBEEF, got 0x%08X (W-before-AW failed!)", rdata);
+			errors = errors + 1;
+		end
+		else
+			$display("   [OK] W arrived 5 cycles before AW: latched data preserved correctly.");
+		$display("[Test 7] Testing AXI-Lite Asynchronous AW arriving 5 cycles before W...");
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_awaddr = 32'h0000000c;
+		s_axil_awvalid = 1'b1;
+		s_axil_bready = 1'b0;
+		while (!s_axil_awready) @(posedge clk)
+			;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_awvalid = 1'b0;
+		s_axil_awaddr = 32'h0000007c;
+		repeat (5) @(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_wdata = 32'h55aa1234;
+		s_axil_wstrb = 4'hf;
+		s_axil_wvalid = 1'b1;
+		while (!s_axil_wready) @(posedge clk)
+			;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_wvalid = 1'b0;
+		while (!s_axil_bvalid) @(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_bready = 1'b1;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_bready = 1'b0;
+		axil_read(32'h0000000c, rdata);
+		if (rdata !== 32'h55aa1234) begin
+			$display("   [ERROR] WEIGHT_BASE expected 0x55AA1234, got 0x%08X (AW-before-W failed!)", rdata);
+			errors = errors + 1;
+		end
+		else
+			$display("   [OK] AW arrived 5 cycles before W: latched address preserved correctly.");
+		$display("[Test 8] Testing AXI-Lite Read with Master holding RREADY low...");
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_araddr = 32'h00000008;
+		s_axil_arvalid = 1'b1;
+		s_axil_rready = 1'b0;
+		while (!s_axil_arready) @(posedge clk)
+			;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_arvalid = 1'b0;
+		while (!s_axil_rvalid) @(posedge clk)
+			;
+		repeat (4) begin
+			@(posedge clk)
+				;
+			if (!s_axil_rvalid || (s_axil_rdata !== 32'hdeadbeef)) begin
+				$display("   [ERROR] RVALID or RDATA glitched while RREADY was low!");
+				errors = errors + 1;
+			end
+		end
+		#(1)
+			;
+		s_axil_rready = 1'b1;
+		@(posedge clk)
+			;
+		#(1)
+			;
+		s_axil_rready = 1'b0;
+		$display("   [OK] RVALID and RDATA remained rock-solid during 4-cycle RREADY stall.");
 		$display("----------------------------------------------------------");
 		if (errors == 0)
 			$display(">>> SUCCESS: npu_soft_regs Unit Test Passed 100%%! <<<");
