@@ -1,3 +1,3 @@
--c ../npu.f
+-f ../npu.f
 TEST_RTL/NPU/TestBenches/tb_npu_general_math.v
 
