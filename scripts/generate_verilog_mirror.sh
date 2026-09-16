@@ -358,7 +358,7 @@ echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
 echo "Running automated verification simulation on mirrored soft-logic controller..."
 (
     cd "${OUT_DIR}"
-    "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_soft_controller.f -s tb_npu_soft_controller -o /tmp/sim_soft_ctrl.vvp
+    "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_minimal_system.f -s tb_npu_minimal_system -o /tmp/sim_soft_ctrl.vvp
     vvp /tmp/sim_soft_ctrl.vvp > /dev/null
     rm -f /tmp/sim_soft_ctrl.vvp
 )

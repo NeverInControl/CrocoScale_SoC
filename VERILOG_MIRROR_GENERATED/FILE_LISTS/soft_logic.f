@@ -1,6 +1,20 @@
-SOFT_LOGIC/npu_soft_regs.v
-SOFT_LOGIC/npu_soft_dma.v
-SOFT_LOGIC/npu_soft_sequencer.v
-SOFT_LOGIC/npu_soft_controller.v
-
+SOFT_LOGIC/minimal_3x3/npu_minimal_regs.v
+SOFT_LOGIC/minimal_3x3/npu_minimal_dma.v
+SOFT_LOGIC/minimal_3x3/npu_minimal_sequencer.v
+SOFT_LOGIC/minimal_3x3/npu_minimal_controller.v
+SOFT_LOGIC/full/npu_axi_read_master.v
+SOFT_LOGIC/full/npu_seq_fsm.v
+SOFT_LOGIC/full/npu_seq_weight_swap.v
+SOFT_LOGIC/full/npu_seq_psum_sched.v
+SOFT_LOGIC/full/npu_seq_addr_3x3.v
+SOFT_LOGIC/full/npu_seq_addr_1x1.v
+SOFT_LOGIC/full/npu_seq_arbiter.v
+SOFT_LOGIC/full/npu_dma_preload_engine.v
+SOFT_LOGIC/full/npu_dma_weight_fetcher.v
+SOFT_LOGIC/full/npu_dma_lut_loader.v
+SOFT_LOGIC/full/npu_dma_drainer.v
+SOFT_LOGIC/full/npu_full_regs.v
+SOFT_LOGIC/full/npu_full_sequencer.v
+SOFT_LOGIC/full/npu_full_dma.v
+SOFT_LOGIC/full/npu_full_controller.v
 
