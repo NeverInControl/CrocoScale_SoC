@@ -53,11 +53,11 @@ module npu_dma_drainer (
 	reg [5:0] drain_burst_idx;
 	reg [4:0] drain_w_beat;
 	reg signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] drain_pixel_lat;
-	reg [2:0] pool_p;
-	reg [3:0] pool_step;
-	reg pool_beat_phase;
+	reg [4:0] stream_cnt;
 	reg signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] max_accum;
 	reg [31:0] lat_upper;
+	wire axi_w_stall = wvalid_o && !wready_i;
+	wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd5 : 6'd4);
 	function automatic signed [ACTIVATION_WIDTH - 1:0] signed_max;
 		input reg signed [ACTIVATION_WIDTH - 1:0] a;
 		input reg signed [ACTIVATION_WIDTH - 1:0] b;
@@ -88,9 +88,7 @@ module npu_dma_drainer (
 			drain_w_beat <= 1'sb0;
 			drain_psum_addr_o <= 1'sb0;
 			drain_pixel_lat <= 1'sb0;
-			pool_p <= 1'sb0;
-			pool_step <= 1'sb0;
-			pool_beat_phase <= 1'b0;
+			stream_cnt <= 1'sb0;
 			max_accum <= 1'sb0;
 			lat_upper <= 1'sb0;
 			done_o <= 1'b0;
@@ -121,28 +119,48 @@ module npu_dma_drainer (
 					awlen_o <= 8'd15;
 					awvalid_o <= 1'b1;
 					drain_w_beat <= 1'sb0;
-					if (pool_en_i) begin
-						pool_p <= 3'd0;
-						pool_step <= 4'd0;
-						pool_beat_phase <= 1'b0;
-						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h00};
-						state <= 4'd11;
-					end
-					else begin
-						drain_psum_addr_o <= burst_base_p[7:0] + 8'd0;
+					if (awvalid_o && awready_i) begin
+						awvalid_o <= 1'b0;
+						if (pool_en_i) begin
+							stream_cnt <= 5'd0;
+							drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h00};
+						end
+						else
+							drain_psum_addr_o <= burst_base_p[7:0] + 8'd0;
 						state <= 4'd2;
 					end
 				end
-				4'd2: state <= 4'd3;
+				4'd2: begin
+					if (pool_en_i)
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h01};
+					state <= 4'd3;
+				end
 				4'd3: begin
-					drain_psum_addr_o <= burst_base_p[7:0] + 8'd1;
+					if (pool_en_i)
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h10};
+					else
+						drain_psum_addr_o <= burst_base_p[7:0] + 8'd1;
 					state <= 4'd4;
 				end
-				4'd4: state <= 4'd5;
-				4'd5: begin
-					drain_psum_addr_o <= burst_base_p[7:0] + 8'd2;
-					state <= 4'd6;
-				end
+				4'd4:
+					if (pool_en_i) begin
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h11};
+						if (!lut_en_i)
+							state <= 4'd11;
+						else
+							state <= 4'd5;
+					end
+					else
+						state <= 4'd5;
+				4'd5:
+					if (pool_en_i) begin
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h02};
+						state <= 4'd11;
+					end
+					else begin
+						drain_psum_addr_o <= burst_base_p[7:0] + 8'd2;
+						state <= 4'd6;
+					end
 				4'd6: begin
 					drain_pixel_lat <= npu_out_act_i;
 					wdata_o <= {npu_out_act_i[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[0+:ACTIVATION_WIDTH]};
@@ -175,77 +193,55 @@ module npu_dma_drainer (
 						end
 					end
 				4'd11:
-					case (pool_step)
-						4'd0: pool_step <= 4'd1;
-						4'd1: begin
-							drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, pool_p, 1'b1};
-							pool_step <= 4'd2;
-						end
-						4'd2: pool_step <= 4'd3;
-						4'd3: begin
-							drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, pool_p, 1'b0};
-							pool_step <= 4'd4;
-						end
-						4'd4: begin
-							max_accum <= npu_out_act_i;
-							pool_step <= 4'd5;
-						end
-						4'd5: begin
-							drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, pool_p, 1'b1};
-							pool_step <= 4'd6;
-						end
-						4'd6: begin
-							begin : sv2v_autoblock_2
+					if (!axi_w_stall) begin
+						stream_cnt <= stream_cnt + 1'b1;
+						if (next_req_idx < 6'd32)
+							drain_psum_addr_o <= {drain_burst_idx[2:0], next_req_idx[1], next_req_idx[4:2], next_req_idx[0]};
+						case (stream_cnt[1:0])
+							2'd0: begin
+								max_accum <= npu_out_act_i;
+								if (stream_cnt > 5'd0) begin
+									wdata_o <= lat_upper;
+									wvalid_o <= 1'b1;
+									drain_w_beat <= drain_w_beat + 1'b1;
+								end
+							end
+							2'd1: begin
+								begin : sv2v_autoblock_2
+									reg signed [31:0] c;
+									for (c = 0; c < ARRAY_WIDTH; c = c + 1)
+										max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= signed_max(max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]);
+								end
+								wvalid_o <= 1'b0;
+							end
+							2'd2: begin : sv2v_autoblock_3
 								reg signed [31:0] c;
 								for (c = 0; c < ARRAY_WIDTH; c = c + 1)
 									max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= signed_max(max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]);
 							end
-							pool_step <= 4'd7;
-						end
-						4'd7: pool_step <= 4'd8;
-						4'd8: begin
-							begin : sv2v_autoblock_3
-								reg signed [31:0] c;
-								for (c = 0; c < ARRAY_WIDTH; c = c + 1)
-									max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= signed_max(max_accum[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[c * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]);
+							2'd3: begin
+								wdata_o <= {final_pix[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[0+:ACTIVATION_WIDTH]};
+								lat_upper <= {final_pix[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
+								wvalid_o <= 1'b1;
+								drain_w_beat <= drain_w_beat + 1'b1;
+								if (stream_cnt == 5'd31)
+									state <= 4'd12;
 							end
-							pool_step <= 4'd9;
-						end
-						4'd9: pool_step <= 4'd10;
-						4'd10: begin
-							wdata_o <= {final_pix[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[0+:ACTIVATION_WIDTH]};
-							lat_upper <= {final_pix[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], final_pix[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
-							wvalid_o <= 1'b1;
-							pool_beat_phase <= 1'b0;
-							pool_step <= 4'd0;
-							state <= 4'd12;
-						end
-						default: pool_step <= 4'd0;
-					endcase
+						endcase
+					end
 				4'd12:
-					if (wready_i && wvalid_o) begin
-						if (pool_beat_phase == 1'b0) begin
-							wdata_o <= lat_upper;
-							pool_beat_phase <= 1'b1;
-							drain_w_beat <= drain_w_beat + 1'b1;
-							if (drain_w_beat == 5'd14)
-								wlast_o <= 1'b1;
+					if (wvalid_o && wready_i) begin
+						if (wlast_o) begin
+							wvalid_o <= 1'b0;
+							wlast_o <= 1'b0;
+							bready_o <= 1'b1;
+							state <= 4'd8;
 						end
 						else begin
+							wdata_o <= lat_upper;
+							wvalid_o <= 1'b1;
+							wlast_o <= 1'b1;
 							drain_w_beat <= drain_w_beat + 1'b1;
-							pool_beat_phase <= 1'b0;
-							wvalid_o <= 1'b0;
-							if (pool_p < 3'd7) begin
-								pool_p <= pool_p + 1'b1;
-								drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, pool_p + 1'b1, 1'b0};
-								pool_step <= 4'd0;
-								state <= 4'd11;
-							end
-							else begin
-								wlast_o <= 1'b0;
-								bready_o <= 1'b1;
-								state <= 4'd8;
-							end
 						end
 					end
 				4'd8:

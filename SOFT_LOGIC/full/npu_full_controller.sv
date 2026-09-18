@@ -137,11 +137,13 @@ module npu_full_controller #(
     wire [31:0] lut_base;
     wire [31:0] config_reg;
     wire        start_pulse;
+    wire        start_drain_pulse;
     wire        soft_reset;
 
-    wire mode_1x1 = config_reg[4];
-    wire lut_en   = config_reg[5];
-    wire pool_en  = config_reg[6];
+    wire auto_drain = config_reg[0];
+    wire mode_1x1   = config_reg[4];
+    wire lut_en     = config_reg[5];
+    wire pool_en    = config_reg[6];
     wire [7:0] total_passes = (config_reg[15:8] != 8'd0) ? config_reg[15:8] : 8'(TOTAL_PASSES);
 
     // Sequencer Wires
@@ -247,20 +249,21 @@ module npu_full_controller #(
         .s_axil_rdata  (s_axil_rdata),
         .s_axil_rresp  (s_axil_rresp),
         .s_axil_rvalid (s_axil_rvalid),
-        .s_axil_rready (s_axil_rready),
-        .start_pulse_o (start_pulse),
-        .soft_reset_o  (soft_reset),
-        .config_o      (config_reg),
-        .act_base_o    (act_base),
-        .weight_base_o (weight_base),
-        .out_base_o    (out_base),
-        .bias_base_o   (bias_base),
-        .quant_base_o  (quant_base),
-        .lut_base_o    (lut_base),
-        .usr_irq_o     (efpga_usr_irq_o),
-        .fsm_busy_i    (seq_busy),
-        .fsm_done_i    (seq_done),
-        .irq_pulse_i   (seq_done)
+        .s_axil_rready       (s_axil_rready),
+        .start_pulse_o       (start_pulse),
+        .start_drain_pulse_o (start_drain_pulse),
+        .soft_reset_o        (soft_reset),
+        .config_o            (config_reg),
+        .act_base_o          (act_base),
+        .weight_base_o       (weight_base),
+        .out_base_o          (out_base),
+        .bias_base_o         (bias_base),
+        .quant_base_o        (quant_base),
+        .lut_base_o          (lut_base),
+        .usr_irq_o           (efpga_usr_irq_o),
+        .fsm_busy_i          (seq_busy),
+        .fsm_done_i          (seq_done),
+        .irq_pulse_i         (seq_done)
     );
 
     // 2. Modular Dual-Mode Sequencer
@@ -275,6 +278,8 @@ module npu_full_controller #(
         .clk_i                (clk_i),
         .rst_n                (rst_n && !soft_reset),
         .start_i              (start_pulse),
+        .start_drain_i        (start_drain_pulse),
+        .auto_drain_i         (auto_drain),
         .mode_1x1_i           (mode_1x1),
         .lut_en_i             (lut_en),
         .lut_load_done_i      (dma_lut_load_done),

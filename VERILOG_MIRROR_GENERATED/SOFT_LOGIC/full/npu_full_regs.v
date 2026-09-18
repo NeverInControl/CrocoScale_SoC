@@ -21,6 +21,7 @@ module npu_full_regs (
 	s_axil_rvalid,
 	s_axil_rready,
 	start_pulse_o,
+	start_drain_pulse_o,
 	soft_reset_o,
 	config_o,
 	act_base_o,
@@ -58,6 +59,7 @@ module npu_full_regs (
 	output reg s_axil_rvalid;
 	input wire s_axil_rready;
 	output reg start_pulse_o;
+	output reg start_drain_pulse_o;
 	output wire soft_reset_o;
 	output wire [31:0] config_o;
 	output wire [31:0] act_base_o;
@@ -115,6 +117,7 @@ module npu_full_regs (
 			latched_waddr <= 8'h00;
 			latched_wdata <= 32'h00000000;
 			start_pulse_o <= 1'b0;
+			start_drain_pulse_o <= 1'b0;
 			reg_ctrl <= 32'h00000000;
 			reg_config <= 32'h00000001;
 			reg_irq_status <= 1'b0;
@@ -128,12 +131,17 @@ module npu_full_regs (
 		end
 		else begin
 			start_pulse_o <= 1'b0;
+			start_drain_pulse_o <= 1'b0;
 			if (reg_ctrl[0]) begin
 				reg_ctrl[0] <= 1'b0;
 				reg_done <= 1'b0;
 			end
 			if (reg_ctrl[1])
 				reg_done <= 1'b0;
+			if (reg_ctrl[2]) begin
+				reg_ctrl[2] <= 1'b0;
+				reg_done <= 1'b0;
+			end
 			if (fsm_done_i)
 				reg_done <= 1'b1;
 			if (irq_pulse_i)
@@ -158,6 +166,10 @@ module npu_full_regs (
 						reg_ctrl <= target_data;
 						if (target_data[0])
 							start_pulse_o <= 1'b1;
+						if (target_data[2])
+							start_drain_pulse_o <= 1'b1;
+						if ((target_data[0] || target_data[1]) || target_data[2])
+							reg_done <= 1'b0;
 					end
 					REG_OFFSET_CONFIG: reg_config <= target_data;
 					REG_OFFSET_IRQ_STATUS:

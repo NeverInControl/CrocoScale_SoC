@@ -172,8 +172,39 @@ module tb_npu_im2col_benchmark;
     end
 
     // =========================================================================
-    // Strict File Existence Guard
+    // Strict File Existence & Directory Resolution Guard
     // =========================================================================
+    task automatic resolve_mem_dir(input string sample_file, output string mem_dir);
+        int fd;
+        int found;
+        found = 0;
+
+        // 1. Check runtime plusarg (+MEM_DIR=...)
+        if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\")
+                mem_dir = {mem_dir, "/"};
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 2. Fallback to single standard default path
+        if (!found) begin
+            mem_dir = "TEST/NPU/GoldenReference/";
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 3. Fail immediately if neither worked
+        if (!found) begin
+            $display("\n=====================================================================================");
+            $display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+            $display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+            $display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+            $display("=====================================================================================\n");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+    endtask
+
     task automatic check_file_exists(input string filename);
         int fd;
         fd = $fopen(filename, "r");
@@ -185,6 +216,18 @@ module tb_npu_im2col_benchmark;
             $fatal(1, "Aborting simulation due to missing test vector files.");
         end
         $fclose(fd);
+    endtask
+
+    task automatic assert_vector_nonzero(
+        input string vec_name,
+        input int nonzero_count,
+        input int min_required = 1
+    );
+        if (nonzero_count < min_required) begin
+            $display("\n[FATAL ERROR] Test vector '%s' is empty or all-zero (%0d non-zero elements, min required: %0d)!",
+                     vec_name, nonzero_count, min_required);
+            $fatal(1, "Zero-vector guard triggered: preventing false-positive pass.");
+        end
     endtask
 
     // =========================================================================
@@ -492,31 +535,9 @@ module tb_npu_im2col_benchmark;
         $display("   Pipelining Architecture  : 9-Cycle Wavefront Staggering + Zero-Stall Background DMA");
         $display("=====================================================================================\n");
 
-        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
-        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
-            fd = $fopen("bench_im2col_act.mem", "r");
-            if (fd != 0) begin
-                $fclose(fd);
-                mem_dir = "./";
-            end else begin
-                fd = $fopen("../GoldenReference/bench_im2col_act.mem", "r");
-                if (fd != 0) begin
-                    $fclose(fd);
-                    mem_dir = "../GoldenReference/";
-                end else begin
-                    fd = $fopen("TEST/NPU/GoldenReference/bench_im2col_act.mem", "r");
-                    if (fd != 0) begin
-                        $fclose(fd);
-                        mem_dir = "TEST/NPU/GoldenReference/";
-                    end else begin
-                        mem_dir = "./";
-                    end
-                end
-            end
-        end
-        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
-            mem_dir = {mem_dir, "/"};
-        end
+        // Resolve memory file path using standardized 2-step resolver
+        resolve_mem_dir("bench_im2col_act.mem", mem_dir);
+        $display("[INFO] Resolved memory directory: '%s'", mem_dir);
 
         // Verify test vectors exist
         check_file_exists({mem_dir, "bench_im2col_act.mem"});
@@ -531,6 +552,22 @@ module tb_npu_im2col_benchmark;
         $readmemh({mem_dir, "bench_im2col_b.mem"},         b1_flat);
         $readmemh({mem_dir, "bench_im2col_cfg.mem"},       p1_cfg);
         $readmemh({mem_dir, "bench_im2col_out_quant.mem"}, gold_l1);
+
+        begin
+            int nz_act = 0, nz_w = 0, nz_b = 0, nz_gold = 0;
+            for (int i = 0; i < $size(fmap_in); i++) if (fmap_in[i] !== 8'sd0) nz_act++;
+            for (int i = 0; i < $size(w1_flat); i++) if (w1_flat[i] !== 8'sd0) nz_w++;
+            for (int i = 0; i < $size(b1_flat); i++) if (b1_flat[i] !== 32'sd0) nz_b++;
+            for (int i = 0; i < $size(gold_l1); i++) if (gold_l1[i] !== 8'sd0) nz_gold++;
+
+            $display("[INFO] Loaded test vectors: %0d non-zero activations, %0d non-zero weights, %0d non-zero biases, %0d non-zero golden outputs.",
+                     nz_act, nz_w, nz_b, nz_gold);
+
+            assert_vector_nonzero("fmap_in", nz_act, 10);
+            assert_vector_nonzero("w1_flat", nz_w, 10);
+            assert_vector_nonzero("b1_flat", nz_b, 1);
+            assert_vector_nonzero("gold_l1", nz_gold, 10);
+        end
 
         compute_golden_psum_l1();
 

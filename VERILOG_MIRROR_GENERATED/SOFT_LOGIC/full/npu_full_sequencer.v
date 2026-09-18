@@ -2,6 +2,8 @@ module npu_full_sequencer (
 	clk_i,
 	rst_n,
 	start_i,
+	start_drain_i,
+	auto_drain_i,
 	mode_1x1_i,
 	lut_en_i,
 	lut_load_done_i,
@@ -44,6 +46,8 @@ module npu_full_sequencer (
 	input wire clk_i;
 	input wire rst_n;
 	input wire start_i;
+	input wire start_drain_i;
+	input wire auto_drain_i;
 	input wire mode_1x1_i;
 	input wire lut_en_i;
 	input wire lut_load_done_i;
@@ -115,6 +119,8 @@ module npu_full_sequencer (
 		.clk_i(clk_i),
 		.rst_n(rst_n),
 		.start_i(start_i),
+		.start_drain_i(start_drain_i),
+		.auto_drain_i(auto_drain_i),
 		.mode_1x1_i(mode_1x1_i),
 		.lut_en_i(lut_en_i),
 		.lut_load_done_i(lut_load_done_i),

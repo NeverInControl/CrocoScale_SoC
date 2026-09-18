@@ -18,6 +18,8 @@ module npu_seq_fsm #(
     input  wire        clk_i,
     input  wire        rst_n,
     input  wire        start_i,
+    input  wire        start_drain_i,
+    input  wire        auto_drain_i,
     input  wire        mode_1x1_i,
     input  wire        lut_en_i,
     input  wire        lut_load_done_i,
@@ -99,6 +101,15 @@ module npu_seq_fsm #(
                         busy_o      <= 1'b1;
                         preload_cnt <= '0;
                         state_reg   <= SEQ_PRELOAD;
+                    end else if (start_drain_i) begin
+                        busy_o <= 1'b1;
+                        if (lut_en_i) begin
+                            start_lut_load_o <= 1'b1;
+                            state_reg        <= SEQ_LUT_LOAD;
+                        end else begin
+                            drain_cnt <= '0;
+                            state_reg <= SEQ_DRAIN;
+                        end
                     end
                 end
 
@@ -116,12 +127,18 @@ module npu_seq_fsm #(
                     if (k_cnt == cur_pass_len - 1'b1) begin
                         k_cnt <= '0;
                         if (pass_cnt == total_passes_i - 1'b1) begin
-                            if (lut_en_i) begin
-                                start_lut_load_o <= 1'b1;
-                                state_reg        <= SEQ_LUT_LOAD;
+                            if (auto_drain_i) begin
+                                if (lut_en_i) begin
+                                    start_lut_load_o <= 1'b1;
+                                    state_reg        <= SEQ_LUT_LOAD;
+                                end else begin
+                                    drain_cnt <= '0;
+                                    state_reg <= SEQ_DRAIN;
+                                end
                             end else begin
-                                drain_cnt <= '0;
-                                state_reg <= SEQ_DRAIN;
+                                done_o    <= 1'b1;
+                                busy_o    <= 1'b0;
+                                state_reg <= SEQ_DONE;
                             end
                         end else begin
                             pass_cnt <= pass_cnt + 1'b1;

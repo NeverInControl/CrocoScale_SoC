@@ -144,6 +144,41 @@ module tb_npu_im2col_benchmark;
 						end
 				end
 		end
+	task automatic resolve_mem_dir;
+		input string sample_file;
+		output string mem_dir;
+		reg signed [31:0] fd;
+		reg signed [31:0] found;
+		begin
+			found = 0;
+			if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+				if (((mem_dir.len() > 0) && (mem_dir[mem_dir.len() - 1] != "/")) && (mem_dir[mem_dir.len() - 1] != "\\"))
+					mem_dir = {mem_dir, "/"};
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				mem_dir = "TEST/NPU/GoldenReference/";
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				$display("\n=====================================================================================");
+				$display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+				$display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+				$display("=====================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:204:13 - tb_npu_im2col_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$finish(1);
+			end
+		end
+	endtask
 	task automatic check_file_exists;
 		input string filename;
 		reg signed [31:0] fd;
@@ -154,10 +189,23 @@ module tb_npu_im2col_benchmark;
 				$display(" [FATAL ERROR] Required memory file '%s' was NOT found!", filename);
 				$display(" Run 'python3 gen_npu_im2col_benchmark.py' and ensure output files are in xsim path.");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:185:13 - tb_npu_im2col_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:216:13 - tb_npu_im2col_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
+		end
+	endtask
+	task automatic assert_vector_nonzero;
+		input string vec_name;
+		input reg signed [31:0] nonzero_count;
+		input reg signed [31:0] min_required;
+		begin
+			min_required = 1;
+			if (nonzero_count < min_required) begin
+				$display("\n[FATAL ERROR] Test vector '%s' is empty or all-zero (%0d non-zero elements, min required: %0d)!", vec_name, nonzero_count, min_required);
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:229:13 - tb_npu_im2col_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-vector guard triggered: preventing false-positive pass.");
+				$finish(1);
+			end
 		end
 	endtask
 	task automatic get_sram_loc;
@@ -521,31 +569,8 @@ module tb_npu_im2col_benchmark;
 		$display("   Reduction Depth (K_total): %0d Taps -> %0d Passes (8 Taps/Pass continuous streaming)", k_total, total_passes);
 		$display("   Pipelining Architecture  : 9-Cycle Wavefront Staggering + Zero-Stall Background DMA");
 		$display("=====================================================================================\n");
-		if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
-			fd = $fopen("bench_im2col_act.mem", "r");
-			if (fd != 0) begin
-				$fclose(fd);
-				mem_dir = "./";
-			end
-			else begin
-				fd = $fopen("../GoldenReference/bench_im2col_act.mem", "r");
-				if (fd != 0) begin
-					$fclose(fd);
-					mem_dir = "../GoldenReference/";
-				end
-				else begin
-					fd = $fopen("TEST/NPU/GoldenReference/bench_im2col_act.mem", "r");
-					if (fd != 0) begin
-						$fclose(fd);
-						mem_dir = "TEST/NPU/GoldenReference/";
-					end
-					else
-						mem_dir = "./";
-				end
-			end
-		end
-		if (((mem_dir.len() > 0) && (mem_dir[mem_dir.len() - 1] != "/")) && (mem_dir[mem_dir.len() - 1] != "\\"))
-			mem_dir = {mem_dir, "/"};
+		resolve_mem_dir("bench_im2col_act.mem", mem_dir);
+		$display("[INFO] Resolved memory directory: '%s'", mem_dir);
 		check_file_exists({mem_dir, "bench_im2col_act.mem"});
 		check_file_exists({mem_dir, "bench_im2col_w.mem"});
 		check_file_exists({mem_dir, "bench_im2col_b.mem"});
@@ -556,6 +581,45 @@ module tb_npu_im2col_benchmark;
 		$readmemh({mem_dir, "bench_im2col_b.mem"}, b1_flat);
 		$readmemh({mem_dir, "bench_im2col_cfg.mem"}, p1_cfg);
 		$readmemh({mem_dir, "bench_im2col_out_quant.mem"}, gold_l1);
+		begin : sv2v_autoblock_8
+			reg signed [31:0] nz_act;
+			reg signed [31:0] nz_w;
+			reg signed [31:0] nz_b;
+			reg signed [31:0] nz_gold;
+			nz_act = 0;
+			nz_w = 0;
+			nz_b = 0;
+			nz_gold = 0;
+			begin : sv2v_autoblock_9
+				reg signed [31:0] i;
+				for (i = 0; i < ((CONV_H * CONV_W) * Cin); i = i + 1)
+					if (fmap_in[i] !== 8'sd0)
+						nz_act = nz_act + 1;
+			end
+			begin : sv2v_autoblock_10
+				reg signed [31:0] i;
+				for (i = 0; i < 36864; i = i + 1)
+					if (w1_flat[i] !== 8'sd0)
+						nz_w = nz_w + 1;
+			end
+			begin : sv2v_autoblock_11
+				reg signed [31:0] i;
+				for (i = 0; i < Cout; i = i + 1)
+					if (b1_flat[i] !== 32'sd0)
+						nz_b = nz_b + 1;
+			end
+			begin : sv2v_autoblock_12
+				reg signed [31:0] i;
+				for (i = 0; i < ((CONV_H * CONV_W) * Cout); i = i + 1)
+					if (gold_l1[i] !== 8'sd0)
+						nz_gold = nz_gold + 1;
+			end
+			$display("[INFO] Loaded test vectors: %0d non-zero activations, %0d non-zero weights, %0d non-zero biases, %0d non-zero golden outputs.", nz_act, nz_w, nz_b, nz_gold);
+			assert_vector_nonzero("fmap_in", nz_act, 10);
+			assert_vector_nonzero("w1_flat", nz_w, 10);
+			assert_vector_nonzero("b1_flat", nz_b, 1);
+			assert_vector_nonzero("gold_l1", nz_gold, 10);
+		end
 		compute_golden_psum_l1;
 		clk_i = 0;
 		rst_n = 0;
@@ -600,7 +664,7 @@ module tb_npu_im2col_benchmark;
 						psum_systolic_en = 0;
 						psum_lut_en = 0;
 						psum_skew_en = 0;
-						begin : sv2v_autoblock_8
+						begin : sv2v_autoblock_13
 							reg signed [31:0] step;
 							for (step = 0; step < 54; step = step + 1)
 								begin
@@ -612,7 +676,7 @@ module tb_npu_im2col_benchmark;
 										end
 									ext_act_sram_we[6] = 1'b0;
 									ext_act_sram_we[7] = 1'b0;
-									if (step < 8) begin : sv2v_autoblock_9
+									if (step < 8) begin : sv2v_autoblock_14
 										reg signed [31:0] ch;
 										reg signed [31:0] q_ch;
 										reg signed [31:0] b_val;
@@ -666,7 +730,7 @@ module tb_npu_im2col_benchmark;
 						swap_weights = 1'sb0;
 						init_preload_cycles = init_preload_cycles + (global_cycle - phase_start);
 						for (p_idx = 0; p_idx < total_passes; p_idx = p_idx + 1)
-							begin : sv2v_autoblock_10
+							begin : sv2v_autoblock_15
 								reg signed [31:0] next_p;
 								next_p = p_idx + 1;
 								pass_len = (p_idx == (total_passes - 1) ? (256 + ARRAY_HEIGHT) + ARRAY_WIDTH : 265);

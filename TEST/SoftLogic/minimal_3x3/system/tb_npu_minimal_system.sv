@@ -13,8 +13,8 @@
  *                                         axi_ram
  *
  * Loads golden reference data directly from:
- *   TEST/NPU/GoldenReference/gen_conv3x3_halo_act.mem
- *   TEST/NPU/GoldenReference/gen_conv3x3_halo_w.mem
+ *   TEST/SoftLogic/GoldenReference/gen_conv3x3_halo_act.mem
+ *   TEST/SoftLogic/GoldenReference/gen_conv3x3_halo_w.mem
  * Tests bias preloading into Address 0, 9-pass systolic execution, and automated draining.
  * =============================================================================================== */
 
@@ -531,6 +531,66 @@ module tb_npu_minimal_system;
         end
     end
 
+    task automatic resolve_mem_dir(input string sample_file, output string mem_dir);
+        int fd;
+        int found;
+        found = 0;
+
+        // 1. Check runtime plusarg (+MEM_DIR=...)
+        if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\")
+                mem_dir = {mem_dir, "/"};
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 2. Fallback to single standard default path
+        if (!found) begin
+            mem_dir = "TEST/SoftLogic/GoldenReference/";
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 3. Fail immediately if neither worked
+        if (!found) begin
+            $display("\n=====================================================================================");
+            $display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+            $display(" Checked plusarg path and standard default 'TEST/SoftLogic/GoldenReference/'.");
+            $display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+            $display("=====================================================================================\n");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+    endtask
+
+    task automatic check_file_exists(input string filename);
+        int fd;
+        fd = $fopen(filename, "r");
+        if (fd == 0) begin
+            $display("\n=========================================================================================");
+            $display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
+            $display(" Please ensure files exist in TEST/SoftLogic/GoldenReference/ or pass +MEM_DIR=<path>.");
+            $display("=========================================================================================\n");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+        $fclose(fd);
+    endtask
+
+    task automatic assert_vector_nonzero(
+        input string vec_name,
+        input int nonzero_count,
+        input int min_required = 1
+    );
+        if (nonzero_count < min_required) begin
+            $display("\n=========================================================================================");
+            $display(" [FATAL ERROR] Vector '%s' contains NO non-zero elements (%0d found, min %0d required)!",
+                     vec_name, nonzero_count, min_required);
+            $display(" Memory was either empty, uninitialized, or filled with all zeroes!");
+            $display(" Simulation aborted to prevent FALSE POSITIVE pass.");
+            $display("=========================================================================================\n");
+            $fatal(1, "Zero-data assertion failure on vector: %s", vec_name);
+        end
+    endtask
+
     // Watchdog Timer (cancels simulation if hung)
     initial begin
         #300_000; // 300us = 30,000 cycles
@@ -549,6 +609,8 @@ module tb_npu_minimal_system;
         int y, x, ky, kx, ci, co, oy, ox, p, s;
         int gy, gx;
         int mem_addr;
+        string mem_dir;
+        int nz_act, nz_w;
         logic [31:0] read_status;
         longint start_cycle, total_cycles;
         int error_count;
@@ -587,10 +649,25 @@ module tb_npu_minimal_system;
         // ---------------------------------------------------------------------
         // 1. Load Reference Mem Files & Prepare Tile Data in AXI RAM
         // ---------------------------------------------------------------------
-        $display("[1/4] Loading Project .mem Files (TEST/NPU/GoldenReference/)...");
-        $readmemh("TEST/NPU/GoldenReference/gen_conv3x3_halo_act.mem", raw_act_mem);
-        $readmemh("TEST/NPU/GoldenReference/gen_conv3x3_halo_w.mem",   raw_w_mem);
-        $display("      gen_conv3x3_halo_act.mem and gen_conv3x3_halo_w.mem loaded successfully.");
+        $display("[1/4] Loading Project .mem Files...");
+        resolve_mem_dir("gen_conv3x3_halo_act.mem", mem_dir);
+        $display("      Resolved memory directory: '%s'", mem_dir);
+
+        check_file_exists({mem_dir, "gen_conv3x3_halo_act.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_w.mem"});
+
+        $readmemh({mem_dir, "gen_conv3x3_halo_act.mem"}, raw_act_mem);
+        $readmemh({mem_dir, "gen_conv3x3_halo_w.mem"},   raw_w_mem);
+
+        nz_act = 0; nz_w = 0;
+        for (int i = 0; i < $size(raw_act_mem); i++) if (raw_act_mem[i] !== 8'sd0) nz_act++;
+        for (int i = 0; i < $size(raw_w_mem); i++) if (raw_w_mem[i] !== 8'sd0) nz_w++;
+
+        $display("      gen_conv3x3_halo_act.mem (%0d non-zero) and gen_conv3x3_halo_w.mem (%0d non-zero) loaded successfully.",
+                 nz_act, nz_w);
+
+        assert_vector_nonzero("raw_act_mem", nz_act, 10);
+        assert_vector_nonzero("raw_w_mem", nz_w, 10);
 
         // Extract Tile (0,0) Activations (18x18x8) and populate AXI RAM
         for (y = 0; y < 18; y++) begin
@@ -756,6 +833,7 @@ module tb_npu_minimal_system;
             $display("    Throughput:                  %0.2f MACs/cycle", (16*16*8*9*8.0) / total_cycles);
         end else begin
             $display(">>> TEST FAILED: %0d / 2048 Activation Mismatches Encountered <<<", error_count);
+            $fatal(1, "Minimal system testbench failed with mismatches!");
         end
         $display("=====================================================================================");
 

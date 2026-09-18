@@ -46,6 +46,7 @@ module npu_full_regs #(
 
     // Decoded Control & Configuration Outputs
     output logic                     start_pulse_o,
+    output logic                     start_drain_pulse_o,
     output logic                     soft_reset_o,
     output logic [31:0]              config_o,
     output logic [31:0]              act_base_o,
@@ -113,8 +114,9 @@ module npu_full_regs #(
             aw_done         <= 1'b0;
             w_done          <= 1'b0;
             latched_waddr   <= 8'h0;
-            latched_wdata   <= 32'h0;
-            start_pulse_o   <= 1'b0;
+            latched_wdata       <= 32'h0;
+            start_pulse_o       <= 1'b0;
+            start_drain_pulse_o <= 1'b0;
 
             reg_ctrl        <= 32'h0;
             reg_config      <= 32'h0000_0001; // [0]: AUTO_DRAIN, [4]: MODE_1X1, [5]: LUT_EN, [6]: POOL_EN, [15:8]: TOTAL_PASSES
@@ -128,12 +130,17 @@ module npu_full_regs #(
             reg_done        <= 1'b0;
         end else begin
             // Single-cycle self-clearing pulses
-            start_pulse_o <= 1'b0;
+            start_pulse_o       <= 1'b0;
+            start_drain_pulse_o <= 1'b0;
             if (reg_ctrl[0]) begin
                 reg_ctrl[0] <= 1'b0;
                 reg_done    <= 1'b0;
             end
             if (reg_ctrl[1]) reg_done <= 1'b0;
+            if (reg_ctrl[2]) begin
+                reg_ctrl[2] <= 1'b0;
+                reg_done    <= 1'b0;
+            end
 
             // Sticky Done and IRQ flags
             if (fsm_done_i)  reg_done       <= 1'b1;
@@ -166,6 +173,8 @@ module npu_full_regs #(
                     REG_OFFSET_CTRL: begin
                         reg_ctrl <= target_data;
                         if (target_data[0]) start_pulse_o <= 1'b1;
+                        if (target_data[2]) start_drain_pulse_o <= 1'b1;
+                        if (target_data[0] || target_data[1] || target_data[2]) reg_done <= 1'b0;
                     end
                     REG_OFFSET_CONFIG:      reg_config      <= target_data;
                     REG_OFFSET_IRQ_STATUS:  if (target_data[0]) reg_irq_status <= 1'b0;

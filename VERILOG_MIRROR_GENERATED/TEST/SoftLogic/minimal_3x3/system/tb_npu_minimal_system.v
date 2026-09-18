@@ -480,6 +480,74 @@ module tb_npu_minimal_system;
 					;
 			endcase
 		end
+	task automatic resolve_mem_dir;
+		input string sample_file;
+		output string mem_dir;
+		reg signed [31:0] fd;
+		reg signed [31:0] found;
+		begin
+			found = 0;
+			if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+				if (((mem_dir.len() > 0) && (mem_dir[mem_dir.len() - 1] != "/")) && (mem_dir[mem_dir.len() - 1] != "\\"))
+					mem_dir = {mem_dir, "/"};
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				mem_dir = "TEST/SoftLogic/GoldenReference/";
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				$display("\n=====================================================================================");
+				$display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+				$display(" Checked plusarg path and standard default 'TEST/SoftLogic/GoldenReference/'.");
+				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+				$display("=====================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal_3x3/system/tb_npu_minimal_system.sv:561:13 - tb_npu_minimal_system.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$finish(1);
+			end
+		end
+	endtask
+	task automatic check_file_exists;
+		input string filename;
+		reg signed [31:0] fd;
+		begin
+			fd = $fopen(filename, "r");
+			if (fd == 0) begin
+				$display("\n=========================================================================================");
+				$display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
+				$display(" Please ensure files exist in TEST/SoftLogic/GoldenReference/ or pass +MEM_DIR=<path>.");
+				$display("=========================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal_3x3/system/tb_npu_minimal_system.sv:573:13 - tb_npu_minimal_system.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$finish(1);
+			end
+			$fclose(fd);
+		end
+	endtask
+	task automatic assert_vector_nonzero;
+		input string vec_name;
+		input reg signed [31:0] nonzero_count;
+		input reg signed [31:0] min_required;
+		begin
+			min_required = 1;
+			if (nonzero_count < min_required) begin
+				$display("\n=========================================================================================");
+				$display(" [FATAL ERROR] Vector '%s' contains NO non-zero elements (%0d found, min %0d required)!", vec_name, nonzero_count, min_required);
+				$display(" Memory was either empty, uninitialized, or filled with all zeroes!");
+				$display(" Simulation aborted to prevent FALSE POSITIVE pass.");
+				$display("=========================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal_3x3/system/tb_npu_minimal_system.sv:590:13 - tb_npu_minimal_system.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$finish(1);
+			end
+		end
+	endtask
 	initial begin
 		#(300000)
 			;
@@ -506,6 +574,9 @@ module tb_npu_minimal_system;
 		reg signed [31:0] gy;
 		reg signed [31:0] gx;
 		reg signed [31:0] mem_addr;
+		string mem_dir;
+		reg signed [31:0] nz_act;
+		reg signed [31:0] nz_w;
 		reg [31:0] read_status;
 		reg signed [63:0] start_cycle;
 		reg signed [63:0] total_cycles;
@@ -540,10 +611,30 @@ module tb_npu_minimal_system;
 		rst_n = 1;
 		#(50)
 			;
-		$display("[1/4] Loading Project .mem Files (TEST/NPU/GoldenReference/)...");
-		$readmemh("TEST/NPU/GoldenReference/gen_conv3x3_halo_act.mem", raw_act_mem);
-		$readmemh("TEST/NPU/GoldenReference/gen_conv3x3_halo_w.mem", raw_w_mem);
-		$display("      gen_conv3x3_halo_act.mem and gen_conv3x3_halo_w.mem loaded successfully.");
+		$display("[1/4] Loading Project .mem Files...");
+		resolve_mem_dir("gen_conv3x3_halo_act.mem", mem_dir);
+		$display("      Resolved memory directory: '%s'", mem_dir);
+		check_file_exists({mem_dir, "gen_conv3x3_halo_act.mem"});
+		check_file_exists({mem_dir, "gen_conv3x3_halo_w.mem"});
+		$readmemh({mem_dir, "gen_conv3x3_halo_act.mem"}, raw_act_mem);
+		$readmemh({mem_dir, "gen_conv3x3_halo_w.mem"}, raw_w_mem);
+		nz_act = 0;
+		nz_w = 0;
+		begin : sv2v_autoblock_2
+			reg signed [31:0] i;
+			for (i = 0; i < 24605; i = i + 1)
+				if (raw_act_mem[i] !== 8'sd0)
+					nz_act = nz_act + 1;
+		end
+		begin : sv2v_autoblock_3
+			reg signed [31:0] i;
+			for (i = 0; i < 3591; i = i + 1)
+				if (raw_w_mem[i] !== 8'sd0)
+					nz_w = nz_w + 1;
+		end
+		$display("      gen_conv3x3_halo_act.mem (%0d non-zero) and gen_conv3x3_halo_w.mem (%0d non-zero) loaded successfully.", nz_act, nz_w);
+		assert_vector_nonzero("raw_act_mem", nz_act, 10);
+		assert_vector_nonzero("raw_w_mem", nz_w, 10);
 		for (y = 0; y < 18; y = y + 1)
 			for (x = 0; x < 18; x = x + 1)
 				begin
@@ -666,8 +757,11 @@ module tb_npu_minimal_system;
 			$display("    Execution Latency:           %0d clock cycles", total_cycles);
 			$display("    Throughput:                  %0.2f MACs/cycle", (18432 * 8.0) / total_cycles);
 		end
-		else
+		else begin
 			$display(">>> TEST FAILED: %0d / 2048 Activation Mismatches Encountered <<<", error_count);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal_3x3/system/tb_npu_minimal_system.sv:836:13 - tb_npu_minimal_system.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Minimal system testbench failed with mismatches!");
+			$finish(1);
+		end
 		$display("=====================================================================================");
 		$display("\n=========================================================================================================");
 		$display(">>> DETAILED HARDWARE LATENCY & EFFICIENCY BREAKDOWN <<<");

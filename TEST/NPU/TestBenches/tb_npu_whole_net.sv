@@ -114,17 +114,59 @@ module tb_npu_whole_net;
         .ext_act_sram_wdata(ext_act_sram_wdata), .act_sram_rdata(act_sram_rdata), .out_act(out_act)
     );
 
+    task automatic resolve_mem_dir(input string sample_file, output string mem_dir);
+        int fd;
+        int found;
+        found = 0;
+
+        // 1. Check runtime plusarg (+MEM_DIR=...)
+        if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\")
+                mem_dir = {mem_dir, "/"};
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 2. Fallback to single standard default path
+        if (!found) begin
+            mem_dir = "TEST/NPU/GoldenReference/";
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 3. Fail immediately if neither worked
+        if (!found) begin
+            $display("\n=====================================================================================");
+            $display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+            $display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+            $display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+            $display("=====================================================================================");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+    endtask
+
     function automatic void check_file_exists(input string filename);
         int fd = $fopen(filename, "r");
         if (fd == 0) begin
             $display("\n=====================================================================================");
             $display(" [FATAL ERROR] Required memory file '%s' was NOT found!", filename);
-            $display(" Run 'python3 gen_npu_whole_net.py' to generate all reference test vectors.");
             $display("=====================================================================================\n");
             $fatal(1, "Aborting simulation due to missing test vector files.");
         end
         $fclose(fd);
     endfunction
+
+    task automatic assert_vector_nonzero(
+        input string vec_name,
+        input int nonzero_count,
+        input int min_required = 1
+    );
+        if (nonzero_count < min_required) begin
+            $display("\n[FATAL ERROR] Test vector '%s' is empty or all-zero (%0d non-zero elements, min required: %0d)!",
+                     vec_name, nonzero_count, min_required);
+            $fatal(1, "Zero-vector guard triggered: preventing false-positive pass.");
+        end
+    endtask
 
     function automatic void get_sram_loc(input int cin, input int ly, input int lx, output int bank, output int addr);
         int h = (lx >= 9) ? 1 : 0;
@@ -742,31 +784,9 @@ module tb_npu_whole_net;
         $display("   NPU 5-LAYER WHOLE-NETWORK REGRESSION (64x64 -> Stride-2 -> 32x32 -> SiLU)         ");
         $display("=====================================================================================");
 
-        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
-        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
-            fd = $fopen("wholenet_in.mem", "r");
-            if (fd != 0) begin
-                $fclose(fd);
-                mem_dir = "./";
-            end else begin
-                fd = $fopen("../GoldenReference/wholenet_in.mem", "r");
-                if (fd != 0) begin
-                    $fclose(fd);
-                    mem_dir = "../GoldenReference/";
-                end else begin
-                    fd = $fopen("TEST/NPU/GoldenReference/wholenet_in.mem", "r");
-                    if (fd != 0) begin
-                        $fclose(fd);
-                        mem_dir = "TEST/NPU/GoldenReference/";
-                    end else begin
-                        mem_dir = "./";
-                    end
-                end
-            end
-        end
-        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
-            mem_dir = {mem_dir, "/"};
-        end
+        // Resolve memory file path using standardized 2-step resolver
+        resolve_mem_dir("wholenet_in.mem", mem_dir);
+        $display("[INFO] Resolved memory directory: '%s'", mem_dir);
 
         check_file_exists({mem_dir, "wholenet_in.mem"});
         check_file_exists({mem_dir, "wholenet_l1_w.mem"});    check_file_exists({mem_dir, "wholenet_l1_b.mem"});   check_file_exists({mem_dir, "wholenet_l1_cfg.mem"}); check_file_exists({mem_dir, "wholenet_l1_gold.mem"});
@@ -783,6 +803,28 @@ module tb_npu_whole_net;
         $readmemh({mem_dir, "wholenet_l4_w.mem"},    w4_flat);  $readmemh({mem_dir, "wholenet_l4_b.mem"},  b4_flat);  $readmemh({mem_dir, "wholenet_l4_cfg.mem"},  cfg4); $readmemh({mem_dir, "wholenet_l4_gold.mem"}, gold_l4);
         $readmemh({mem_dir, "wholenet_l5_w.mem"},    w5_flat);  $readmemh({mem_dir, "wholenet_l5_b.mem"},  b5_flat);  $readmemh({mem_dir, "wholenet_l5_cfg.mem"},  cfg5); $readmemh({mem_dir, "wholenet_l5_gold.mem"}, gold_l5);
         $readmemh({mem_dir, "wholenet_l5_lut.mem"},  lut_silu);
+
+        begin
+            int nz_in = 0, nz_l1_w = 0, nz_l2_w = 0, nz_l3_w = 0, nz_l4_w = 0, nz_l5_w = 0, nz_silu = 0;
+            for (int i = 0; i < $size(fmap_in); i++) if (fmap_in[i] !== 8'sd0) nz_in++;
+            for (int i = 0; i < $size(w1_flat); i++) if (w1_flat[i] !== 8'sd0) nz_l1_w++;
+            for (int i = 0; i < $size(w2_flat); i++) if (w2_flat[i] !== 8'sd0) nz_l2_w++;
+            for (int i = 0; i < $size(w3_flat); i++) if (w3_flat[i] !== 8'sd0) nz_l3_w++;
+            for (int i = 0; i < $size(w4_flat); i++) if (w4_flat[i] !== 8'sd0) nz_l4_w++;
+            for (int i = 0; i < $size(w5_flat); i++) if (w5_flat[i] !== 8'sd0) nz_l5_w++;
+            for (int i = 0; i < $size(lut_silu); i++) if (lut_silu[i] !== 8'sd0) nz_silu++;
+
+            $display("[INFO] Loaded test vectors: fmap_in=%0d nz, L1_W=%0d nz, L2_W=%0d nz, L3_W=%0d nz, L4_W=%0d nz, L5_W=%0d nz, SiLU=%0d nz",
+                     nz_in, nz_l1_w, nz_l2_w, nz_l3_w, nz_l4_w, nz_l5_w, nz_silu);
+
+            assert_vector_nonzero("fmap_in", nz_in, 10);
+            assert_vector_nonzero("w1_flat", nz_l1_w, 10);
+            assert_vector_nonzero("w2_flat", nz_l2_w, 10);
+            assert_vector_nonzero("w3_flat", nz_l3_w, 10);
+            assert_vector_nonzero("w4_flat", nz_l4_w, 10);
+            assert_vector_nonzero("w5_flat", nz_l5_w, 10);
+            assert_vector_nonzero("lut_silu", nz_silu, 10);
+        end
 
         zp_l1 = $signed(cfg1[0][29:22]);
         zp_l2 = $signed(cfg2[0][29:22]);

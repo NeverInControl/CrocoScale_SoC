@@ -16,6 +16,8 @@ module tb_npu_full_sys_3x3_benchmark;
 	parameter signed [31:0] COUT = 32;
 	localparam signed [31:0] CONV_H = 48;
 	localparam signed [31:0] CONV_W = 48;
+	localparam signed [31:0] POOL_H = 24;
+	localparam signed [31:0] POOL_W = 24;
 	reg clk;
 	reg rst_n;
 	reg [AXI_ADDR_WIDTH - 1:0] s_axil_awaddr;
@@ -71,19 +73,19 @@ module tb_npu_full_sys_3x3_benchmark;
 	wire [(ARRAY_WIDTH * WEIGHT_WIDTH) - 1:0] npu_weight_shift_in;
 	wire [1:0] npu_weight_shift_en;
 	wire npu_swap_weights;
-	wire [SCALE_WIDTH - 1:0] npu_quant_shift_in;
+	wire [29:0] npu_quant_shift_in;
 	wire npu_quant_shift_en;
 	wire npu_stochastic_round_en;
 	wire [7:0] npu_psum_A_addr;
 	wire [ARRAY_WIDTH - 1:0] npu_psum_A_we;
-	wire [(ARRAY_WIDTH * PSUM_WIDTH) - 1:0] npu_psum_A_wdata;
-	wire npu_psum_A_read_bank_sel;
-	wire [(ARRAY_WIDTH * PSUM_WIDTH) - 1:0] npu_psum_A_rdata;
+	wire signed [PSUM_WIDTH - 1:0] npu_psum_A_wdata;
+	wire [2:0] npu_psum_A_read_bank_sel;
+	wire signed [PSUM_WIDTH - 1:0] npu_psum_A_rdata;
 	wire [7:0] npu_psum_B_addr;
 	wire [ARRAY_WIDTH - 1:0] npu_psum_B_we;
-	wire [(ARRAY_WIDTH * PSUM_WIDTH) - 1:0] npu_psum_B_wdata;
-	wire npu_psum_B_read_bank_sel;
-	wire [(ARRAY_WIDTH * PSUM_WIDTH) - 1:0] npu_psum_B_rdata;
+	wire signed [PSUM_WIDTH - 1:0] npu_psum_B_wdata;
+	wire [2:0] npu_psum_B_read_bank_sel;
+	wire signed [PSUM_WIDTH - 1:0] npu_psum_B_rdata;
 	wire [ARRAY_HEIGHT - 1:0] npu_ext_act_sram_we;
 	wire [(ARRAY_HEIGHT * 9) - 1:0] npu_ext_act_sram_addr;
 	reg [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] npu_ext_act_sram_wdata;
@@ -92,17 +94,22 @@ module tb_npu_full_sys_3x3_benchmark;
 	wire [3:0] efpga_usr_irq_o;
 	initial clk = 0;
 	always #(5) clk = ~clk;
-	localparam signed [31:0] MEM_ADDR_WIDTH = 17;
+	localparam signed [31:0] MEM_ADDR_WIDTH = 19;
 	axi_ram #(
 		.DATA_WIDTH(AXI_DATA_WIDTH),
-		.ADDR_WIDTH(MEM_ADDR_WIDTH)
+		.ADDR_WIDTH(MEM_ADDR_WIDTH),
+		.ID_WIDTH(1)
 	) axi_ram_inst(
 		.clk(clk),
-		.rst_n(rst_n),
-		.s_axi_awaddr(m_axi_awaddr[16:0]),
+		.rst(~rst_n),
+		.s_axi_awid(1'b0),
+		.s_axi_awaddr(m_axi_awaddr[18:0]),
 		.s_axi_awlen(m_axi_awlen),
 		.s_axi_awsize(m_axi_awsize),
 		.s_axi_awburst(m_axi_awburst),
+		.s_axi_awlock(1'b0),
+		.s_axi_awcache(4'd0),
+		.s_axi_awprot(3'd0),
 		.s_axi_awvalid(m_axi_awvalid),
 		.s_axi_awready(m_axi_awready),
 		.s_axi_wdata(m_axi_wdata),
@@ -110,15 +117,21 @@ module tb_npu_full_sys_3x3_benchmark;
 		.s_axi_wlast(m_axi_wlast),
 		.s_axi_wvalid(m_axi_wvalid),
 		.s_axi_wready(m_axi_wready),
+		.s_axi_bid(),
 		.s_axi_bresp(m_axi_bresp),
 		.s_axi_bvalid(m_axi_bvalid),
 		.s_axi_bready(m_axi_bready),
-		.s_axi_araddr(m_axi_araddr[16:0]),
+		.s_axi_arid(1'b0),
+		.s_axi_araddr(m_axi_araddr[18:0]),
 		.s_axi_arlen(m_axi_arlen),
 		.s_axi_arsize(m_axi_arsize),
 		.s_axi_arburst(m_axi_arburst),
+		.s_axi_arlock(1'b0),
+		.s_axi_arcache(4'd0),
+		.s_axi_arprot(3'd0),
 		.s_axi_arvalid(m_axi_arvalid),
 		.s_axi_arready(m_axi_arready),
+		.s_axi_rid(),
 		.s_axi_rdata(m_axi_rdata),
 		.s_axi_rresp(m_axi_rresp),
 		.s_axi_rlast(m_axi_rlast),
@@ -136,7 +149,7 @@ module tb_npu_full_sys_3x3_benchmark;
 		.SCALE_WIDTH(SCALE_WIDTH),
 		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) npu_inst(
-		.clk(clk),
+		.clk_i(clk),
 		.rst_n(rst_n),
 		.array_en(npu_array_en),
 		.psum_systolic_en(npu_psum_systolic_en),
@@ -233,7 +246,7 @@ module tb_npu_full_sys_3x3_benchmark;
 		.npu_psum_lut_en(npu_psum_lut_en),
 		.npu_psum_skew_en(npu_psum_skew_en),
 		.npu_compute_bank_swap(npu_compute_bank_swap),
-		.crossbar_sel(npu_crossbar_sel),
+		.npu_crossbar_sel(npu_crossbar_sel),
 		.npu_weight_shift_in(npu_weight_shift_in),
 		.npu_weight_shift_en(npu_weight_shift_en),
 		.npu_swap_weights(npu_swap_weights),
@@ -259,17 +272,17 @@ module tb_npu_full_sys_3x3_benchmark;
 	reg signed [WEIGHT_WIDTH - 1:0] w1_flat [0:((9 * CIN) * COUT) - 1];
 	reg signed [31:0] b1_flat [0:COUT - 1];
 	reg [31:0] p1_cfg [0:COUT - 1];
-	reg signed [ACTIVATION_WIDTH - 1:0] gold_l1 [0:((CONV_H * CONV_W) * COUT) - 1];
+	reg signed [ACTIVATION_WIDTH - 1:0] gold_l1 [0:((POOL_H * POOL_W) * COUT) - 1];
 	localparam [31:0] ACT_BASE_ADDR = 32'h00000000;
 	localparam [31:0] WEIGHT_BASE_ADDR = 32'h00010000;
-	localparam [31:0] OUT_BASE_ADDR = 32'h00018000;
-	localparam [31:0] BIAS_BASE_ADDR = 32'h0001c000;
-	localparam [31:0] QUANT_BASE_ADDR = 32'h0001d000;
-	localparam [31:0] LUT_BASE_ADDR = 32'h0001e000;
+	localparam [31:0] BIAS_BASE_ADDR = 32'h0001a000;
+	localparam [31:0] QUANT_BASE_ADDR = 32'h0001a100;
+	localparam [31:0] LUT_BASE_ADDR = 32'h0001a200;
+	localparam [31:0] OUT_BASE_ADDR = 32'h00020000;
 	task automatic ram_write_word;
 		input [31:0] addr;
 		input [31:0] data;
-		axi_ram_inst.mem[addr[16:2]] = data;
+		axi_ram_inst.mem[addr[18:2]] = data;
 	endtask
 	task automatic axil_write;
 		input reg [31:0] addr;
@@ -348,6 +361,74 @@ module tb_npu_full_sys_3x3_benchmark;
 			s_axil_rready = 1'b0;
 		end
 	endtask
+	task automatic resolve_mem_dir;
+		input string sample_file;
+		output string mem_dir;
+		reg signed [31:0] fd;
+		reg signed [31:0] found;
+		begin
+			found = 0;
+			if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+				if (((mem_dir.len() > 0) && (mem_dir[mem_dir.len() - 1] != "/")) && (mem_dir[mem_dir.len() - 1] != "\\"))
+					mem_dir = {mem_dir, "/"};
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				mem_dir = "TEST/SoftLogic/GoldenReference/";
+				fd = $fopen({mem_dir, sample_file}, "r");
+				if (fd != 0) begin
+					$fclose(fd);
+					found = 1;
+				end
+			end
+			if (!found) begin
+				$display("\n=====================================================================================");
+				$display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+				$display(" Checked plusarg path and standard default 'TEST/SoftLogic/GoldenReference/'.");
+				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+				$display("=====================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:408:13 - tb_npu_full_sys_3x3_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$finish(1);
+			end
+		end
+	endtask
+	task automatic check_file_exists;
+		input string filename;
+		reg signed [31:0] fd;
+		begin
+			fd = $fopen(filename, "r");
+			if (fd == 0) begin
+				$display("\n=========================================================================================");
+				$display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
+				$display(" Please ensure files exist in TEST/SoftLogic/GoldenReference/ or pass +MEM_DIR=<path>.");
+				$display("=========================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:420:13 - tb_npu_full_sys_3x3_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$finish(1);
+			end
+			$fclose(fd);
+		end
+	endtask
+	task automatic assert_vector_nonzero;
+		input string vec_name;
+		input reg signed [31:0] nonzero_count;
+		input reg signed [31:0] min_required;
+		begin
+			min_required = 1;
+			if (nonzero_count < min_required) begin
+				$display("\n=========================================================================================");
+				$display(" [FATAL ERROR] Vector '%s' contains NO non-zero elements (%0d found, min %0d required)!", vec_name, nonzero_count, min_required);
+				$display(" Memory was either empty, uninitialized, or filled with all zeroes!");
+				$display(" Simulation aborted to prevent FALSE POSITIVE pass.");
+				$display("=========================================================================================\n");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:437:13 - tb_npu_full_sys_3x3_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$finish(1);
+			end
+		end
+	endtask
 	function automatic signed [7:0] get_fmap_val;
 		input reg signed [31:0] c_idx;
 		input reg signed [31:0] b_idx;
@@ -397,6 +478,31 @@ module tb_npu_full_sys_3x3_benchmark;
 				get_weight_val = 8'sd0;
 		end
 	endfunction
+	reg signed [31:0] curr_ty = 0;
+	reg signed [31:0] curr_tx = 0;
+	function automatic string get_progress_bar;
+		input reg signed [31:0] current;
+		input reg signed [31:0] total;
+		string bar;
+		reg signed [31:0] filled;
+		begin
+			bar = "[";
+			filled = (current * 20) / total;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 20; i = i + 1)
+					if (i < filled)
+						bar = {bar, "="};
+					else if (i == filled)
+						bar = {bar, ">"};
+					else
+						bar = {bar, " "};
+			end
+			bar = {bar, "]"};
+			get_progress_bar = bar;
+		end
+	endfunction
+	reg signed [31:0] feeder_b;
 	function automatic signed [31:0] sv2v_cast_32_signed;
 		input reg signed [31:0] inp;
 		sv2v_cast_32_signed = inp;
@@ -405,30 +511,28 @@ module tb_npu_full_sys_3x3_benchmark;
 		if (!rst_n)
 			npu_ext_act_sram_wdata <= 1'sb0;
 		else if (dut.preload_phase) begin
-			begin : sv2v_autoblock_1
-				reg signed [31:0] b;
-				for (b = 0; b < 6; b = b + 1)
-					npu_ext_act_sram_wdata[b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(0, b, sv2v_cast_32_signed(dut.preload_step), 0, 0);
-			end
+			for (feeder_b = 0; feeder_b < 6; feeder_b = feeder_b + 1)
+				npu_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(0, feeder_b, sv2v_cast_32_signed(dut.preload_step), curr_ty, curr_tx);
 			npu_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 			npu_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 		end
 		else if (dut.dma_channel_to_load >= 0) begin
-			begin : sv2v_autoblock_2
-				reg signed [31:0] b;
-				for (b = 0; b < 6; b = b + 1)
-					npu_ext_act_sram_wdata[b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(sv2v_cast_32_signed(dut.dma_channel_to_load), b, sv2v_cast_32_signed(dut.dma_bank_ptr[b]), 0, 0);
-			end
+			for (feeder_b = 0; feeder_b < 6; feeder_b = feeder_b + 1)
+				npu_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(sv2v_cast_32_signed(dut.dma_channel_to_load), feeder_b, sv2v_cast_32_signed((dut.dma_bank_ptr >> (feeder_b * 6)) & 6'h3f), curr_ty, curr_tx);
 			npu_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 			npu_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 		end
 	initial begin
-		#(800000)
+		#(30000000)
 			;
-		$display("\n[ERROR] Simulation Watchdog Timeout in Benchmark (80,000 cycles)!");
+		$display("\n[ERROR] Simulation Watchdog Timeout in Benchmark (3,000,000 cycles)!");
 		$finish;
 	end
-	initial begin : sv2v_autoblock_3
+	function automatic signed [63:0] sv2v_cast_64_signed;
+		input reg signed [63:0] inp;
+		sv2v_cast_64_signed = inp;
+	endfunction
+	initial begin : sv2v_autoblock_2
 		reg signed [63:0] start_time;
 		reg signed [63:0] total_cycles;
 		reg signed [63:0] ideal_macs;
@@ -441,24 +545,80 @@ module tb_npu_full_sys_3x3_benchmark;
 		reg signed [31:0] max_diff;
 		reg signed [31:0] diff_val;
 		reg signed [31:0] p_idx;
-		reg signed [31:0] y_idx;
-		reg signed [31:0] x_idx;
 		reg signed [31:0] ch_idx;
 		reg signed [31:0] flat_idx;
+		reg signed [31:0] ty;
+		reg signed [31:0] tx;
+		reg signed [31:0] cout_b;
+		reg signed [31:0] block_idx;
+		reg signed [31:0] done_blks;
 		reg [31:0] read_status;
 		reg [31:0] word0;
 		reg [31:0] word1;
+		string mem_dir;
+		reg signed [31:0] nz_act;
+		reg signed [31:0] nz_w;
+		reg signed [31:0] nz_b;
+		reg signed [31:0] nz_gold;
 		reg signed [7:0] ram_pix [0:7];
 		reg signed [7:0] gold_val;
 		reg signed [7:0] act_val;
-		$display("\n=========================================================================================");
-		$display(">>> Starting Standalone Phase 3: The Big One (144-Pass 3x3 Benchmark) <<<");
-		$display("=========================================================================================");
-		$readmemh("TEST/NPU/GoldenReference/bench_im2col_act.mem", fmap_in);
-		$readmemh("TEST/NPU/GoldenReference/bench_im2col_w.mem", w1_flat);
-		$readmemh("TEST/NPU/GoldenReference/bench_im2col_b.mem", b1_flat);
-		$readmemh("TEST/NPU/GoldenReference/bench_im2col_cfg.mem", p1_cfg);
-		$readmemh("TEST/NPU/GoldenReference/bench_im2col_out_quant.mem", gold_l1);
+		reg signed [31:0] word_base;
+		reg signed [31:0] y_local;
+		reg signed [31:0] x_local;
+		reg signed [31:0] y_global;
+		reg signed [31:0] x_global;
+		reg signed [31:0] ch_global;
+		reg signed [31:0] i_init;
+		reg signed [31:0] cb;
+		reg signed [31:0] ch;
+		reg signed [31:0] p;
+		reg signed [31:0] s;
+		$display("=====================================================================================");
+		$display("   NPU SCALING EVALUATION: 3x3 CONVOLUTION (FULL 48x48x128 -> 32 BENCHMARK)         ");
+		$display("=====================================================================================");
+		$display("   Input Tensor Dimensions  : 48x48 (Height x Width), 128 Channels");
+		$display("   Output Tensor Dimensions : 48x48 (Height x Width), 32 Channels");
+		$display("   Kernel Configuration     : 3x3 Conv, Stride 1, SAME Padding");
+		$display("   Spatial Partitioning     : 3x3 Tiles of 16x16 (Exact 100%% Spatial Alignment)");
+		$display("   Channel Processing       : 4 Output Channel Blocks (Exact 100%% Channel Alignment)");
+		$display("   Total Workload Execution : 36 Total Blocks | 144 Passes/Block (5,184 Passes Total)");
+		$display("   Reduction Depth (K_total): 1152 Taps -> 144 Passes (8 Taps/Pass continuous streaming)");
+		$display("   Memory Persistence       : Multi-Block In-Place AXI RAM Retention (No Reset/Wipe)");
+		$display("=====================================================================================\n");
+		resolve_mem_dir("bench_im2col_act.mem", mem_dir);
+		$display("[INFO] Resolved memory directory: '%s'", mem_dir);
+		check_file_exists({mem_dir, "bench_im2col_act.mem"});
+		check_file_exists({mem_dir, "bench_im2col_w.mem"});
+		check_file_exists({mem_dir, "bench_im2col_b.mem"});
+		check_file_exists({mem_dir, "bench_im2col_cfg.mem"});
+		check_file_exists({mem_dir, "bench_im2col_out_pooled.mem"});
+		$readmemh({mem_dir, "bench_im2col_act.mem"}, fmap_in);
+		$readmemh({mem_dir, "bench_im2col_w.mem"}, w1_flat);
+		$readmemh({mem_dir, "bench_im2col_b.mem"}, b1_flat);
+		$readmemh({mem_dir, "bench_im2col_cfg.mem"}, p1_cfg);
+		$readmemh({mem_dir, "bench_im2col_out_pooled.mem"}, gold_l1);
+		nz_act = 0;
+		nz_w = 0;
+		nz_b = 0;
+		nz_gold = 0;
+		for (i_init = 0; i_init < ((CONV_H * CONV_W) * CIN); i_init = i_init + 1)
+			if (fmap_in[i_init] !== 8'sd0)
+				nz_act = nz_act + 1;
+		for (i_init = 0; i_init < ((9 * CIN) * COUT); i_init = i_init + 1)
+			if (w1_flat[i_init] !== 8'sd0)
+				nz_w = nz_w + 1;
+		for (i_init = 0; i_init < COUT; i_init = i_init + 1)
+			if (b1_flat[i_init] !== 32'sd0)
+				nz_b = nz_b + 1;
+		for (i_init = 0; i_init < ((POOL_H * POOL_W) * COUT); i_init = i_init + 1)
+			if (gold_l1[i_init] !== 8'sd0)
+				nz_gold = nz_gold + 1;
+		$display("[INFO] Loaded test vectors: %0d non-zero activations, %0d non-zero weights, %0d non-zero biases, %0d non-zero golden outputs.", nz_act, nz_w, nz_b, nz_gold);
+		assert_vector_nonzero("fmap_in", nz_act, 10);
+		assert_vector_nonzero("w1_flat", nz_w, 10);
+		assert_vector_nonzero("b1_flat", nz_b, 1);
+		assert_vector_nonzero("gold_l1", nz_gold, 10);
 		rst_n = 0;
 		s_axil_awaddr = 1'sb0;
 		s_axil_awprot = 1'sb0;
@@ -478,99 +638,119 @@ module tb_npu_full_sys_3x3_benchmark;
 		rst_n = 1;
 		#(50)
 			;
-		begin : sv2v_autoblock_4
-			reg signed [31:0] ch;
+		for (cb = 0; cb < 4; cb = cb + 1)
 			for (ch = 0; ch < 8; ch = ch + 1)
-				ram_write_word(BIAS_BASE_ADDR + (ch * 4), b1_flat[ch]);
-		end
-		begin : sv2v_autoblock_5
-			reg signed [31:0] ch;
-			for (ch = 0; ch < 8; ch = ch + 1)
-				ram_write_word(QUANT_BASE_ADDR + (ch * 4), p1_cfg[ch]);
-		end
-		begin : sv2v_autoblock_6
-			reg signed [31:0] p;
-			for (p = 0; p < 144; p = p + 1)
-				begin : sv2v_autoblock_7
-					reg signed [31:0] s;
-					for (s = 0; s < 8; s = s + 1)
-						begin
-							ram_write_word(((WEIGHT_BASE_ADDR + (p * 64)) + (s * 8)) + 0, {get_weight_val(p, 0, 3, 7 - s), get_weight_val(p, 0, 2, 7 - s), get_weight_val(p, 0, 1, 7 - s), get_weight_val(p, 0, 0, 7 - s)});
-							ram_write_word(((WEIGHT_BASE_ADDR + (p * 64)) + (s * 8)) + 4, {get_weight_val(p, 0, 7, 7 - s), get_weight_val(p, 0, 6, 7 - s), get_weight_val(p, 0, 5, 7 - s), get_weight_val(p, 0, 4, 7 - s)});
-						end
+				begin
+					ram_write_word((BIAS_BASE_ADDR + (cb * 32)) + (ch * 4), b1_flat[(cb * 8) + ch]);
+					ram_write_word((QUANT_BASE_ADDR + (cb * 32)) + (ch * 4), p1_cfg[(cb * 8) + ch]);
 				end
-		end
-		axil_write(32'h00000008, 32'h00009001);
-		axil_write(32'h00000010, ACT_BASE_ADDR);
-		axil_write(32'h00000014, WEIGHT_BASE_ADDR);
-		axil_write(32'h00000018, OUT_BASE_ADDR);
-		axil_write(32'h0000001c, BIAS_BASE_ADDR);
-		axil_write(32'h00000020, QUANT_BASE_ADDR);
-		axil_write(32'h00000024, LUT_BASE_ADDR);
+		for (cb = 0; cb < 4; cb = cb + 1)
+			for (p = 0; p < 144; p = p + 1)
+				for (s = 0; s < 8; s = s + 1)
+					begin
+						ram_write_word((((WEIGHT_BASE_ADDR + ((cb * 144) * 64)) + (p * 64)) + (s * 8)) + 0, {get_weight_val(p, cb, 3, 7 - s), get_weight_val(p, cb, 2, 7 - s), get_weight_val(p, cb, 1, 7 - s), get_weight_val(p, cb, 0, 7 - s)});
+						ram_write_word((((WEIGHT_BASE_ADDR + ((cb * 144) * 64)) + (p * 64)) + (s * 8)) + 4, {get_weight_val(p, cb, 7, 7 - s), get_weight_val(p, cb, 6, 7 - s), get_weight_val(p, cb, 5, 7 - s), get_weight_val(p, cb, 4, 7 - s)});
+					end
+		$display(">>> Prepopulation Complete. Beginning 36-Block Continuous Benchmark Execution <<<\n");
+		done_blks = 0;
 		start_time = $time;
-		axil_write(32'h00000000, 32'h00000001);
-		read_status = 32'h00000000;
-		while (!read_status[1]) begin
-			#(500)
-				;
-			axil_read(32'h00000004, read_status);
-		end
+		for (ty = 0; ty < 3; ty = ty + 1)
+			for (tx = 0; tx < 3; tx = tx + 1)
+				for (cout_b = 0; cout_b < 4; cout_b = cout_b + 1)
+					begin
+						block_idx = (((ty * 3) + tx) * 4) + cout_b;
+						curr_ty = ty;
+						curr_tx = tx;
+						axil_write(32'h00000008, 32'h00009041);
+						axil_write(32'h00000010, ACT_BASE_ADDR);
+						axil_write(32'h00000014, WEIGHT_BASE_ADDR + ((cout_b * 144) * 64));
+						axil_write(32'h00000018, OUT_BASE_ADDR + (block_idx * 512));
+						axil_write(32'h0000001c, BIAS_BASE_ADDR + (cout_b * 32));
+						axil_write(32'h00000020, QUANT_BASE_ADDR + (cout_b * 32));
+						axil_write(32'h00000024, LUT_BASE_ADDR);
+						axil_write(32'h00000000, 32'h00000001);
+						read_status = 32'h00000000;
+						while (!read_status[1]) begin
+							#(500)
+								;
+							axil_read(32'h00000004, read_status);
+						end
+						done_blks = done_blks + 1;
+						$display("  %s %3d%% (Block %2d/36) [Tile (%0d,%0d), Cout Blk %0d/4] | Latency: %8d cycles", get_progress_bar(done_blks, 36), (done_blks * 100) / 36, done_blks, ty, tx, cout_b + 1, ($time - start_time) / 10);
+					end
 		total_cycles = ($time - start_time) / 10;
+		$display("\n=========================================================================================");
+		$display(">>> VALIDATING PERSISTENT OUTPUT TENSOR IN AXI RAM (36 BLOCKS, 18,432 ACTIVATIONS) <<<");
+		$display("=========================================================================================");
 		errs = 0;
 		tol_ok = 0;
 		exact_ok = 0;
 		max_diff = 0;
-		for (p_idx = 0; p_idx < 256; p_idx = p_idx + 1)
-			begin
-				y_idx = p_idx / 16;
-				x_idx = p_idx % 16;
-				word0 = axi_ram_inst.mem[(OUT_BASE_ADDR[16:2] + (p_idx * 2)) + 0];
-				word1 = axi_ram_inst.mem[(OUT_BASE_ADDR[16:2] + (p_idx * 2)) + 1];
-				ram_pix[0] = $signed(word0[7:0]);
-				ram_pix[1] = $signed(word0[15:8]);
-				ram_pix[2] = $signed(word0[23:16]);
-				ram_pix[3] = $signed(word0[31:24]);
-				ram_pix[4] = $signed(word1[7:0]);
-				ram_pix[5] = $signed(word1[15:8]);
-				ram_pix[6] = $signed(word1[23:16]);
-				ram_pix[7] = $signed(word1[31:24]);
-				for (ch_idx = 0; ch_idx < 8; ch_idx = ch_idx + 1)
+		for (ty = 0; ty < 3; ty = ty + 1)
+			for (tx = 0; tx < 3; tx = tx + 1)
+				for (cout_b = 0; cout_b < 4; cout_b = cout_b + 1)
 					begin
-						flat_idx = (((y_idx * CONV_W) * COUT) + (x_idx * COUT)) + ch_idx;
-						gold_val = gold_l1[flat_idx];
-						act_val = ram_pix[ch_idx];
-						diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-						if (diff_val == 0)
-							exact_ok = exact_ok + 1;
-						else if (diff_val <= 1)
-							tol_ok = tol_ok + 1;
-						else
-							errs = errs + 1;
-						if (diff_val > max_diff)
-							max_diff = diff_val;
+						block_idx = (((ty * 3) + tx) * 4) + cout_b;
+						for (p_idx = 0; p_idx < 64; p_idx = p_idx + 1)
+							begin
+								y_local = p_idx / 8;
+								x_local = p_idx % 8;
+								y_global = (ty * 8) + y_local;
+								x_global = (tx * 8) + x_local;
+								word_base = (OUT_BASE_ADDR[18:2] + (block_idx * 128)) + (p_idx * 2);
+								word0 = axi_ram_inst.mem[word_base + 0];
+								word1 = axi_ram_inst.mem[word_base + 1];
+								ram_pix[0] = $signed(word0[7:0]);
+								ram_pix[1] = $signed(word0[15:8]);
+								ram_pix[2] = $signed(word0[23:16]);
+								ram_pix[3] = $signed(word0[31:24]);
+								ram_pix[4] = $signed(word1[7:0]);
+								ram_pix[5] = $signed(word1[15:8]);
+								ram_pix[6] = $signed(word1[23:16]);
+								ram_pix[7] = $signed(word1[31:24]);
+								for (ch_idx = 0; ch_idx < 8; ch_idx = ch_idx + 1)
+									begin
+										ch_global = (cout_b * 8) + ch_idx;
+										flat_idx = (((y_global * POOL_W) * COUT) + (x_global * COUT)) + ch_global;
+										gold_val = gold_l1[flat_idx];
+										act_val = ram_pix[ch_idx];
+										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+										if (diff_val == 0)
+											exact_ok = exact_ok + 1;
+										else if (diff_val <= 1)
+											tol_ok = tol_ok + 1;
+										else
+											errs = errs + 1;
+										if (diff_val > max_diff)
+											max_diff = diff_val;
+									end
+							end
 					end
-			end
-		ideal_macs = 2359296;
+		ideal_macs = (((sv2v_cast_64_signed(CONV_H) * sv2v_cast_64_signed(CONV_W)) * sv2v_cast_64_signed(CIN)) * sv2v_cast_64_signed(COUT)) * 9;
 		ideal_cycles = ideal_macs / 64;
-		compute_eff = (real'(ideal_cycles) / real'(37440)) * 100.0;
+		compute_eff = (real'(ideal_cycles) / real'(1347840)) * 100.0;
 		e2e_eff = (real'(ideal_cycles) / real'(total_cycles)) * 100.0;
 		$display("\n=========================================================================================");
-		$display(">>> BENCHMARK RESULTS (144 PASSES) <<<");
+		$display(">>> FULL WORKLOAD BENCHMARK RESULTS (36 BLOCKS, 5,184 PASSES + MAXPOOL2D) <<<");
 		$display("=========================================================================================");
 		$display("  Total Latency:         %0d clock cycles", total_cycles);
-		$display("  Ideal Compute Cycles:  %0d clock cycles", ideal_cycles);
+		$display("  Ideal Peak Cycles:     %0d clock cycles (at 64 MACs/cycle)", ideal_cycles);
+		$display("  Mathematical MACs:     %0d operations", ideal_macs);
 		$display("  Compute Array Eff:     %0.2f%%", compute_eff);
 		$display("  End-to-End System Eff: %0.2f%%", e2e_eff);
-		$display("  Total Validated:       2048 activations");
-		$display("  Exact Matches (diff 0):%0d", exact_ok);
-		$display("  Tol Matches   (diff 1):%0d", tol_ok);
+		$display("  Total Validated:       18,432 activations (100%% of 24x24x32 pooled output tensor)");
+		$display("  Exact Matches (diff 0):%0d (%0.2f%%)", exact_ok, (real'(exact_ok) / 18432.0) * 100.0);
+		$display("  Tol Matches   (diff 1):%0d (%0.2f%%)", tol_ok, (real'(tol_ok) / 18432.0) * 100.0);
 		$display("  Errors        (diff >1):%0d", errs);
 		$display("  Max Discrepancy:       %0d", max_diff);
 		$display("=========================================================================================");
-		if (errs == 0)
-			$display(">>> SUCCESS: 144-Pass Benchmark PASSED 100%%! <<<");
-		else
-			$display(">>> FAILED: Benchmark had %0d mismatches! <<<", errs);
+		if ((errs == 0) && (exact_ok > 0))
+			$display(">>> SUCCESS: Full 36-Block Benchmark with MaxPool2D PASSED 100%%! <<<");
+		else begin
+			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:735:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
+			$finish(1);
+		end
 		$finish;
 	end
 	initial _sv2v_0 = 0;

@@ -2,6 +2,8 @@ module npu_seq_fsm (
 	clk_i,
 	rst_n,
 	start_i,
+	start_drain_i,
+	auto_drain_i,
 	mode_1x1_i,
 	lut_en_i,
 	lut_load_done_i,
@@ -25,6 +27,8 @@ module npu_seq_fsm (
 	input wire clk_i;
 	input wire rst_n;
 	input wire start_i;
+	input wire start_drain_i;
+	input wire auto_drain_i;
 	input wire mode_1x1_i;
 	input wire lut_en_i;
 	input wire lut_load_done_i;
@@ -80,6 +84,17 @@ module npu_seq_fsm (
 						preload_cnt <= 1'sb0;
 						state_reg <= 3'd1;
 					end
+					else if (start_drain_i) begin
+						busy_o <= 1'b1;
+						if (lut_en_i) begin
+							start_lut_load_o <= 1'b1;
+							state_reg <= 3'd3;
+						end
+						else begin
+							drain_cnt <= 1'sb0;
+							state_reg <= 3'd4;
+						end
+					end
 				end
 				3'd1:
 					if (preload_cnt == preload_limit) begin
@@ -93,13 +108,20 @@ module npu_seq_fsm (
 					if (k_cnt == (cur_pass_len - 1'b1)) begin
 						k_cnt <= 1'sb0;
 						if (pass_cnt == (total_passes_i - 1'b1)) begin
-							if (lut_en_i) begin
-								start_lut_load_o <= 1'b1;
-								state_reg <= 3'd3;
+							if (auto_drain_i) begin
+								if (lut_en_i) begin
+									start_lut_load_o <= 1'b1;
+									state_reg <= 3'd3;
+								end
+								else begin
+									drain_cnt <= 1'sb0;
+									state_reg <= 3'd4;
+								end
 							end
 							else begin
-								drain_cnt <= 1'sb0;
-								state_reg <= 3'd4;
+								done_o <= 1'b1;
+								busy_o <= 1'b0;
+								state_reg <= 3'd5;
 							end
 						end
 						else

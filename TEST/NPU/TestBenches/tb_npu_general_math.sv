@@ -368,6 +368,64 @@ module tb_npu_general_math;
         $display("   \\-- SiLU Non-Linear LUT Act  : %s (%0d mismatches)", (p.lut_errors == 0) ? "PASS [100%]" : "FAIL", p.lut_errors);
     endtask
 
+    // =========================================================================
+    // Strict File Existence & Directory Resolution Guard
+    // =========================================================================
+    task automatic resolve_mem_dir(input string sample_file, output string mem_dir);
+        int fd;
+        int found;
+        found = 0;
+
+        // 1. Check runtime plusarg (+MEM_DIR=...)
+        if ($value$plusargs("MEM_DIR=%s", mem_dir)) begin
+            if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\")
+                mem_dir = {mem_dir, "/"};
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 2. Fallback to single standard default path
+        if (!found) begin
+            mem_dir = "TEST/NPU/GoldenReference/";
+            fd = $fopen({mem_dir, sample_file}, "r");
+            if (fd != 0) begin $fclose(fd); found = 1; end
+        end
+
+        // 3. Fail immediately if neither worked
+        if (!found) begin
+            $display("\n=====================================================================================");
+            $display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
+            $display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+            $display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
+            $display("=====================================================================================\n");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+    endtask
+
+    task automatic check_file_exists(input string filename);
+        int fd;
+        fd = $fopen(filename, "r");
+        if (fd == 0) begin
+            $display("\n=====================================================================================");
+            $display(" [FATAL ERROR] Required memory file '%s' was NOT found!", filename);
+            $display("=====================================================================================\n");
+            $fatal(1, "Aborting simulation due to missing test vector files.");
+        end
+        $fclose(fd);
+    endtask
+
+    task automatic assert_vector_nonzero(
+        input string vec_name,
+        input int nonzero_count,
+        input int min_required = 1
+    );
+        if (nonzero_count < min_required) begin
+            $display("\n[FATAL ERROR] Test vector '%s' is empty or all-zero (%0d non-zero elements, min required: %0d)!",
+                     vec_name, nonzero_count, min_required);
+            $fatal(1, "Zero-vector guard triggered: preventing false-positive pass.");
+        end
+    endtask
+
     initial begin : main_proc
         automatic longint t_start, s_time, c_start, d_start;
         automatic logic swap_val, hold_zero;
@@ -383,37 +441,30 @@ module tb_npu_general_math;
         automatic int py, px, ch, ch_in, ch_out, co;
         automatic int gy, gx, m_p, ky_t, kx_t;
         string mem_dir;
-        int fd;
 
         $display("=====================================================================================");
         $display("    NPU GENERAL MATH MULTI-TILE REGRESSION (GEMM, 1x1, 3x3 Halo)                     ");
         $display("=====================================================================================");
 
-        // Resolve memory file path: runtime plusarg (+MEM_DIR=...) -> local working dir -> relative GoldenReference
-        if (!$value$plusargs("MEM_DIR=%s", mem_dir)) begin
-            fd = $fopen("gen_lut_silu.mem", "r");
-            if (fd != 0) begin
-                $fclose(fd);
-                mem_dir = "./";
-            end else begin
-                fd = $fopen("../GoldenReference/gen_lut_silu.mem", "r");
-                if (fd != 0) begin
-                    $fclose(fd);
-                    mem_dir = "../GoldenReference/";
-                end else begin
-                    fd = $fopen("TEST/NPU/GoldenReference/gen_lut_silu.mem", "r");
-                    if (fd != 0) begin
-                        $fclose(fd);
-                        mem_dir = "TEST/NPU/GoldenReference/";
-                    end else begin
-                        mem_dir = "./";
-                    end
-                end
-            end
-        end
-        if (mem_dir.len() > 0 && mem_dir[mem_dir.len()-1] != "/" && mem_dir[mem_dir.len()-1] != "\\") begin
-            mem_dir = {mem_dir, "/"};
-        end
+        // Resolve memory file path using standardized 2-step resolver
+        resolve_mem_dir("gen_lut_silu.mem", mem_dir);
+        $display("[INFO] Resolved memory directory: '%s'", mem_dir);
+
+        // Verify test vector files exist
+        check_file_exists({mem_dir, "gen_lut_silu.mem"});
+        check_file_exists({mem_dir, "gen_gemm_a.mem"});
+        check_file_exists({mem_dir, "gen_gemm_b.mem"});
+        check_file_exists({mem_dir, "gen_gemm_out_raw.mem"});
+        check_file_exists({mem_dir, "gen_conv1x1_act.mem"});
+        check_file_exists({mem_dir, "gen_conv1x1_w.mem"});
+        check_file_exists({mem_dir, "gen_conv1x1_out_raw.mem"});
+        check_file_exists({mem_dir, "gen_conv1x1_out_quant.mem"});
+        check_file_exists({mem_dir, "gen_conv1x1_out_lut.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_act.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_w.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_out_raw.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_out_quant.mem"});
+        check_file_exists({mem_dir, "gen_conv3x3_halo_out_lut.mem"});
 
         // Pre-load reference datasets generated by the Python script
         $readmemh({mem_dir, "gen_lut_silu.mem"},               lut_silu_flat);
@@ -432,6 +483,28 @@ module tb_npu_general_math;
         $readmemh({mem_dir, "gen_conv3x3_halo_out_raw.mem"},   golden_conv3x3_halo_raw_flat);
         $readmemh({mem_dir, "gen_conv3x3_halo_out_quant.mem"}, golden_conv3x3_halo_quant_flat);
         $readmemh({mem_dir, "gen_conv3x3_halo_out_lut.mem"},   golden_conv3x3_halo_lut_flat);
+
+        begin
+            int nz_silu = 0, nz_gemm_a = 0, nz_gemm_b = 0, nz_c1_a = 0, nz_c1_w = 0, nz_c3_a = 0, nz_c3_w = 0;
+            for (int i = 0; i < $size(lut_silu_flat); i++) if (lut_silu_flat[i] !== 8'sd0) nz_silu++;
+            for (int i = 0; i < $size(raw_gemm_A_flat); i++) if (raw_gemm_A_flat[i] !== 8'sd0) nz_gemm_a++;
+            for (int i = 0; i < $size(raw_gemm_B_flat); i++) if (raw_gemm_B_flat[i] !== 8'sd0) nz_gemm_b++;
+            for (int i = 0; i < $size(raw_conv1x1_in_flat); i++) if (raw_conv1x1_in_flat[i] !== 8'sd0) nz_c1_a++;
+            for (int i = 0; i < $size(raw_conv1x1_w_flat); i++) if (raw_conv1x1_w_flat[i] !== 8'sd0) nz_c1_w++;
+            for (int i = 0; i < $size(raw_conv3x3_halo_in_flat); i++) if (raw_conv3x3_halo_in_flat[i] !== 8'sd0) nz_c3_a++;
+            for (int i = 0; i < $size(raw_conv3x3_halo_w_flat); i++) if (raw_conv3x3_halo_w_flat[i] !== 8'sd0) nz_c3_w++;
+
+            $display("[INFO] Loaded test vectors: SiLU=%0d nz, GEMM_A=%0d nz, GEMM_B=%0d nz, Conv1x1_Act=%0d nz, Conv3x3_Act=%0d nz",
+                     nz_silu, nz_gemm_a, nz_gemm_b, nz_c1_a, nz_c3_a);
+
+            assert_vector_nonzero("lut_silu_flat", nz_silu, 10);
+            assert_vector_nonzero("raw_gemm_A_flat", nz_gemm_a, 10);
+            assert_vector_nonzero("raw_gemm_B_flat", nz_gemm_b, 10);
+            assert_vector_nonzero("raw_conv1x1_in_flat", nz_c1_a, 10);
+            assert_vector_nonzero("raw_conv1x1_w_flat", nz_c1_w, 10);
+            assert_vector_nonzero("raw_conv3x3_halo_in_flat", nz_c3_a, 10);
+            assert_vector_nonzero("raw_conv3x3_halo_w_flat", nz_c3_w, 10);
+        end
 
         clk_i = 0; rst_n = 0; array_en = 0; psum_systolic_en = 0; psum_lut_en = 0; crossbar_sel = '0;
         weight_shift_in = '0; weight_shift_en = '0; swap_weights = 0;

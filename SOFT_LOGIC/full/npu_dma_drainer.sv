@@ -61,8 +61,8 @@ module npu_dma_drainer #(
         WAIT_B         = 4'd8,
         DONE           = 4'd9,
         WAIT_START_LOW = 4'd10,
-        POOL_SAMPLE    = 4'd11,
-        POOL_WRITE     = 4'd12
+        POOL_STREAM    = 4'd11,
+        POOL_FLUSH     = 4'd12
     } state_t;
 
     state_t state;
@@ -71,12 +71,13 @@ module npu_dma_drainer #(
     logic [4:0] drain_w_beat;    // 0 to 15
     logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] drain_pixel_lat;
 
-    // MaxPool Pipeline Registers
-    logic [2:0] pool_p;
-    logic [3:0] pool_step;
-    logic       pool_beat_phase;
+    // MaxPool Streaming Registers (Lean: only 5 flops total)
+    logic [4:0] stream_cnt;
     logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] max_accum;
     logic [31:0] lat_upper;
+
+    wire axi_w_stall   = wvalid_o && !wready_i;
+    wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd5 : 6'd4);
 
     function automatic logic signed [ACTIVATION_WIDTH-1:0] signed_max(
         input logic signed [ACTIVATION_WIDTH-1:0] a,
@@ -105,9 +106,7 @@ module npu_dma_drainer #(
             drain_w_beat      <= '0;
             drain_psum_addr_o <= '0;
             drain_pixel_lat   <= '0;
-            pool_p            <= '0;
-            pool_step         <= '0;
-            pool_beat_phase   <= 1'b0;
+            stream_cnt        <= '0;
             max_accum         <= '0;
             lat_upper         <= '0;
             done_o            <= 1'b0;
@@ -138,38 +137,60 @@ module npu_dma_drainer #(
                 end
 
                 SEND_AW: begin
-                    awaddr_o          <= out_base_i + {19'd0, drain_burst_idx, 6'b000000}; // burst_idx * 64
-                    awlen_o           <= 8'd15; // 16 beats = 64 bytes = 8 pixels
-                    awvalid_o         <= 1'b1;
-                    drain_w_beat      <= '0;
-                    if (pool_en_i) begin
-                        pool_p            <= 3'd0;
-                        pool_step         <= 4'd0;
-                        pool_beat_phase   <= 1'b0;
-                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd0, 1'b0};
-                        state             <= POOL_SAMPLE;
-                    end else begin
-                        drain_psum_addr_o <= burst_base_p[7:0] + 8'd0;
-                        state             <= PIPE_0;
+                    awaddr_o     <= out_base_i + {19'd0, drain_burst_idx, 6'b000000}; // burst_idx * 64
+                    awlen_o      <= 8'd15; // 16 beats = 64 bytes = 8 pixels
+                    awvalid_o    <= 1'b1;
+                    drain_w_beat <= '0;
+
+                    if (awvalid_o && awready_i) begin
+                        awvalid_o <= 1'b0;
+                        if (pool_en_i) begin
+                            stream_cnt        <= 5'd0;
+                            drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd0, 1'b0};
+                        end else begin
+                            drain_psum_addr_o <= burst_base_p[7:0] + 8'd0;
+                        end
+                        state <= PIPE_0;
                     end
                 end
 
                 PIPE_0: begin
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd0, 1'b1};
+                    end
                     state <= PIPE_1;
                 end
 
                 PIPE_1: begin
-                    drain_psum_addr_o <= burst_base_p[7:0] + 8'd1;
-                    state             <= PIPE_2;
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, 3'd0, 1'b0};
+                    end else begin
+                        drain_psum_addr_o <= burst_base_p[7:0] + 8'd1;
+                    end
+                    state <= PIPE_2;
                 end
 
                 PIPE_2: begin
-                    state <= PIPE_3;
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, 3'd0, 1'b1};
+                        if (!lut_en_i) begin
+                            state <= POOL_STREAM;
+                        end else begin
+                            state <= PIPE_3;
+                        end
+                    end else begin
+                        state <= PIPE_3;
+                    end
                 end
 
                 PIPE_3: begin
-                    drain_psum_addr_o <= burst_base_p[7:0] + 8'd2;
-                    state             <= PIPE_4;
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd1, 1'b0};
+                        state             <= POOL_STREAM;
+                    end else begin
+                        drain_psum_addr_o <= burst_base_p[7:0] + 8'd2;
+                        state             <= PIPE_4;
+                    end
                 end
 
                 PIPE_4: begin
@@ -207,84 +228,62 @@ module npu_dma_drainer #(
                     end
                 end
 
-                POOL_SAMPLE: begin
-                    case (pool_step)
-                        4'd0: begin
-                            pool_step <= 4'd1;
+                POOL_STREAM: begin
+                    if (!axi_w_stall) begin
+                        stream_cnt <= stream_cnt + 1'b1;
+
+                        if (next_req_idx < 6'd32) begin
+                            drain_psum_addr_o <= {drain_burst_idx[2:0], next_req_idx[1], next_req_idx[4:2], next_req_idx[0]};
                         end
-                        4'd1: begin
-                            drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, pool_p, 1'b1};
-                            pool_step         <= 4'd2;
-                        end
-                        4'd2: begin
-                            pool_step <= 4'd3;
-                        end
-                        4'd3: begin
-                            drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, pool_p, 1'b0};
-                            pool_step         <= 4'd4;
-                        end
-                        4'd4: begin
-                            max_accum <= npu_out_act_i;
-                            pool_step <= 4'd5;
-                        end
-                        4'd5: begin
-                            drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, pool_p, 1'b1};
-                            pool_step         <= 4'd6;
-                        end
-                        4'd6: begin
-                            for (int c = 0; c < ARRAY_WIDTH; c++) begin
-                                max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
+
+                        case (stream_cnt[1:0])
+                            2'd0: begin
+                                max_accum <= npu_out_act_i;
+                                if (stream_cnt > 5'd0) begin
+                                    wdata_o      <= lat_upper;
+                                    wvalid_o     <= 1'b1;
+                                    drain_w_beat <= drain_w_beat + 1'b1;
+                                end
                             end
-                            pool_step <= 4'd7;
-                        end
-                        4'd7: begin
-                            pool_step <= 4'd8;
-                        end
-                        4'd8: begin
-                            for (int c = 0; c < ARRAY_WIDTH; c++) begin
-                                max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
+
+                            2'd1: begin
+                                for (int c = 0; c < ARRAY_WIDTH; c++) begin
+                                    max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
+                                end
+                                wvalid_o <= 1'b0;
                             end
-                            pool_step <= 4'd9;
-                        end
-                        4'd9: begin
-                            pool_step <= 4'd10;
-                        end
-                        4'd10: begin
-                            wdata_o         <= {final_pix[3], final_pix[2], final_pix[1], final_pix[0]};
-                            lat_upper       <= {final_pix[7], final_pix[6], final_pix[5], final_pix[4]};
-                            wvalid_o        <= 1'b1;
-                            pool_beat_phase <= 1'b0;
-                            pool_step       <= 4'd0;
-                            state           <= POOL_WRITE;
-                        end
-                        default: pool_step <= 4'd0;
-                    endcase
+
+                            2'd2: begin
+                                for (int c = 0; c < ARRAY_WIDTH; c++) begin
+                                    max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
+                                end
+                            end
+
+                            2'd3: begin
+                                wdata_o      <= {final_pix[3], final_pix[2], final_pix[1], final_pix[0]};
+                                lat_upper    <= {final_pix[7], final_pix[6], final_pix[5], final_pix[4]};
+                                wvalid_o     <= 1'b1;
+                                drain_w_beat <= drain_w_beat + 1'b1;
+                                if (stream_cnt == 5'd31) begin
+                                    state <= POOL_FLUSH;
+                                end
+                            end
+                        endcase
+                    end
                 end
 
-                POOL_WRITE: begin
-                    if (wready_i && wvalid_o) begin
-                        if (pool_beat_phase == 1'b0) begin
-                            wdata_o         <= lat_upper;
-                            pool_beat_phase <= 1'b1;
-                            drain_w_beat    <= drain_w_beat + 1'b1;
-                            if (drain_w_beat == 5'd14) begin
-                                wlast_o <= 1'b1;
-                            end
+                POOL_FLUSH: begin
+                    if (wvalid_o && wready_i) begin
+                        if (wlast_o) begin
+                            wvalid_o <= 1'b0;
+                            wlast_o  <= 1'b0;
+                            bready_o <= 1'b1;
+                            state    <= WAIT_B;
                         end else begin
-                            drain_w_beat    <= drain_w_beat + 1'b1;
-                            pool_beat_phase <= 1'b0;
-                            wvalid_o        <= 1'b0;
-
-                            if (pool_p < 3'd7) begin
-                                pool_p            <= pool_p + 1'b1;
-                                drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'(pool_p + 1'b1), 1'b0};
-                                pool_step         <= 4'd0;
-                                state             <= POOL_SAMPLE;
-                            end else begin
-                                wlast_o  <= 1'b0;
-                                bready_o <= 1'b1;
-                                state    <= WAIT_B;
-                            end
+                            wdata_o      <= lat_upper;
+                            wvalid_o     <= 1'b1;
+                            wlast_o      <= 1'b1;
+                            drain_w_beat <= drain_w_beat + 1'b1;
                         end
                     end
                 end
