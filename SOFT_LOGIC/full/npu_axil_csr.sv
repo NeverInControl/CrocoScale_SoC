@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 
 /* ===============================================================================================
- * File: SOFT_LOGIC/full/npu_full_regs.sv
- * Module: npu_full_regs
- * Project: CrocoScale SoC — Full eFPGA NPU Control & Status Registers
+ * File: SOFT_LOGIC/full/npu_axil_csr.sv
+ * Module: npu_axil_csr
+ * Project: CrocoScale SoC — Full eFPGA NPU Control & Status Registers (AXI4-Lite)
  *
  * Description:
  *   Ultra-lean AXI4-Lite Slave MMIO register block for the full dual-mode NPU controller.
@@ -12,7 +12,7 @@
  *   holding flops.
  * =============================================================================================== */
 
-module npu_full_regs #(
+module npu_axil_csr #(
     parameter int AXI_ADDR_WIDTH = 32,
     parameter int AXI_DATA_WIDTH = 32
 )(
@@ -207,3 +207,4 @@ module npu_full_regs #(
     end
 
 endmodule
+

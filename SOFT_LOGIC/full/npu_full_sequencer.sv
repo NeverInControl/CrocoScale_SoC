@@ -6,11 +6,12 @@
 // Description:
 //   Top-level hierarchical sequencer instantiating fine-grained submodules for:
 //   - Central FSM & counters (npu_seq_fsm)
-//   - Weight pre-shift and swap pulses (npu_seq_weight_swap)
-//   - PSUM ping-pong accumulation, LUT enable, and drain (npu_seq_psum_sched)
-//   - 3x3 im2col address generation (npu_seq_addr_3x3)
-//   - 1x1 half-array ping-pong address generation (npu_seq_addr_1x1)
-//   - Memory & crossbar mode multiplexing (npu_seq_arbiter)
+//   - Weight pre-shift and swap pulses (npu_seq_weights)
+//   - PSUM ping-pong accumulation and drain scheduler (npu_seq_psum)
+//   - 3x3 background DMA channel and bank tracker (npu_seq_preload)
+//   - 3x3 im2col systolic addressing (npu_seq_addr_3x3)
+//   - 1x1 half-array double-buffered addressing (npu_seq_addr_1x1)
+//   - Memory & crossbar mode multiplexer (npu_seq_arbiter)
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -96,7 +97,10 @@ module npu_full_sequencer #(
     wire [ARRAY_HEIGHT-1:0][3:0] crossbar_sel_3x3;
     wire [5:0]                   act_sram_we_3x3;
     wire [5:0][8:0]              act_sram_addr_3x3;
+    wire [5:0]                   bank_read_used_3x3;
     wire [6:0]                   dma_ch_3x3;
+    wire [5:0]                   dma_we_3x3;
+    wire [5:0][8:0]              dma_addr_3x3;
 
     wire [ARRAY_HEIGHT-1:0][3:0] crossbar_sel_1x1;
     wire [7:0]                   act_sram_we_1x1;
@@ -144,8 +148,8 @@ module npu_full_sequencer #(
         .drain_cnt_o     (drain_cnt)
     );
 
-    // 2. Weight Pre-Shift & Swap Engine
-    npu_seq_weight_swap weight_swap_inst (
+    // 2. Weight Pre-Shift & Swap Controller
+    npu_seq_weights weights_inst (
         .preload_phase_i    (preload_phase),
         .preload_cnt_i      (preload_cnt),
         .state_i            (state),
@@ -159,9 +163,9 @@ module npu_full_sequencer #(
     );
 
     // 3. PSUM Ping-Pong Accumulation & Drain Scheduler
-    npu_seq_psum_sched #(
+    npu_seq_psum #(
         .ARRAY_WIDTH(ARRAY_WIDTH)
-    ) psum_sched_inst (
+    ) psum_inst (
         .state_i        (state),
         .preload_phase_i(preload_phase),
         .preload_cnt_i  (preload_cnt),
@@ -179,28 +183,48 @@ module npu_full_sequencer #(
         .psum_B_we_o    (psum_B_we_o)
     );
 
-    // 4. 3x3 im2col Address Generator
-    npu_seq_addr_3x3 #(
-        .ARRAY_HEIGHT(ARRAY_HEIGHT),
-        .CIN         (CIN)
-    ) addr_3x3_inst (
+    // 4. Background DMA Activation Preload Tracker (3x3)
+    npu_seq_preload #(
+        .CIN(CIN)
+    ) preload_inst (
         .clk_i                (clk_i),
         .rst_n                (rst_n),
         .state_i              (state),
-        .preload_phase_i      (preload_phase),
         .preload_cnt_i        (preload_cnt),
         .pass_cnt_i           (pass_cnt),
         .k_cnt_i              (k_cnt),
         .pass_len_i           (pass_len),
         .total_passes_i       (total_passes_i),
-        .crossbar_sel_o       (crossbar_sel_3x3),
-        .act_sram_we_o        (act_sram_we_3x3),
-        .act_sram_addr_o      (act_sram_addr_3x3),
+        .bank_read_used_i     (bank_read_used_3x3),
         .dma_channel_to_load_o(dma_ch_3x3),
-        .dma_bank_ptr_o       (dma_bank_ptr_o)
+        .dma_bank_ptr_o       (dma_bank_ptr_o),
+        .dma_we_o             (dma_we_3x3),
+        .dma_addr_o           (dma_addr_3x3)
     );
 
-    // 5. 1x1 Half-Array Double-Buffered Address Generator
+    // 5. 3x3 im2col Systolic Address Generator & Bank Read Router
+    npu_seq_addr_3x3 #(
+        .ARRAY_HEIGHT(ARRAY_HEIGHT),
+        .CIN         (CIN)
+    ) addr_3x3_inst (
+        .clk_i           (clk_i),
+        .rst_n           (rst_n),
+        .state_i         (state),
+        .preload_phase_i (preload_phase),
+        .preload_cnt_i   (preload_cnt),
+        .pass_cnt_i      (pass_cnt),
+        .k_cnt_i         (k_cnt),
+        .pass_len_i      (pass_len),
+        .total_passes_i  (total_passes_i),
+        .dma_we_i        (dma_we_3x3),
+        .dma_addr_i      (dma_addr_3x3),
+        .bank_read_used_o(bank_read_used_3x3),
+        .crossbar_sel_o  (crossbar_sel_3x3),
+        .act_sram_we_o   (act_sram_we_3x3),
+        .act_sram_addr_o (act_sram_addr_3x3)
+    );
+
+    // 6. 1x1 Half-Array Double-Buffered Address Generator
     npu_seq_addr_1x1 #(
         .ARRAY_HEIGHT(ARRAY_HEIGHT)
     ) addr_1x1_inst (
@@ -215,10 +239,20 @@ module npu_full_sequencer #(
         .act_sram_addr_o(act_sram_addr_1x1)
     );
 
-    // Mode arbitration between 1x1 half-array and 3x3 im2col
-    assign crossbar_sel_o  = mode_1x1_i ? crossbar_sel_1x1 : crossbar_sel_3x3;
-    assign act_sram_we_o   = mode_1x1_i ? act_sram_we_1x1  : {2'b00, act_sram_we_3x3};
-    assign act_sram_addr_o = mode_1x1_i ? act_sram_addr_1x1 : {9'd0, 9'd0, act_sram_addr_3x3};
-
+    // 7. Memory & Crossbar Mode Multiplexer (1x1 vs 3x3)
+    npu_seq_arbiter #(
+        .ARRAY_HEIGHT(ARRAY_HEIGHT)
+    ) arbiter_inst (
+        .mode_1x1_i        (mode_1x1_i),
+        .crossbar_sel_3x3_i(crossbar_sel_3x3),
+        .act_sram_we_3x3_i (act_sram_we_3x3),
+        .act_sram_addr_3x3_i(act_sram_addr_3x3),
+        .crossbar_sel_1x1_i(crossbar_sel_1x1),
+        .act_sram_we_1x1_i (act_sram_we_1x1),
+        .act_sram_addr_1x1_i(act_sram_addr_1x1),
+        .crossbar_sel_o    (crossbar_sel_o),
+        .act_sram_we_o     (act_sram_we_o),
+        .act_sram_addr_o   (act_sram_addr_o)
+    );
 
 endmodule

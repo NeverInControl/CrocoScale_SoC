@@ -1,6 +1,6 @@
 // =============================================================================
-// File: SOFT_LOGIC/npu_seq_weight_swap.sv
-// Module: npu_seq_weight_swap
+// File: SOFT_LOGIC/full/npu_seq_weights.sv
+// Module: npu_seq_weights
 // Project: CrocoScale SoC — Unified Sequencer Weight Pre-Shift and Swap Engine
 //
 // Description:
@@ -10,7 +10,7 @@
 
 `timescale 1ns / 1ps
 
-module npu_seq_weight_swap (
+module npu_seq_weights (
     input  wire       preload_phase_i,
     input  wire [7:0] preload_cnt_i,
     input  wire [2:0] state_i,

@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 
 /* ===============================================================================================
- * File: SOFT_LOGIC/full/npu_dma_reader.sv
- * Module: npu_dma_reader
- * Project: CrocoScale SoC — Unified AXI4 Read DMA Engine
+ * File: SOFT_LOGIC/full/npu_axi_reader.sv
+ * Module: npu_axi_reader
+ * Project: CrocoScale SoC — Unified AXI4 Read DMA Master
  *
  * Description:
  *   Single unified AXI4 burst read engine serving all three read consumers in mutually
@@ -15,7 +15,7 @@
  *   Eliminates duplicate AXI masters, duplicate address registers, and the 240-FF cfg_buf.
  * =============================================================================================== */
 
-module npu_dma_reader #(
+module npu_axi_reader #(
     parameter int ARRAY_HEIGHT     = 8,
     parameter int WEIGHT_WIDTH     = 8,
     parameter int PSUM_WIDTH       = 32,
@@ -94,7 +94,6 @@ module npu_dma_reader #(
         PRELOAD_BIAS_R      = 4'd8,
         PRELOAD_QUANT_AR    = 4'd9,
         PRELOAD_QUANT_R     = 4'd10,
-        PRELOAD_QUANT_SHIFT = 4'd13,
         // Weight fetch phases
         WEIGHT_AR           = 4'd11,
         WEIGHT_R            = 4'd12
@@ -106,7 +105,6 @@ module npu_dma_reader #(
     logic [1:0]  burst_idx;
     logic [5:0]  word_idx;
     logic [31:0] lat_word;
-    logic [29:0] cfg_buf [0:7];
 
     // Weight streaming multiplexing
     wire weight_beat_valid = (state == WEIGHT_R) && (m_axi_rvalid && m_axi_rready);
@@ -142,8 +140,8 @@ module npu_dma_reader #(
     assign bias_channel_o   = beat_cnt[2:0];
     assign bias_we_o        = (state == PRELOAD_BIAS_R) && (m_axi_rvalid && m_axi_rready);
 
-    assign quant_shift_in_o = (state == PRELOAD_QUANT_SHIFT) ? cfg_buf[beat_cnt[2:0]] : '0;
-    assign quant_shift_en_o = (state == PRELOAD_QUANT_SHIFT);
+    assign quant_shift_in_o = m_axi_rdata[29:0];
+    assign quant_shift_en_o = (state == PRELOAD_QUANT_R) && (m_axi_rvalid && m_axi_rready);
 
     always_comb begin
         case (state)
@@ -189,7 +187,6 @@ module npu_dma_reader #(
             burst_idx           <= '0;
             word_idx            <= '0;
             lat_word            <= '0;
-            for (int i = 0; i < 8; i++) cfg_buf[i] <= '0;
         end else begin
             // Default single-cycle strobes
             lut_load_done_o     <= 1'b0;
@@ -318,23 +315,13 @@ module npu_dma_reader #(
 
                 PRELOAD_QUANT_R: begin
                     if (m_axi_rvalid && m_axi_rready) begin
-                        cfg_buf[beat_cnt[2:0]] <= m_axi_rdata[29:0];
                         if (m_axi_rlast || beat_cnt == 5'd7) begin
-                            m_axi_rready <= 1'b0;
-                            beat_cnt     <= 5'd7;
-                            state        <= PRELOAD_QUANT_SHIFT;
+                            m_axi_rready   <= 1'b0;
+                            preload_done_o <= 1'b1;
+                            state          <= IDLE;
                         end else begin
                             beat_cnt <= beat_cnt + 1'b1;
                         end
-                    end
-                end
-
-                PRELOAD_QUANT_SHIFT: begin
-                    if (beat_cnt[2:0] == 3'd0) begin
-                        preload_done_o <= 1'b1;
-                        state          <= IDLE;
-                    end else begin
-                        beat_cnt <= beat_cnt - 1'b1;
                     end
                 end
 

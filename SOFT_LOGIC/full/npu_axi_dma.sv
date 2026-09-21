@@ -1,17 +1,17 @@
 `timescale 1ns / 1ps
 
 /* ===============================================================================================
- * File: SOFT_LOGIC/full/npu_full_dma.sv
- * Module: npu_full_dma
- * Project: CrocoScale SoC — Full Dual-Mode AXI4 Master DMA Engine
+ * File: SOFT_LOGIC/full/npu_axi_dma.sv
+ * Module: npu_axi_dma
+ * Project: CrocoScale SoC — Full Dual-Mode AXI4 Master DMA Subsystem
  *
  * Description:
  *   Top-level lean AXI4 Master DMA engine. Integrates:
- *   - npu_dma_reader: Unified burst read engine (weights, biases, quant parameters, LUT)
- *   - npu_dma_drainer: Dedicated high-throughput burst write engine (linear, Mish, MaxPool)
+ *   - npu_axi_reader: Unified burst read engine (weights, biases, quant parameters, LUT)
+ *   - npu_axi_writer: Dedicated high-throughput burst write engine (linear, Mish, MaxPool)
  * =============================================================================================== */
 
-module npu_full_dma #(
+module npu_axi_dma #(
     parameter int ARRAY_HEIGHT     = 8,
     parameter int ARRAY_WIDTH      = 8,
     parameter int ACTIVATION_WIDTH = 8,
@@ -100,56 +100,56 @@ module npu_full_dma #(
     output wire        [7:0]                                             psum_B_we_o
 );
 
-    // 1. Unified AXI4 Read DMA Engine
-    npu_dma_reader #(
+    // 1. Unified AXI4 Read Master Engine
+    npu_axi_reader #(
         .ARRAY_HEIGHT  (ARRAY_HEIGHT),
         .WEIGHT_WIDTH  (WEIGHT_WIDTH),
         .PSUM_WIDTH    (PSUM_WIDTH),
         .AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
         .AXI_DATA_WIDTH(AXI_DATA_WIDTH)
-    ) dma_reader_inst (
-        .clk_i              (clk_i),
-        .rst_n              (rst_n),
-        .lut_base_i         (lut_base_i),
-        .bias_base_i        (bias_base_i),
-        .quant_base_i       (quant_base_i),
-        .weight_base_i      (weight_base_i),
-        .mode_1x1_i         (mode_1x1_i),
-        .start_lut_load_i   (start_lut_load_i),
-        .lut_load_done_o    (lut_load_done_o),
-        .start_preload_i    (start_preload_i),
-        .preload_done_o     (preload_done_o),
+    ) axi_reader_inst (
+        .clk_i               (clk_i),
+        .rst_n               (rst_n),
+        .lut_base_i          (lut_base_i),
+        .bias_base_i         (bias_base_i),
+        .quant_base_i        (quant_base_i),
+        .weight_base_i       (weight_base_i),
+        .mode_1x1_i          (mode_1x1_i),
+        .start_lut_load_i    (start_lut_load_i),
+        .lut_load_done_o     (lut_load_done_o),
+        .start_preload_i     (start_preload_i),
+        .preload_done_o      (preload_done_o),
         .start_weight_fetch_i(start_weight_fetch_i),
-        .fetch_pass_idx_i   (fetch_pass_idx_i),
-        .weight_fetch_done_o(weight_fetch_done_o),
-        .m_axi_araddr       (m_axi_araddr),
-        .m_axi_arlen        (m_axi_arlen),
-        .m_axi_arsize       (m_axi_arsize),
-        .m_axi_arburst      (m_axi_arburst),
-        .m_axi_arvalid      (m_axi_arvalid),
-        .m_axi_arready      (m_axi_arready),
-        .m_axi_rdata        (m_axi_rdata),
-        .m_axi_rresp        (m_axi_rresp),
-        .m_axi_rlast        (m_axi_rlast),
-        .m_axi_rvalid       (m_axi_rvalid),
-        .m_axi_rready       (m_axi_rready),
-        .weight_shift_in_o  (weight_shift_in_o),
-        .weight_shift_en_o  (weight_shift_en_o),
-        .bias_wdata_o       (bias_wdata_o),
-        .bias_channel_o     (bias_channel_o),
-        .bias_we_o          (bias_we_o),
-        .quant_shift_in_o   (quant_shift_in_o),
-        .quant_shift_en_o   (quant_shift_en_o),
-        .psum_B_addr_o      (psum_B_addr_o),
-        .psum_B_wdata_o     (psum_B_wdata_o),
-        .psum_B_we_o        (psum_B_we_o)
+        .fetch_pass_idx_i    (fetch_pass_idx_i),
+        .weight_fetch_done_o (weight_fetch_done_o),
+        .m_axi_araddr        (m_axi_araddr),
+        .m_axi_arlen         (m_axi_arlen),
+        .m_axi_arsize        (m_axi_arsize),
+        .m_axi_arburst       (m_axi_arburst),
+        .m_axi_arvalid       (m_axi_arvalid),
+        .m_axi_arready       (m_axi_arready),
+        .m_axi_rdata         (m_axi_rdata),
+        .m_axi_rresp         (m_axi_rresp),
+        .m_axi_rlast         (m_axi_rlast),
+        .m_axi_rvalid        (m_axi_rvalid),
+        .m_axi_rready        (m_axi_rready),
+        .weight_shift_in_o   (weight_shift_in_o),
+        .weight_shift_en_o   (weight_shift_en_o),
+        .bias_wdata_o        (bias_wdata_o),
+        .bias_channel_o      (bias_channel_o),
+        .bias_we_o           (bias_we_o),
+        .quant_shift_in_o    (quant_shift_in_o),
+        .quant_shift_en_o    (quant_shift_en_o),
+        .psum_B_addr_o       (psum_B_addr_o),
+        .psum_B_wdata_o      (psum_B_wdata_o),
+        .psum_B_we_o         (psum_B_we_o)
     );
 
-    // 2. High-Throughput Output Drain Engine (AXI Write Master)
-    npu_dma_drainer #(
+    // 2. High-Throughput Output Drain Engine (AXI4 Write Master)
+    npu_axi_writer #(
         .ARRAY_WIDTH     (ARRAY_WIDTH),
         .ACTIVATION_WIDTH(ACTIVATION_WIDTH)
-    ) drainer_inst (
+    ) axi_writer_inst (
         .clk_i            (clk_i),
         .rst_n            (rst_n),
         .start_i          (start_drain_i),
@@ -176,3 +176,4 @@ module npu_full_dma #(
     );
 
 endmodule
+

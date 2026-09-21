@@ -1,6 +1,6 @@
 // =============================================================================
-// File: SOFT_LOGIC/npu_seq_psum_sched.sv
-// Module: npu_seq_psum_sched
+// File: SOFT_LOGIC/full/npu_seq_psum.sv
+// Module: npu_seq_psum
 // Project: CrocoScale SoC — Unified Sequencer PSUM Accumulation & Drain Scheduler
 //
 // Description:
@@ -11,7 +11,7 @@
 
 `timescale 1ns / 1ps
 
-module npu_seq_psum_sched #(
+module npu_seq_psum #(
     parameter int ARRAY_WIDTH = 8
 ) (
     input  wire [2:0] state_i,
@@ -66,3 +66,4 @@ module npu_seq_psum_sched #(
     end
 
 endmodule
+

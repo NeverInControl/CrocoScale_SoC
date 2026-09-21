@@ -1,12 +1,12 @@
 // =============================================================================
 // File: SOFT_LOGIC/full/npu_seq_addr_3x3.sv
 // Module: npu_seq_addr_3x3
-// Project: CrocoScale SoC — 3x3 im2col Address Generator & Memory Arbiter
+// Project: CrocoScale SoC — 3x3 im2col Systolic Addressing & Memory Arbiter
 //
 // Description:
-//   Lean, optimized orthogonal address generator and memory arbiter for 3x3
-//   convolution across 6 activation SRAM banks. Replaces unconstrained 32-bit
-//   generic dividers with compact lookup functions and bit-slice math.
+//   Lean, orthogonal address generator and memory arbiter for 3x3 convolution
+//   across 6 activation SRAM banks. Generates im2col memory addresses, crossbar
+//   routing selections, and arbitrates systolic read ports with background DMA.
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -25,25 +25,21 @@ module npu_seq_addr_3x3 #(
     input  wire [8:0]  pass_len_i,
     input  wire [7:0]  total_passes_i,
 
+    // Background DMA Interface (from npu_seq_preload)
+    input  wire [5:0]      dma_we_i,
+    input  wire [5:0][8:0] dma_addr_i,
+    output logic [5:0]     bank_read_used_o,
+
+    // Outputs to Systolic Array & Activation SRAMs
     output logic [ARRAY_HEIGHT-1:0][3:0] crossbar_sel_o,
     output logic [5:0]                   act_sram_we_o,
-    output logic [5:0][8:0]              act_sram_addr_o,
-    output logic [6:0]                   dma_channel_to_load_o,
-    output logic [5:0][5:0]              dma_bank_ptr_o
+    output logic [5:0][8:0]              act_sram_addr_o
 );
 
     localparam logic [2:0] SEQ_IDLE    = 3'd0;
     localparam logic [2:0] SEQ_PRELOAD = 3'd1;
     localparam logic [2:0] SEQ_COMPUTE = 3'd2;
     localparam int K_TOTAL = CIN * 9;
-
-    logic [5:0] dma_bank_ptr [6];
-    logic [6:0] dma_channel_reg;
-
-    assign dma_channel_to_load_o = dma_channel_reg;
-    for (genvar gb = 0; gb < 6; gb++) begin : gen_bank_ptr
-        assign dma_bank_ptr_o[gb] = dma_bank_ptr[gb];
-    end
 
     // Compact decode of ly (0..17) -> {ly_mod[1:0], ly_mul9[5:0]}
     function automatic [7:0] get_ly_data(input [4:0] ly);
@@ -88,8 +84,6 @@ module npu_seq_addr_3x3 #(
 
     logic [6:0] cin_0;
     logic [3:0] tap_0;
-    logic [3:0] dma_mod9_cnt;
-    logic [6:0] dma_next_ch;
 
     // Compute address generation per systolic row
     logic [ARRAY_HEIGHT-1:0]      row_active;
@@ -173,68 +167,31 @@ module npu_seq_addr_3x3 #(
         end
     end
 
-    wire dma_channel_active = (dma_channel_reg > 7'd0);
+    assign bank_read_used_o = bank_read_used;
+
+    // Arbitrate SRAM ports between Systolic compute read, Preload write, and Background DMA write
     for (genvar gb = 0; gb < 6; gb++) begin : gen_bank_mem
-        wire dma_write_active = (state_i == SEQ_COMPUTE && !bank_read_used[gb] && dma_channel_active && (dma_bank_ptr[gb] < 6'd54));
-        assign act_sram_we_o[gb] = (state_i == SEQ_PRELOAD) ? 1'b1 : dma_write_active;
+        assign act_sram_we_o[gb] = (state_i == SEQ_PRELOAD) ? 1'b1 : dma_we_i[gb];
 
         assign act_sram_addr_o[gb] = (state_i == SEQ_PRELOAD) ? {3'b000, preload_cnt_i[5:0]} :
                                      (state_i == SEQ_COMPUTE && bank_read_used[gb]) ? bank_read_addr[gb] :
-                                     dma_write_active ? {dma_channel_reg[2:0], dma_bank_ptr[gb]} : 9'd0;
+                                     dma_addr_i[gb];
     end
 
+    // Pass and tap progression
     always_ff @(posedge clk_i or negedge rst_n) begin
         if (!rst_n) begin
-            dma_channel_reg <= 7'd0;
-            dma_mod9_cnt    <= 4'd0;
-            dma_next_ch     <= 7'd0;
-            cin_0           <= 7'd0;
-            tap_0           <= 4'd0;
-            for (int b = 0; b < 6; b++) dma_bank_ptr[b] <= '0;
+            cin_0 <= 7'd0;
+            tap_0 <= 4'd0;
         end else begin
-            if (state_i == SEQ_IDLE) begin
-                dma_channel_reg <= 7'd0;
-                dma_mod9_cnt    <= 4'd0;
-                dma_next_ch     <= 7'd0;
-                cin_0           <= 7'd0;
-                tap_0           <= 4'd0;
-                for (int b = 0; b < 6; b++) dma_bank_ptr[b] <= '0;
-            end else if (state_i == SEQ_PRELOAD && preload_cnt_i == 8'd53) begin
-                dma_channel_reg <= 7'd1;
-                dma_mod9_cnt    <= 4'd1;
-                dma_next_ch     <= 7'd1;
-                cin_0           <= 7'd0;
-                tap_0           <= 4'd0;
-                for (int b = 0; b < 6; b++) dma_bank_ptr[b] <= '0;
+            if (state_i == SEQ_IDLE || (state_i == SEQ_PRELOAD && preload_cnt_i == 8'd53)) begin
+                cin_0 <= 7'd0;
+                tap_0 <= 4'd0;
             end else if (state_i == SEQ_COMPUTE) begin
-                for (int b = 0; b < 6; b++) begin
-                    if (!bank_read_used[b] && dma_channel_reg > 7'd0 && dma_bank_ptr[b] < 6'd54) begin
-                        dma_bank_ptr[b] <= dma_bank_ptr[b] + 1'b1;
-                    end
-                end
-
                 if (k_cnt_i == pass_len_i - 1'b1) begin
                     if (pass_cnt_i + 1'b1 < total_passes_i) begin
-                        logic [3:0] next_mod;
-                        logic [6:0] next_ch_val;
-
-                        next_mod    = (dma_mod9_cnt == 4'd8) ? 4'd0 : (dma_mod9_cnt + 4'd1);
-                        next_ch_val = (dma_mod9_cnt == 4'd8) ? dma_next_ch : (dma_next_ch + 7'd1);
-
-                        dma_mod9_cnt <= next_mod;
-                        dma_next_ch  <= next_ch_val;
-                        if (next_mod == 4'd8 || {1'b0, next_ch_val} >= 8'(CIN)) begin
-                            dma_channel_reg <= 7'd0;
-                        end else begin
-                            dma_channel_reg <= next_ch_val;
-                        end
-
                         tap_0 <= (tap_0 == 4'd0) ? 4'd8 : (tap_0 - 4'd1);
                         cin_0 <= (tap_0 == 4'd0) ? cin_0 : (cin_0 + 7'd1);
-
-                        for (int b = 0; b < 6; b++) dma_bank_ptr[b] <= '0;
-                    end else begin
-                        dma_channel_reg <= 7'd0;
                     end
                 end
             end

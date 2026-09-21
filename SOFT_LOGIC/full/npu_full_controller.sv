@@ -7,9 +7,9 @@
  *
  * Description:
  *   Full synthesizable eFPGA soft-logic controller integrating:
- *   - AXI4-Lite CSR register file (npu_full_regs) with contiguous memory pointers
+ *   - AXI4-Lite CSR register file (npu_axil_csr) with contiguous memory pointers
  *   - Modular dual-mode sequencer (npu_full_sequencer)
- *   - Modular AXI4 burst DMA with shared read master (npu_full_dma)
+ *   - Modular AXI4 burst DMA with shared read master (npu_axi_dma)
  *
  *   Configuration Register (REG_CONFIG at 0x08):
  *     Bit 0:     AUTO_DRAIN_OUT
@@ -225,7 +225,7 @@ module npu_full_controller #(
     wire [7:0] next_pass    = preload_phase ? 8'd0 : (current_pass + 1'b1);
 
     // 1. AXI-Lite Register File with Contiguous Base Pointers
-    npu_full_regs #(
+    npu_axil_csr #(
         .AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
         .AXI_DATA_WIDTH(AXI_DATA_WIDTH)
     ) regs_inst (
@@ -315,7 +315,7 @@ module npu_full_controller #(
     );
 
     // 3. Modular Dual-Mode AXI4 Master DMA with Shared Read Master
-    npu_full_dma #(
+    npu_axi_dma #(
         .ARRAY_HEIGHT    (ARRAY_HEIGHT),
         .ARRAY_WIDTH     (ARRAY_WIDTH),
         .ACTIVATION_WIDTH(ACTIVATION_WIDTH),

@@ -601,7 +601,7 @@ module tb_npu_full_sys_3x3_benchmark;
         for (cb = 0; cb < 4; cb++) begin
             for (ch = 0; ch < 8; ch++) begin
                 ram_write_word(BIAS_BASE_ADDR + (cb * 32) + (ch * 4), b1_flat[cb * 8 + ch]);
-                ram_write_word(QUANT_BASE_ADDR + (cb * 32) + (ch * 4), p1_cfg[cb * 8 + ch]);
+                ram_write_word(QUANT_BASE_ADDR + (cb * 32) + (ch * 4), p1_cfg[cb * 8 + (7 - ch)]);
             end
         end
 

@@ -1,17 +1,17 @@
-// =============================================================================
-// File: SOFT_LOGIC/npu_dma_drainer.sv
-// Module: npu_dma_drainer
-// Project: CrocoScale SoC — High-Throughput Output Activation Drain Engine
-//
-// Description:
-//   Drains 2,048 INT8 output activations (512 32-bit words) from the NPU pipeline
-//   to external AXI system memory across 32 bursts of 16 beats.
-//   Supports an additional pipeline stage when non-linear LUT activation is enabled.
-// =============================================================================
-
 `timescale 1ns / 1ps
 
-module npu_dma_drainer #(
+/* ===============================================================================================
+ * File: SOFT_LOGIC/full/npu_axi_writer.sv
+ * Module: npu_axi_writer
+ * Project: CrocoScale SoC — High-Throughput Output Activation AXI4 Write Master
+ *
+ * Description:
+ *   Drains 2,048 INT8 output activations (512 32-bit words) from the NPU pipeline
+ *   to external AXI system memory across 32 bursts of 16 beats.
+ *   Supports an additional pipeline stage when non-linear LUT activation is enabled.
+ * =============================================================================================== */
+
+module npu_axi_writer #(
     parameter int ARRAY_WIDTH      = 8,
     parameter int ACTIVATION_WIDTH = 8
 ) (
@@ -309,3 +309,4 @@ module npu_dma_drainer #(
     end
 
 endmodule
+

@@ -545,7 +545,7 @@ module tb_npu_full_sys_functional;
                         npu_ext_act_sram_wdata[b] <= 8'sd0;
                 end
                 for (int b = 4; b < 8; b++) npu_ext_act_sram_wdata[b] <= 8'sd0;
-            end else if (dut.sequencer_inst.addr_1x1_inst.act_sram_we_o != 8'h00) begin
+            end else if (npu_ext_act_sram_we != 8'h00) begin
                 feeder_p_idx = int'(dut.cycle_in_pass);
                 feeder_y_idx = feeder_p_idx / 16;
                 feeder_x_idx = feeder_p_idx % 16;
@@ -712,7 +712,7 @@ module tb_npu_full_sys_functional;
 
         // Prepopulate Biases and Quant Params for 1x1
         for (ch = 0; ch < 8; ch++) ram_write_word(BIAS_BASE_ADDR + (ch * 4), c1_b[ch]);
-        for (ch = 0; ch < 8; ch++) ram_write_word(QUANT_BASE_ADDR + (ch * 4), c1_cfg[ch]);
+        for (ch = 0; ch < 8; ch++) ram_write_word(QUANT_BASE_ADDR + (ch * 4), c1_cfg[7 - ch]);
 
         // Prepopulate 1x1 Weights for all 6 passes (8 beats = 32 bytes per pass)
         for (p = 0; p < 6; p++) begin
@@ -903,7 +903,7 @@ module tb_npu_full_sys_functional;
 
         // Prepopulate Biases and Quant Params for 3x3
         for (ch = 0; ch < 8; ch++) ram_write_word(BIAS_BASE_ADDR + (ch * 4), c3_b[ch]);
-        for (ch = 0; ch < 8; ch++) ram_write_word(QUANT_BASE_ADDR + (ch * 4), c3_cfg[ch]);
+        for (ch = 0; ch < 8; ch++) ram_write_word(QUANT_BASE_ADDR + (ch * 4), c3_cfg[7 - ch]);
 
         // Prepopulate 3x3 Weights (9 passes of 8 taps = 72 taps)
         for (p = 0; p < 9; p++) begin
