@@ -28,62 +28,54 @@ module npu_seq_addr_1x1 #(
     localparam logic [2:0] SEQ_PRELOAD = 3'd1;
     localparam logic [2:0] SEQ_COMPUTE = 3'd2;
 
-    wire [2:0] cur_bank_base  = pass_cnt_i[0] ? 3'd4 : 3'd0;
-    wire [2:0] next_bank_base = pass_cnt_i[0] ? 3'd0 : 3'd4;
-    wire       has_next_pass  = (pass_cnt_i + 1'b1 < total_passes_i);
+    wire has_next_pass = (pass_cnt_i + 1'b1 < total_passes_i);
+    wire ping = pass_cnt_i[0];
 
     always_comb begin
-        for (int r = 0; r < ARRAY_HEIGHT; r++) crossbar_sel_o[r] = 4'b1000;
-        act_sram_we_o = 8'h00;
-        for (int b = 0; b < 8; b++) act_sram_addr_o[b] = 9'd0;
+        // Default crossbar routing
+        for (int r = 0; r < 4; r++) begin
+            crossbar_sel_o[r] = (state_i == SEQ_COMPUTE) ? {1'b0, ping, 2'(r)} : 4'b1000;
+        end
+        for (int r = 4; r < 8; r++) begin
+            crossbar_sel_o[r] = 4'b1000;
+        end
 
-        if (state_i == SEQ_PRELOAD) begin
-            // Preload Pass 0 into Banks 0..3 (256 cycles)
-            for (int b = 0; b < 4; b++) begin
-                act_sram_we_o[b]   = 1'b1;
-                act_sram_addr_o[b] = {1'b0, preload_cnt_i};
-            end
-            for (int b = 4; b < 8; b++) begin
-                act_sram_we_o[b]   = 1'b0;
-                act_sram_addr_o[b] = 9'd0;
-            end
-            for (int r = 0; r < ARRAY_HEIGHT; r++) begin
-                crossbar_sel_o[r]  = 4'b1000;
-            end
-        end else if (state_i == SEQ_COMPUTE) begin
-            int b_cur;
-            int b_nxt;
+        // SRAM Banks 0..3 and 4..7
+        for (int r = 0; r < 4; r++) begin
+            logic [8:0] m_p;
+            logic m_p_valid;
+            logic [8:0] compute_addr;
+            logic write_active;
 
-            // 1. Compute reading from active half
-            for (int r = 0; r < 4; r++) begin
-                b_cur = cur_bank_base + r;
-                crossbar_sel_o[r] = {1'b0, 3'(b_cur)};
-                act_sram_we_o[b_cur] = 1'b0;
-                if (k_cnt_i >= 9'(r) && (k_cnt_i - 9'(r)) < 9'd256) begin
-                    act_sram_addr_o[b_cur] = 9'(k_cnt_i - 9'(r));
+            m_p          = k_cnt_i - 9'(r);
+            m_p_valid    = (k_cnt_i >= 9'(r)) && !m_p[8];
+            compute_addr = m_p_valid ? m_p : 9'd0;
+            write_active = has_next_pass && !k_cnt_i[8];
+
+            if (state_i == SEQ_PRELOAD) begin
+                act_sram_we_o[r]     = 1'b1;
+                act_sram_addr_o[r]   = {1'b0, preload_cnt_i};
+                act_sram_we_o[r+4]   = 1'b0;
+                act_sram_addr_o[r+4] = 9'd0;
+            end else if (state_i == SEQ_COMPUTE) begin
+                if (!ping) begin
+                    // Bank r is compute read, Bank r+4 is preload write
+                    act_sram_we_o[r]     = 1'b0;
+                    act_sram_addr_o[r]   = compute_addr;
+                    act_sram_we_o[r+4]   = write_active;
+                    act_sram_addr_o[r+4] = {1'b0, k_cnt_i[7:0]};
                 end else begin
-                    act_sram_addr_o[b_cur] = 9'd0;
-                end
-            end
-
-            // Rows 4..7 are grounded
-            for (int r = 4; r < 8; r++) begin
-                crossbar_sel_o[r] = 4'b1000;
-            end
-
-            // 2. Preload writing to alternate half
-            if (has_next_pass && k_cnt_i < 9'd256) begin
-                for (int b = 0; b < 4; b++) begin
-                    b_nxt = next_bank_base + b;
-                    act_sram_we_o[b_nxt]   = 1'b1;
-                    act_sram_addr_o[b_nxt] = {1'b0, k_cnt_i[7:0]};
+                    // Bank r+4 is compute read, Bank r is preload write
+                    act_sram_we_o[r]     = write_active;
+                    act_sram_addr_o[r]   = {1'b0, k_cnt_i[7:0]};
+                    act_sram_we_o[r+4]   = 1'b0;
+                    act_sram_addr_o[r+4] = compute_addr;
                 end
             end else begin
-                for (int b = 0; b < 4; b++) begin
-                    b_nxt = next_bank_base + b;
-                    act_sram_we_o[b_nxt]   = 1'b0;
-                    act_sram_addr_o[b_nxt] = 9'd0;
-                end
+                act_sram_we_o[r]     = 1'b0;
+                act_sram_addr_o[r]   = 9'd0;
+                act_sram_we_o[r+4]   = 1'b0;
+                act_sram_addr_o[r+4] = 9'd0;
             end
         end
     end

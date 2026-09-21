@@ -695,13 +695,23 @@ module tb_npu_full_sys_3x3_benchmark;
                             flat_idx = (y_global * POOL_W * COUT) + (x_global * COUT) + ch_global;
                             gold_val = gold_l1[flat_idx];
                             act_val  = ram_pix[ch_idx];
-                            diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
 
-                            if (diff_val == 0) exact_ok++;
-                            else if (diff_val <= 1) tol_ok++;
-                            else errs++;
+                            if ($isunknown(act_val)) begin
+                                errs++;
+                                max_diff = 255;
+                                if (errs <= 10) begin
+                                    $display("[FATAL] RAM activation at flat_idx=%0d (x=%0d, y=%0d, ch=%0d) is UNKNOWN (X)!",
+                                             flat_idx, x_global, y_global, ch_global);
+                                end
+                            end else begin
+                                diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
 
-                            if (diff_val > max_diff) max_diff = diff_val;
+                                if (diff_val == 0) exact_ok++;
+                                else if (diff_val <= 1) tol_ok++;
+                                else errs++;
+
+                                if (diff_val > max_diff) max_diff = diff_val;
+                            end
                         end
                     end
                 end

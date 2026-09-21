@@ -215,20 +215,10 @@ module npu_full_sequencer #(
         .act_sram_addr_o(act_sram_addr_1x1)
     );
 
-    // 6. Memory & Crossbar Mode Arbiter
-    npu_seq_arbiter #(
-        .ARRAY_HEIGHT(ARRAY_HEIGHT)
-    ) arbiter_inst (
-        .mode_1x1_i         (mode_1x1_i),
-        .crossbar_sel_3x3_i (crossbar_sel_3x3),
-        .act_sram_we_3x3_i  (act_sram_we_3x3),
-        .act_sram_addr_3x3_i(act_sram_addr_3x3),
-        .crossbar_sel_1x1_i (crossbar_sel_1x1),
-        .act_sram_we_1x1_i  (act_sram_we_1x1),
-        .act_sram_addr_1x1_i(act_sram_addr_1x1),
-        .crossbar_sel_o     (crossbar_sel_o),
-        .act_sram_we_o      (act_sram_we_o),
-        .act_sram_addr_o    (act_sram_addr_o)
-    );
+    // Mode arbitration between 1x1 half-array and 3x3 im2col
+    assign crossbar_sel_o  = mode_1x1_i ? crossbar_sel_1x1 : crossbar_sel_3x3;
+    assign act_sram_we_o   = mode_1x1_i ? act_sram_we_1x1  : {2'b00, act_sram_we_3x3};
+    assign act_sram_addr_o = mode_1x1_i ? act_sram_addr_1x1 : {9'd0, 9'd0, act_sram_addr_3x3};
+
 
 endmodule

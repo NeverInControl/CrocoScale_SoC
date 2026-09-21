@@ -69,9 +69,8 @@ module npu_dma_drainer #(
 
     logic [5:0] drain_burst_idx; // 0 to 31 (unpooled) or 0 to 7 (pooled)
     logic [4:0] drain_w_beat;    // 0 to 15
-    logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] drain_pixel_lat;
 
-    // MaxPool Streaming Registers (Lean: only 5 flops total)
+    // MaxPool / Unpooled Shared Holding Registers
     logic [4:0] stream_cnt;
     logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] max_accum;
     logic [31:0] lat_upper;
@@ -86,15 +85,17 @@ module npu_dma_drainer #(
         return ($signed(a) > $signed(b)) ? a : b;
     endfunction
 
-    logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] final_pix;
+    logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] next_max;
     always_comb begin
         for (int c = 0; c < ARRAY_WIDTH; c++) begin
-            final_pix[c] = signed_max(max_accum[c], npu_out_act_i[c]);
+            next_max[c] = signed_max(max_accum[c], npu_out_act_i[c]);
         end
     end
 
-    wire [8:0] burst_base_p = {drain_burst_idx, 3'b000}; // burst_idx * 8
+    wire [7:0] burst_base_p = {drain_burst_idx[4:0], 3'b000}; // burst_idx * 8
 
+    assign awaddr_o  = out_base_i + {19'd0, drain_burst_idx, 6'b000000}; // burst_idx * 64
+    assign awlen_o   = 8'd15;  // 16 beats = 64 bytes = 8 pixels
     assign awsize_o  = 3'b010; // 4 bytes
     assign awburst_o = 2'b01;  // INCR
     assign wstrb_o   = 4'hF;
@@ -105,14 +106,11 @@ module npu_dma_drainer #(
             drain_burst_idx   <= '0;
             drain_w_beat      <= '0;
             drain_psum_addr_o <= '0;
-            drain_pixel_lat   <= '0;
             stream_cnt        <= '0;
             max_accum         <= '0;
             lat_upper         <= '0;
             done_o            <= 1'b0;
 
-            awaddr_o          <= '0;
-            awlen_o           <= '0;
             awvalid_o         <= 1'b0;
             wdata_o           <= '0;
             wlast_o           <= 1'b0;
@@ -137,8 +135,6 @@ module npu_dma_drainer #(
                 end
 
                 SEND_AW: begin
-                    awaddr_o     <= out_base_i + {19'd0, drain_burst_idx, 6'b000000}; // burst_idx * 64
-                    awlen_o      <= 8'd15; // 16 beats = 64 bytes = 8 pixels
                     awvalid_o    <= 1'b1;
                     drain_w_beat <= '0;
 
@@ -148,7 +144,7 @@ module npu_dma_drainer #(
                             stream_cnt        <= 5'd0;
                             drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd0, 1'b0};
                         end else begin
-                            drain_psum_addr_o <= burst_base_p[7:0] + 8'd0;
+                            drain_psum_addr_o <= {burst_base_p[7:3], 3'b000};
                         end
                         state <= PIPE_0;
                     end
@@ -165,7 +161,7 @@ module npu_dma_drainer #(
                     if (pool_en_i) begin
                         drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, 3'd0, 1'b0};
                     end else begin
-                        drain_psum_addr_o <= burst_base_p[7:0] + 8'd1;
+                        drain_psum_addr_o <= {burst_base_p[7:3], 3'b001};
                     end
                     state <= PIPE_2;
                 end
@@ -188,18 +184,18 @@ module npu_dma_drainer #(
                         drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd1, 1'b0};
                         state             <= POOL_STREAM;
                     end else begin
-                        drain_psum_addr_o <= burst_base_p[7:0] + 8'd2;
+                        drain_psum_addr_o <= {burst_base_p[7:3], 3'b010};
                         state             <= PIPE_4;
                     end
                 end
 
                 PIPE_4: begin
-                    drain_pixel_lat <= npu_out_act_i;
-                    wdata_o         <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
-                    wvalid_o        <= 1'b1;
-                    wlast_o         <= 1'b0;
-                    drain_w_beat    <= '0;
-                    state           <= WRITE_W;
+                    lat_upper    <= {npu_out_act_i[7], npu_out_act_i[6], npu_out_act_i[5], npu_out_act_i[4]};
+                    wdata_o      <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
+                    wvalid_o     <= 1'b1;
+                    wlast_o      <= 1'b0;
+                    drain_w_beat <= '0;
+                    state        <= WRITE_W;
                 end
 
                 WRITE_W: begin
@@ -213,16 +209,16 @@ module npu_dma_drainer #(
                             drain_w_beat <= drain_w_beat + 1'b1;
 
                             if (drain_w_beat[0] == 1'b0) begin
-                                wdata_o <= {drain_pixel_lat[7], drain_pixel_lat[6], drain_pixel_lat[5], drain_pixel_lat[4]};
+                                wdata_o <= lat_upper;
                                 if (drain_w_beat == 5'd14) begin
                                     wlast_o <= 1'b1;
                                 end
                                 if (drain_w_beat <= 5'd8) begin
-                                    drain_psum_addr_o <= burst_base_p[7:0] + 8'((drain_w_beat >> 1) + 3);
+                                    drain_psum_addr_o <= burst_base_p + 8'((drain_w_beat >> 1) + 3);
                                 end
                             end else begin
-                                drain_pixel_lat <= npu_out_act_i;
-                                wdata_o         <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
+                                lat_upper <= {npu_out_act_i[7], npu_out_act_i[6], npu_out_act_i[5], npu_out_act_i[4]};
+                                wdata_o   <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
                             end
                         end
                     end
@@ -247,21 +243,17 @@ module npu_dma_drainer #(
                             end
 
                             2'd1: begin
-                                for (int c = 0; c < ARRAY_WIDTH; c++) begin
-                                    max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
-                                end
-                                wvalid_o <= 1'b0;
+                                max_accum <= next_max;
+                                wvalid_o  <= 1'b0;
                             end
 
                             2'd2: begin
-                                for (int c = 0; c < ARRAY_WIDTH; c++) begin
-                                    max_accum[c] <= signed_max(max_accum[c], npu_out_act_i[c]);
-                                end
+                                max_accum <= next_max;
                             end
 
                             2'd3: begin
-                                wdata_o      <= {final_pix[3], final_pix[2], final_pix[1], final_pix[0]};
-                                lat_upper    <= {final_pix[7], final_pix[6], final_pix[5], final_pix[4]};
+                                wdata_o      <= {next_max[3], next_max[2], next_max[1], next_max[0]};
+                                lat_upper    <= {next_max[7], next_max[6], next_max[5], next_max[4]};
                                 wvalid_o     <= 1'b1;
                                 drain_w_beat <= drain_w_beat + 1'b1;
                                 if (stream_cnt == 5'd31) begin

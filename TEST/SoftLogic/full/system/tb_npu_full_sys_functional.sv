@@ -779,11 +779,16 @@ module tb_npu_full_sys_functional;
             for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                 gold_val = c1_gold_lin[p_idx * 8 + ch_idx];
                 act_val  = ram_pix[ch_idx];
-                diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                if (diff_val == 0) exact_ok++;
-                else if (diff_val <= 1) tol_ok++;
-                else errs++;
-                if (diff_val > max_diff) max_diff = diff_val;
+                if ($isunknown(act_val)) begin
+                    errs++;
+                    max_diff = 255;
+                end else begin
+                    diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                    if (diff_val == 0) exact_ok++;
+                    else if (diff_val <= 1) tol_ok++;
+                    else errs++;
+                    if (diff_val > max_diff) max_diff = diff_val;
+                end
             end
         end
         if (errs == 0) $display("    -> [PASS] 1x1 Mode A Linear: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
@@ -807,11 +812,16 @@ module tb_npu_full_sys_functional;
             for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                 gold_val = c1_gold_mish[p_idx * 8 + ch_idx];
                 act_val  = ram_pix[ch_idx];
-                diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                if (diff_val == 0) exact_ok++;
-                else if (diff_val <= 1) tol_ok++;
-                else errs++;
-                if (diff_val > max_diff) max_diff = diff_val;
+                if ($isunknown(act_val)) begin
+                    errs++;
+                    max_diff = 255;
+                end else begin
+                    diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                    if (diff_val == 0) exact_ok++;
+                    else if (diff_val <= 1) tol_ok++;
+                    else errs++;
+                    if (diff_val > max_diff) max_diff = diff_val;
+                end
             end
         end
         if (errs == 0) $display("    -> [PASS] 1x1 Mode B Mish LUT: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
@@ -835,11 +845,16 @@ module tb_npu_full_sys_functional;
             for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                 gold_val = c1_gold_pool[p_idx * 8 + ch_idx];
                 act_val  = ram_pix[ch_idx];
-                diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                if (diff_val == 0) exact_ok++;
-                else if (diff_val <= 1) tol_ok++;
-                else errs++;
-                if (diff_val > max_diff) max_diff = diff_val;
+                if ($isunknown(act_val)) begin
+                    errs++;
+                    max_diff = 255;
+                end else begin
+                    diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                    if (diff_val == 0) exact_ok++;
+                    else if (diff_val <= 1) tol_ok++;
+                    else errs++;
+                    if (diff_val > max_diff) max_diff = diff_val;
+                end
             end
         end
         if (errs == 0) $display("    -> [PASS] 1x1 Mode C MaxPool: 512/512 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
@@ -863,11 +878,16 @@ module tb_npu_full_sys_functional;
             for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                 gold_val = c1_gold_mpool[p_idx * 8 + ch_idx];
                 act_val  = ram_pix[ch_idx];
-                diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                if (diff_val == 0) exact_ok++;
-                else if (diff_val <= 1) tol_ok++;
-                else errs++;
-                if (diff_val > max_diff) max_diff = diff_val;
+                if ($isunknown(act_val)) begin
+                    errs++;
+                    max_diff = 255;
+                end else begin
+                    diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                    if (diff_val == 0) exact_ok++;
+                    else if (diff_val <= 1) tol_ok++;
+                    else errs++;
+                    if (diff_val > max_diff) max_diff = diff_val;
+                end
             end
         end
         if (errs == 0) $display("    -> [PASS] 1x1 Mode D Mish+MaxPool: 512/512 matches (exact: %0d, tol: %0d)!\n", exact_ok, tol_ok);
@@ -985,11 +1005,16 @@ module tb_npu_full_sys_functional;
                     for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                         gold_val = c3_gold_lin[(y_idx * 32 * 8) + (x_idx * 8) + ch_idx];
                         act_val  = ram_pix[ch_idx];
-                        diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                        if (diff_val == 0) exact_ok++;
-                        else if (diff_val <= 1) tol_ok++;
-                        else errs++;
-                        if (diff_val > max_diff) max_diff = diff_val;
+                        if ($isunknown(act_val)) begin
+                            errs++;
+                            max_diff = 255;
+                        end else begin
+                            diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                            if (diff_val == 0) exact_ok++;
+                            else if (diff_val <= 1) tol_ok++;
+                            else errs++;
+                            if (diff_val > max_diff) max_diff = diff_val;
+                        end
                     end
                 end
             end
@@ -1015,11 +1040,16 @@ module tb_npu_full_sys_functional;
                     for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                         gold_val = c3_gold_mish[(y_idx * 32 * 8) + (x_idx * 8) + ch_idx];
                         act_val  = ram_pix[ch_idx];
-                        diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                        if (diff_val == 0) exact_ok++;
-                        else if (diff_val <= 1) tol_ok++;
-                        else errs++;
-                        if (diff_val > max_diff) max_diff = diff_val;
+                        if ($isunknown(act_val)) begin
+                            errs++;
+                            max_diff = 255;
+                        end else begin
+                            diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                            if (diff_val == 0) exact_ok++;
+                            else if (diff_val <= 1) tol_ok++;
+                            else errs++;
+                            if (diff_val > max_diff) max_diff = diff_val;
+                        end
                     end
                 end
             end
@@ -1045,11 +1075,16 @@ module tb_npu_full_sys_functional;
                     for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                         gold_val = c3_gold_pool[(y_idx * 16 * 8) + (x_idx * 8) + ch_idx];
                         act_val  = ram_pix[ch_idx];
-                        diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                        if (diff_val == 0) exact_ok++;
-                        else if (diff_val <= 1) tol_ok++;
-                        else errs++;
-                        if (diff_val > max_diff) max_diff = diff_val;
+                        if ($isunknown(act_val)) begin
+                            errs++;
+                            max_diff = 255;
+                        end else begin
+                            diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                            if (diff_val == 0) exact_ok++;
+                            else if (diff_val <= 1) tol_ok++;
+                            else errs++;
+                            if (diff_val > max_diff) max_diff = diff_val;
+                        end
                     end
                 end
             end
@@ -1075,11 +1110,16 @@ module tb_npu_full_sys_functional;
                     for (ch_idx = 0; ch_idx < 8; ch_idx++) begin
                         gold_val = c3_gold_mpool[(y_idx * 16 * 8) + (x_idx * 8) + ch_idx];
                         act_val  = ram_pix[ch_idx];
-                        diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
-                        if (diff_val == 0) exact_ok++;
-                        else if (diff_val <= 1) tol_ok++;
-                        else errs++;
-                        if (diff_val > max_diff) max_diff = diff_val;
+                        if ($isunknown(act_val)) begin
+                            errs++;
+                            max_diff = 255;
+                        end else begin
+                            diff_val = (act_val > gold_val) ? (act_val - gold_val) : (gold_val - act_val);
+                            if (diff_val == 0) exact_ok++;
+                            else if (diff_val <= 1) tol_ok++;
+                            else errs++;
+                            if (diff_val > max_diff) max_diff = diff_val;
+                        end
                     end
                 end
             end

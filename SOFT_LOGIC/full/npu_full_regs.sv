@@ -6,10 +6,10 @@
  * Project: CrocoScale SoC — Full eFPGA NPU Control & Status Registers
  *
  * Description:
- *   AXI4-Lite Slave MMIO register block for the full dual-mode NPU controller.
- *   Provides clean handshake isolation, single-cycle self-clearing execution triggers,
- *   and contiguous 32-bit base address pointers for activations, weights, outputs,
- *   biases, per-channel quantization parameters, and non-linear activation LUT.
+ *   Ultra-lean AXI4-Lite Slave MMIO register block for the full dual-mode NPU controller.
+ *   Optimized for tight eFPGA budget: strips unallocated register bits, uses combinational
+ *   read-channel multiplexing, and direct single-cycle write commit to eliminate redundant
+ *   holding flops.
  * =============================================================================================== */
 
 module npu_full_regs #(
@@ -75,165 +75,135 @@ module npu_full_regs #(
     localparam [7:0] REG_OFFSET_QUANT_BASE  = 8'h20;
     localparam [7:0] REG_OFFSET_LUT_BASE    = 8'h24;
 
-    // Storage Registers
-    logic [31:0] reg_ctrl;
-    logic [31:0] reg_config;
+    // Lean Storage Registers
+    logic        reg_soft_reset;
+    logic        reg_auto_drain;
+    logic        reg_mode_1x1;
+    logic        reg_lut_en;
+    logic        reg_pool_en;
+    logic [7:0]  reg_total_passes;
     logic        reg_irq_status;
+    logic        reg_done;
     logic [31:0] reg_act_base;
     logic [31:0] reg_weight_base;
     logic [31:0] reg_out_base;
     logic [31:0] reg_bias_base;
     logic [31:0] reg_quant_base;
     logic [31:0] reg_lut_base;
-    logic        reg_done;
 
     // Continuous Assignments for Decoded Configuration
-    assign config_o      = reg_config;
+    assign config_o      = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
     assign act_base_o    = reg_act_base;
     assign weight_base_o = reg_weight_base;
     assign out_base_o    = reg_out_base;
     assign bias_base_o   = reg_bias_base;
     assign quant_base_o  = reg_quant_base;
     assign lut_base_o    = reg_lut_base;
-    assign soft_reset_o  = reg_ctrl[1];
+    assign soft_reset_o  = reg_soft_reset;
     assign usr_irq_o     = {3'b000, irq_pulse_i};
 
-    wire [31:0] reg_status = {30'b0, reg_done, fsm_busy_i};
-
-    // AXI-Lite Write Channels
-    logic aw_done, w_done;
-    logic [7:0]  latched_waddr;
-    logic [31:0] latched_wdata;
+    // AXI-Lite Write Channel Handshake & Single-Cycle Commit
+    wire write_req = s_axil_awvalid && s_axil_wvalid;
+    assign s_axil_awready = !s_axil_bvalid;
+    assign s_axil_wready  = !s_axil_bvalid;
+    assign s_axil_bresp   = 2'b00;
 
     always_ff @(posedge clk_i or negedge rst_n) begin
         if (!rst_n) begin
-            s_axil_awready  <= 1'b1;
-            s_axil_wready   <= 1'b1;
-            s_axil_bvalid   <= 1'b0;
-            s_axil_bresp    <= 2'b00;
-            aw_done         <= 1'b0;
-            w_done          <= 1'b0;
-            latched_waddr   <= 8'h0;
-            latched_wdata       <= 32'h0;
+            s_axil_bvalid       <= 1'b0;
             start_pulse_o       <= 1'b0;
             start_drain_pulse_o <= 1'b0;
-
-            reg_ctrl        <= 32'h0;
-            reg_config      <= 32'h0000_0001; // [0]: AUTO_DRAIN, [4]: MODE_1X1, [5]: LUT_EN, [6]: POOL_EN, [15:8]: TOTAL_PASSES
-            reg_irq_status  <= 1'b0;
-            reg_act_base    <= 32'h0000_1000;
-            reg_weight_base <= 32'h0000_2000;
-            reg_out_base    <= 32'h0000_3000;
-            reg_bias_base   <= 32'h0000_4000;
-            reg_quant_base  <= 32'h0000_5000;
-            reg_lut_base    <= 32'h0000_6000;
-            reg_done        <= 1'b0;
+            reg_soft_reset      <= 1'b0;
+            reg_auto_drain      <= 1'b1;
+            reg_mode_1x1        <= 1'b0;
+            reg_lut_en          <= 1'b0;
+            reg_pool_en         <= 1'b0;
+            reg_total_passes    <= 8'd0;
+            reg_irq_status      <= 1'b0;
+            reg_done            <= 1'b0;
+            reg_act_base        <= 32'h0000_1000;
+            reg_weight_base     <= 32'h0000_2000;
+            reg_out_base        <= 32'h0000_3000;
+            reg_bias_base       <= 32'h0000_4000;
+            reg_quant_base      <= 32'h0000_5000;
+            reg_lut_base        <= 32'h0000_6000;
         end else begin
-            // Single-cycle self-clearing pulses
             start_pulse_o       <= 1'b0;
             start_drain_pulse_o <= 1'b0;
-            if (reg_ctrl[0]) begin
-                reg_ctrl[0] <= 1'b0;
-                reg_done    <= 1'b0;
-            end
-            if (reg_ctrl[1]) reg_done <= 1'b0;
-            if (reg_ctrl[2]) begin
-                reg_ctrl[2] <= 1'b0;
-                reg_done    <= 1'b0;
-            end
 
             // Sticky Done and IRQ flags
             if (fsm_done_i)  reg_done       <= 1'b1;
             if (irq_pulse_i) reg_irq_status <= 1'b1;
 
-            // Address write handshake (decoupled from W channel)
-            if (s_axil_awvalid && s_axil_awready) begin
-                latched_waddr  <= s_axil_awaddr[7:0];
-                aw_done        <= 1'b1;
-                s_axil_awready <= 1'b0;
-            end
-
-            // Data write handshake (decoupled from AW channel)
-            if (s_axil_wvalid && s_axil_wready) begin
-                latched_wdata <= s_axil_wdata;
-                w_done        <= 1'b1;
-                s_axil_wready <= 1'b0;
-            end
-
-            // Register write commit when both address and data handshakes are satisfied
-            if ((aw_done || (s_axil_awvalid && s_axil_awready)) && 
-                (w_done  || (s_axil_wvalid && s_axil_wready)) && !s_axil_bvalid) begin
-                
-                logic [7:0]  target_addr;
-                logic [31:0] target_data;
-                target_addr = (s_axil_awvalid && s_axil_awready) ? s_axil_awaddr[7:0] : latched_waddr;
-                target_data = (s_axil_wvalid && s_axil_wready)   ? s_axil_wdata        : latched_wdata;
-
-                case (target_addr)
+            if (write_req && !s_axil_bvalid) begin
+                s_axil_bvalid <= 1'b1;
+                case (s_axil_awaddr[7:0])
                     REG_OFFSET_CTRL: begin
-                        reg_ctrl <= target_data;
-                        if (target_data[0]) start_pulse_o <= 1'b1;
-                        if (target_data[2]) start_drain_pulse_o <= 1'b1;
-                        if (target_data[0] || target_data[1] || target_data[2]) reg_done <= 1'b0;
+                        if (s_axil_wdata[0]) begin
+                            start_pulse_o <= 1'b1;
+                            reg_done      <= 1'b0;
+                        end
+                        if (s_axil_wdata[1]) begin
+                            reg_soft_reset <= 1'b1;
+                            reg_done       <= 1'b0;
+                        end else begin
+                            reg_soft_reset <= 1'b0;
+                        end
+                        if (s_axil_wdata[2]) begin
+                            start_drain_pulse_o <= 1'b1;
+                            reg_done            <= 1'b0;
+                        end
                     end
-                    REG_OFFSET_CONFIG:      reg_config      <= target_data;
-                    REG_OFFSET_IRQ_STATUS:  if (target_data[0]) reg_irq_status <= 1'b0;
-                    REG_OFFSET_ACT_BASE:    reg_act_base    <= target_data;
-                    REG_OFFSET_WEIGHT_BASE: reg_weight_base <= target_data;
-                    REG_OFFSET_OUT_BASE:    reg_out_base    <= target_data;
-                    REG_OFFSET_BIAS_BASE:   reg_bias_base   <= target_data;
-                    REG_OFFSET_QUANT_BASE:  reg_quant_base  <= target_data;
-                    REG_OFFSET_LUT_BASE:    reg_lut_base    <= target_data;
+                    REG_OFFSET_CONFIG: begin
+                        reg_auto_drain   <= s_axil_wdata[0];
+                        reg_mode_1x1     <= s_axil_wdata[4];
+                        reg_lut_en       <= s_axil_wdata[5];
+                        reg_pool_en      <= s_axil_wdata[6];
+                        reg_total_passes <= s_axil_wdata[15:8];
+                    end
+                    REG_OFFSET_IRQ_STATUS: begin
+                        if (s_axil_wdata[0]) reg_irq_status <= 1'b0;
+                    end
+                    REG_OFFSET_ACT_BASE:    reg_act_base    <= s_axil_wdata;
+                    REG_OFFSET_WEIGHT_BASE: reg_weight_base <= s_axil_wdata;
+                    REG_OFFSET_OUT_BASE:    reg_out_base    <= s_axil_wdata;
+                    REG_OFFSET_BIAS_BASE:   reg_bias_base   <= s_axil_wdata;
+                    REG_OFFSET_QUANT_BASE:  reg_quant_base  <= s_axil_wdata;
+                    REG_OFFSET_LUT_BASE:    reg_lut_base    <= s_axil_wdata;
                     default: ;
                 endcase
-
-                s_axil_bvalid <= 1'b1;
-                s_axil_bresp  <= 2'b00;
-                aw_done       <= 1'b0;
-                w_done        <= 1'b0;
-            end
-
-            // Write response completion
-            if (s_axil_bvalid && s_axil_bready) begin
-                s_axil_bvalid  <= 1'b0;
-                s_axil_awready <= 1'b1;
-                s_axil_wready  <= 1'b1;
+            end else if (s_axil_bvalid && s_axil_bready) begin
+                s_axil_bvalid <= 1'b0;
             end
         end
     end
 
-    // AXI-Lite Read Channels
+    // Combinational Read Channel Multiplexing (Pruned readback of write-only base pointers)
+    logic [31:0] rdata_comb;
+    always_comb begin
+        case (s_axil_araddr[7:0])
+            REG_OFFSET_CTRL:       rdata_comb = {30'b0, reg_soft_reset, 1'b0};
+            REG_OFFSET_STATUS:     rdata_comb = {30'b0, reg_done, fsm_busy_i};
+            REG_OFFSET_CONFIG:     rdata_comb = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
+            REG_OFFSET_IRQ_STATUS: rdata_comb = {31'b0, reg_irq_status};
+            default:               rdata_comb = 32'd0;
+        endcase
+    end
+
+    assign s_axil_rdata   = rdata_comb;
+    assign s_axil_rresp   = 2'b00;
+    assign s_axil_arready = !s_axil_rvalid;
+
     always_ff @(posedge clk_i or negedge rst_n) begin
         if (!rst_n) begin
-            s_axil_arready <= 1'b1;
-            s_axil_rvalid  <= 1'b0;
-            s_axil_rresp   <= 2'b00;
-            s_axil_rdata   <= 32'h0;
+            s_axil_rvalid <= 1'b0;
         end else begin
-            // Address read handshake & data generation
             if (s_axil_arvalid && s_axil_arready) begin
-                s_axil_arready <= 1'b0;
-                s_axil_rvalid  <= 1'b1;
-                s_axil_rresp   <= 2'b00;
-                case (s_axil_araddr[7:0])
-                    REG_OFFSET_CTRL:        s_axil_rdata <= reg_ctrl;
-                    REG_OFFSET_STATUS:      s_axil_rdata <= reg_status;
-                    REG_OFFSET_CONFIG:      s_axil_rdata <= reg_config;
-                    REG_OFFSET_IRQ_STATUS:  s_axil_rdata <= {31'b0, reg_irq_status};
-                    REG_OFFSET_ACT_BASE:    s_axil_rdata <= reg_act_base;
-                    REG_OFFSET_WEIGHT_BASE: s_axil_rdata <= reg_weight_base;
-                    REG_OFFSET_OUT_BASE:    s_axil_rdata <= reg_out_base;
-                    REG_OFFSET_BIAS_BASE:   s_axil_rdata <= reg_bias_base;
-                    REG_OFFSET_QUANT_BASE:  s_axil_rdata <= reg_quant_base;
-                    REG_OFFSET_LUT_BASE:    s_axil_rdata <= reg_lut_base;
-                    default:                s_axil_rdata <= 32'hBAD00001;
-                endcase
+                s_axil_rvalid <= 1'b1;
             end else if (s_axil_rvalid && s_axil_rready) begin
-                s_axil_rvalid  <= 1'b0;
-                s_axil_arready <= 1'b1;
+                s_axil_rvalid <= 1'b0;
             end
         end
     end
 
 endmodule
-
