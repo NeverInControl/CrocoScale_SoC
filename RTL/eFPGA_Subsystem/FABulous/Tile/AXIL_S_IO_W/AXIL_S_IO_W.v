@@ -187,6 +187,12 @@ module AXIL_S_IO_W
         input  [MaxFramesPerCol-1:0] Tile_X0Y3_FrameStrobe, //CONFIG_PORT
         output  [FrameBitsPerRow-1:0] Tile_X0Y3_FrameData_O, //CONFIG_PORT
         output  Tile_X0Y0_UserCLKo,
+        input  Tile_X0Y0_UserCLK,
+        output  Tile_X0Y1_UserCLKo,
+        input  Tile_X0Y1_UserCLK,
+        output  Tile_X0Y2_UserCLKo,
+        input  Tile_X0Y2_UserCLK,
+        output  Tile_X0Y3_UserCLKo,
         input  Tile_X0Y3_UserCLK
 );
 
@@ -335,11 +341,8 @@ module AXIL_S_IO_W
     wire[7:0] Tile_X0Y3_N2BEGb; //TilePort({N} OUTPUT N2BEGb[7:0])
     wire[15:0] Tile_X0Y3_N4BEG; //TilePort({N} OUTPUT N4BEG[3:0])
     wire[MaxFramesPerCol-1:0] Tile_X0Y1_FrameStrobe_O;
-    wire Tile_X0Y1_UserCLKo;
     wire[MaxFramesPerCol-1:0] Tile_X0Y2_FrameStrobe_O;
-    wire Tile_X0Y2_UserCLKo;
     wire[MaxFramesPerCol-1:0] Tile_X0Y3_FrameStrobe_O;
-    wire Tile_X0Y3_UserCLKo;
     wire[6-1:0] ST_ConfigBits;
     wire[6-1:0] ST_ConfigBits_N;
 
@@ -379,7 +382,7 @@ AXIL_S_IO_W_3
     .S4BEG(Tile_X0Y0_S4BEG),
     .BASE_TO_TOP(AXIL_S_IO_W_3_BASE_TO_TOP),
     .TOP_TO_BASE(AXIL_S_IO_W_3_TOP_TO_BASE),
-    .UserCLK(Tile_X0Y1_UserCLKo),
+    .UserCLK(Tile_X0Y0_UserCLK),
     .UserCLKo(Tile_X0Y0_UserCLKo),
     .FrameData(Tile_X0Y0_FrameData),
     .FrameData_O(Tile_X0Y0_FrameData_O),
@@ -423,7 +426,7 @@ AXIL_S_IO_W_2
     .S4BEG(Tile_X0Y1_S4BEG),
     .BASE_TO_TOP(AXIL_S_IO_W_2_BASE_TO_TOP),
     .TOP_TO_BASE(AXIL_S_IO_W_2_TOP_TO_BASE),
-    .UserCLK(Tile_X0Y2_UserCLKo),
+    .UserCLK(Tile_X0Y1_UserCLK),
     .UserCLKo(Tile_X0Y1_UserCLKo),
     .FrameData(Tile_X0Y1_FrameData),
     .FrameData_O(Tile_X0Y1_FrameData_O),
@@ -467,7 +470,7 @@ AXIL_S_IO_W_1
     .S4BEG(Tile_X0Y2_S4BEG),
     .BASE_TO_TOP(AXIL_S_IO_W_1_BASE_TO_TOP),
     .TOP_TO_BASE(AXIL_S_IO_W_1_TOP_TO_BASE),
-    .UserCLK(Tile_X0Y3_UserCLKo),
+    .UserCLK(Tile_X0Y2_UserCLK),
     .UserCLKo(Tile_X0Y2_UserCLKo),
     .FrameData(Tile_X0Y2_FrameData),
     .FrameData_O(Tile_X0Y2_FrameData_O),

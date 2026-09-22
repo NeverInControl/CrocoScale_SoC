@@ -1,7 +1,8 @@
-SOFT_LOGIC/minimal_3x3/npu_minimal_regs.sv
-SOFT_LOGIC/minimal_3x3/npu_minimal_dma.sv
-SOFT_LOGIC/minimal_3x3/npu_minimal_sequencer.sv
-SOFT_LOGIC/minimal_3x3/npu_minimal_controller.sv
+SOFT_LOGIC/minimal/npu_min_csr.sv
+SOFT_LOGIC/minimal/npu_min_addr_gen.sv
+SOFT_LOGIC/minimal/npu_min_dma.sv
+SOFT_LOGIC/minimal/npu_min_sequencer.sv
+SOFT_LOGIC/minimal/npu_minimal_controller.sv
 SOFT_LOGIC/full/npu_axil_csr.sv
 SOFT_LOGIC/full/npu_axi_reader.sv
 SOFT_LOGIC/full/npu_axi_writer.sv

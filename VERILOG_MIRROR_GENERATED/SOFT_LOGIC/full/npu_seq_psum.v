@@ -1,4 +1,4 @@
-module npu_seq_psum_sched (
+module npu_seq_psum (
 	state_i,
 	preload_phase_i,
 	preload_cnt_i,

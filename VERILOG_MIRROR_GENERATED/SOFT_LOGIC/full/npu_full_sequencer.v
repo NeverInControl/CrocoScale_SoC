@@ -93,7 +93,10 @@ module npu_full_sequencer (
 	wire [(ARRAY_HEIGHT * 4) - 1:0] crossbar_sel_3x3;
 	wire [5:0] act_sram_we_3x3;
 	wire [53:0] act_sram_addr_3x3;
+	wire [5:0] bank_read_used_3x3;
 	wire [6:0] dma_ch_3x3;
+	wire [5:0] dma_we_3x3;
+	wire [53:0] dma_addr_3x3;
 	wire [(ARRAY_HEIGHT * 4) - 1:0] crossbar_sel_1x1;
 	wire [7:0] act_sram_we_1x1;
 	wire [71:0] act_sram_addr_1x1;
@@ -139,7 +142,7 @@ module npu_full_sequencer (
 		.drain_phase_o(drain_phase),
 		.drain_cnt_o(drain_cnt)
 	);
-	npu_seq_weight_swap weight_swap_inst(
+	npu_seq_weights weights_inst(
 		.preload_phase_i(preload_phase),
 		.preload_cnt_i(preload_cnt),
 		.state_i(state),
@@ -151,7 +154,7 @@ module npu_full_sequencer (
 		.swap_weights_o(swap_weights_o),
 		.weight_shift_step_o(weight_shift_step_o)
 	);
-	npu_seq_psum_sched #(.ARRAY_WIDTH(ARRAY_WIDTH)) psum_sched_inst(
+	npu_seq_psum #(.ARRAY_WIDTH(ARRAY_WIDTH)) psum_inst(
 		.state_i(state),
 		.preload_phase_i(preload_phase),
 		.preload_cnt_i(preload_cnt),
@@ -168,6 +171,21 @@ module npu_full_sequencer (
 		.psum_B_addr_o(psum_B_addr_o),
 		.psum_B_we_o(psum_B_we_o)
 	);
+	npu_seq_preload #(.CIN(CIN)) preload_inst(
+		.clk_i(clk_i),
+		.rst_n(rst_n),
+		.state_i(state),
+		.preload_cnt_i(preload_cnt),
+		.pass_cnt_i(pass_cnt),
+		.k_cnt_i(k_cnt),
+		.pass_len_i(pass_len),
+		.total_passes_i(total_passes_i),
+		.bank_read_used_i(bank_read_used_3x3),
+		.dma_channel_to_load_o(dma_ch_3x3),
+		.dma_bank_ptr_o(dma_bank_ptr_o),
+		.dma_we_o(dma_we_3x3),
+		.dma_addr_o(dma_addr_3x3)
+	);
 	npu_seq_addr_3x3 #(
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
 		.CIN(CIN)
@@ -181,11 +199,12 @@ module npu_full_sequencer (
 		.k_cnt_i(k_cnt),
 		.pass_len_i(pass_len),
 		.total_passes_i(total_passes_i),
+		.dma_we_i(dma_we_3x3),
+		.dma_addr_i(dma_addr_3x3),
+		.bank_read_used_o(bank_read_used_3x3),
 		.crossbar_sel_o(crossbar_sel_3x3),
 		.act_sram_we_o(act_sram_we_3x3),
-		.act_sram_addr_o(act_sram_addr_3x3),
-		.dma_channel_to_load_o(dma_ch_3x3),
-		.dma_bank_ptr_o(dma_bank_ptr_o)
+		.act_sram_addr_o(act_sram_addr_3x3)
 	);
 	npu_seq_addr_1x1 #(.ARRAY_HEIGHT(ARRAY_HEIGHT)) addr_1x1_inst(
 		.state_i(state),

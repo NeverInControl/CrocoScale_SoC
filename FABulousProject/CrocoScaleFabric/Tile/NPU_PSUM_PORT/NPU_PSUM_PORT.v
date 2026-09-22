@@ -123,10 +123,8 @@ module NPU_PSUM_PORT
         output  [MaxFramesPerCol-1:0] Tile_X1Y0_FrameStrobe_O, //CONFIG_PORT
         input  [MaxFramesPerCol-1:0] Tile_X1Y0_FrameStrobe, //CONFIG_PORT
         output  [FrameBitsPerRow-1:0] Tile_X1Y0_FrameData_O, //CONFIG_PORT
-        output  Tile_X0Y0_UserCLKo,
         input  Tile_X0Y0_UserCLK,
-        output  Tile_X1Y0_UserCLKo,
-        input  Tile_X1Y0_UserCLK
+        output  Tile_X1Y0_UserCLKo
 );
 
  //signal declarations
@@ -220,6 +218,7 @@ module NPU_PSUM_PORT
     wire FAB_RDATA29;
     wire FAB_RDATA30;
     wire FAB_RDATA31;
+    wire Tile_X0Y0_UserCLKo;
     wire[FrameBitsPerRow-1:0] Tile_X0Y0_FrameData_O;
 
 NPU_PSUM_PORT0
@@ -272,7 +271,7 @@ NPU_PSUM_PORT1
     .SS4BEG(Tile_X1Y0_SS4BEG),
     .BASE_TO_TOP(NPU_PSUM_PORT1_BASE_TO_TOP),
     .TOP_TO_BASE(NPU_PSUM_PORT1_TOP_TO_BASE),
-    .UserCLK(Tile_X1Y0_UserCLK),
+    .UserCLK(Tile_X0Y0_UserCLKo),
     .UserCLKo(Tile_X1Y0_UserCLKo),
     .FrameData(Tile_X0Y0_FrameData_O),
     .FrameData_O(Tile_X1Y0_FrameData_O),

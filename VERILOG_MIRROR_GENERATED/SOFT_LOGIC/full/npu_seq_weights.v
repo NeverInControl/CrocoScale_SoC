@@ -1,4 +1,4 @@
-module npu_seq_weight_swap (
+module npu_seq_weights (
 	preload_phase_i,
 	preload_cnt_i,
 	state_i,

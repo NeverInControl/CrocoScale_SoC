@@ -243,7 +243,7 @@ module npu_full_controller (
 	assign npu_weight_shift_in = dma_weight_shift_in;
 	wire start_weight_fetch = (preload_phase && dma_preload_done) || ((cycle_in_pass == 9'd24) && ((current_pass + 1'b1) < total_passes));
 	wire [7:0] next_pass = (preload_phase ? 8'd0 : current_pass + 1'b1);
-	npu_full_regs #(
+	npu_axil_csr #(
 		.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
 		.AXI_DATA_WIDTH(AXI_DATA_WIDTH)
 	) regs_inst(
@@ -329,7 +329,7 @@ module npu_full_controller (
 		.drain_phase_o(drain_phase),
 		.drain_step_o(drain_step)
 	);
-	npu_full_dma #(
+	npu_axi_dma #(
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
 		.ARRAY_WIDTH(ARRAY_WIDTH),
 		.ACTIVATION_WIDTH(ACTIVATION_WIDTH),

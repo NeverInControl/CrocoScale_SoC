@@ -22,6 +22,7 @@ ConfigBitMode,frame_based,# default is FlipFlopChain,,frame_based,,,,,,,,,,,,,,
 GenerateDelayInSwitchMatrix,80,,,,,,,,,,,,,,,,,
 MultiplexerStyle,custom,#,custom,generic,,,,,,,,,,,,,,
 SuperTileEnable,TRUE,#,TRUE,FALSE,,,,,,,,,,,,,,
+UserCLKDirection,W2E
 ,,,,,,,,,,,,,,,,,,
 Tile,./Tile/LUT4AB/LUT4AB.csv,,,,,,,,,,,,,,,,,
 Tile,./Tile/N_term_single/N_term_single.csv,,,,,,,,,,,,,,,,,

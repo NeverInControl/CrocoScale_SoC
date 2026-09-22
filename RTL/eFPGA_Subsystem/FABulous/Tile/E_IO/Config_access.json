@@ -11,7 +11,7 @@
         "FABulous": 1,
         "dynports": 1,
         "top": 1,
-        "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/E_IO/Config_access.v:10.1-22.10"
+        "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/CrocoScaleFabric/Tile/E_IO/Config_access.v:10.1-22.10"
       },
       "parameter_default_values": {
         "NoConfigBits": 4
@@ -35,7 +35,7 @@
           "attributes": {
             "EXTERNAL": 1,
             "FABulous": 1,
-            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/E_IO/Config_access.v:14.47-14.52"
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/CrocoScaleFabric/Tile/E_IO/Config_access.v:14.47-14.52"
           }
         },
         "ConfigBits": {
@@ -44,7 +44,7 @@
           "attributes": {
             "FABulous": 1,
             "GLOBAL": 1,
-            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/NeoFabUnlimitedFabric/Tile/E_IO/Config_access.v:16.57-16.67"
+            "src": "/mnt/c/Users/Niels/Documents/nct/fabulous/FABulous/CrocoScaleFabric/Tile/E_IO/Config_access.v:16.57-16.67"
           }
         }
       }
