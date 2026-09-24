@@ -1,23 +1,24 @@
 `timescale 1ns / 1ps
 
 /* ===============================================================================================
- * File: SOFT_LOGIC/minimal/npu_minimal_controller.sv
- * Module: npu_minimal_controller
+ * File: SOFT_LOGIC/minimal/npu_min_controller.sv
+ * Module: npu_min_controller
  * Project: CrocoScale SoC -- eFPGA Minimal NPU Soft-Logic Controller Top-Level
  *
  * Description:
  *   Ultra-low area soft-logic controller integrating:
  *   1. npu_min_csr:       AXI4-Lite MMIO register block for host CPU orchestration.
- *   2. npu_min_dma:       AXI4 Master burst DMA engine for tensor preloading & output draining.
+ *   2. npu_min_dma:       Single-beat AXI4 master DMA engine for tensor preloading & output draining.
  *   3. npu_min_sequencer: Central cycle-accurate FSM coordinating systolic matrix operations.
  *   
  *   Compile-time parameterizable via KERNEL_SIZE:
  *   - KERNEL_SIZE == 1: 1x1 convolution (single pass, 16x16 tile, no halo, direct drain).
  *   - KERNEL_SIZE == 3: 3x3 convolution (9 passes, 18x18 halo tile, ping-pong accumulate, drain).
- *   Zero max-pooling logic. Fully synchronous reset for single-LUT DFF mapping.
+ *   Zero max-pooling logic. Zero non-linear LUT logic.
+ *   Fully synchronous reset for single-LUT DFF mapping. Target: <= 600 LUTs.
  * =============================================================================================== */
 
-module npu_minimal_controller #(
+module npu_min_controller #(
     parameter int KERNEL_SIZE      = 3,
     parameter int ARRAY_HEIGHT     = 8,
     parameter int ARRAY_WIDTH      = 8,
@@ -73,16 +74,16 @@ module npu_minimal_controller #(
     // =========================================================================
     // 2. AXI4 Master Interface (System RAM DMA Access)
     // =========================================================================
-    output logic       [AXI_ADDR_WIDTH-1:0]                              m_axi_awaddr,
-    output logic       [7:0]                                             m_axi_awlen,
-    output logic       [2:0]                                             m_axi_awsize,
-    output logic       [1:0]                                             m_axi_awburst,
+    output wire        [AXI_ADDR_WIDTH-1:0]                              m_axi_awaddr,
+    output wire        [7:0]                                             m_axi_awlen,
+    output wire        [2:0]                                             m_axi_awsize,
+    output wire        [1:0]                                             m_axi_awburst,
     output logic                                                         m_axi_awvalid,
     input  wire                                                          m_axi_awready,
 
-    output logic       [AXI_DATA_WIDTH-1:0]                              m_axi_wdata,
-    output logic       [(AXI_DATA_WIDTH/8)-1:0]                          m_axi_wstrb,
-    output logic                                                         m_axi_wlast,
+    output wire        [AXI_DATA_WIDTH-1:0]                              m_axi_wdata,
+    output wire        [(AXI_DATA_WIDTH/8)-1:0]                          m_axi_wstrb,
+    output wire                                                          m_axi_wlast,
     output logic                                                         m_axi_wvalid,
     input  wire                                                          m_axi_wready,
 
@@ -90,10 +91,10 @@ module npu_minimal_controller #(
     input  wire                                                          m_axi_bvalid,
     output logic                                                         m_axi_bready,
 
-    output logic       [AXI_ADDR_WIDTH-1:0]                              m_axi_araddr,
-    output logic       [7:0]                                             m_axi_arlen,
-    output logic       [2:0]                                             m_axi_arsize,
-    output logic       [1:0]                                             m_axi_arburst,
+    output wire        [AXI_ADDR_WIDTH-1:0]                              m_axi_araddr,
+    output wire        [7:0]                                             m_axi_arlen,
+    output wire        [2:0]                                             m_axi_arsize,
+    output wire        [1:0]                                             m_axi_arburst,
     output logic                                                         m_axi_arvalid,
     input  wire                                                          m_axi_arready,
 
@@ -106,48 +107,47 @@ module npu_minimal_controller #(
     // =========================================================================
     // 3. NPU Complex Dedicated Interface (Direct to npu_wrapper)
     // =========================================================================
-    output logic                                                         npu_array_en,
-    output logic                                                         npu_psum_systolic_en,
-    output logic                                                         npu_psum_lut_en,
-    output logic                                                         npu_psum_skew_en,
-    output logic                                                         npu_compute_bank_swap,
-    output logic       [ARRAY_HEIGHT-1:0][XBAR_SEL_WIDTH-1:0]            npu_crossbar_sel,
+    output wire                                                          npu_array_en,
+    output wire                                                          npu_psum_systolic_en,
+    output wire                                                          npu_psum_lut_en,
+    output wire                                                          npu_psum_skew_en,
+    output wire                                                          npu_compute_bank_swap,
+    output wire        [ARRAY_HEIGHT-1:0][XBAR_SEL_WIDTH-1:0]            npu_crossbar_sel,
 
-    output logic signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0]             npu_weight_shift_in,
-    output logic       [WEIGHT_SPLIT-1:0]                                npu_weight_shift_en,
-    output logic                                                         npu_swap_weights,
+    output wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0]              npu_weight_shift_in,
+    output wire        [WEIGHT_SPLIT-1:0]                                npu_weight_shift_en,
+    output wire                                                          npu_swap_weights,
 
-    output logic       [QUANT_CFG_WIDTH-1:0]                             npu_quant_shift_in,
-    output logic                                                         npu_quant_shift_en,
-    output logic                                                         npu_stochastic_round_en,
+    output wire        [QUANT_CFG_WIDTH-1:0]                             npu_quant_shift_in,
+    output wire                                                          npu_quant_shift_en,
+    output wire                                                          npu_stochastic_round_en,
 
-    output logic       [PSUM_ADDR_WIDTH-1:0]                             npu_psum_A_addr,
-    output logic       [ARRAY_WIDTH-1:0]                                 npu_psum_A_we,
-    output logic signed [PSUM_WIDTH-1:0]                                 npu_psum_A_wdata,
-    output logic       [BANK_SEL_WIDTH-1:0]                              npu_psum_A_read_bank_sel,
+    output wire        [PSUM_ADDR_WIDTH-1:0]                             npu_psum_A_addr,
+    output wire        [ARRAY_WIDTH-1:0]                                 npu_psum_A_we,
+    output wire signed [PSUM_WIDTH-1:0]                                  npu_psum_A_wdata,
+    output wire        [BANK_SEL_WIDTH-1:0]                              npu_psum_A_read_bank_sel,
     input  wire signed [PSUM_WIDTH-1:0]                                  npu_psum_A_rdata,
 
-    output logic       [PSUM_ADDR_WIDTH-1:0]                             npu_psum_B_addr,
-    output logic       [ARRAY_WIDTH-1:0]                                 npu_psum_B_we,
-    output logic signed [PSUM_WIDTH-1:0]                                 npu_psum_B_wdata,
-    output logic       [BANK_SEL_WIDTH-1:0]                              npu_psum_B_read_bank_sel,
+    output wire        [PSUM_ADDR_WIDTH-1:0]                             npu_psum_B_addr,
+    output wire        [ARRAY_WIDTH-1:0]                                 npu_psum_B_we,
+    output wire signed [PSUM_WIDTH-1:0]                                  npu_psum_B_wdata,
+    output wire        [BANK_SEL_WIDTH-1:0]                              npu_psum_B_read_bank_sel,
     input  wire signed [PSUM_WIDTH-1:0]                                  npu_psum_B_rdata,
 
-    output logic       [NUM_ACT_BANKS-1:0]                               npu_ext_act_sram_we,
-    output logic       [NUM_ACT_BANKS-1:0][ACT_ADDR_WIDTH-1:0]           npu_ext_act_sram_addr,
-    output logic signed [NUM_ACT_BANKS-1:0][ACTIVATION_WIDTH-1:0]        npu_ext_act_sram_wdata,
+    output wire        [NUM_ACT_BANKS-1:0]                               npu_ext_act_sram_we,
+    output wire        [NUM_ACT_BANKS-1:0][ACT_ADDR_WIDTH-1:0]           npu_ext_act_sram_addr,
+    output wire signed [NUM_ACT_BANKS-1:0][ACTIVATION_WIDTH-1:0]        npu_ext_act_sram_wdata,
     input  wire signed [NUM_ACT_BANKS-1:0][ACTIVATION_WIDTH-1:0]         npu_act_sram_rdata,
 
     input  wire signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0]           npu_out_act,
 
-    // 4-bit Interrupt Line to CPU
-    output logic       [3:0]                                             efpga_usr_irq_o
+    // Interrupt Line to Host CPU
+    output wire        [3:0]                                             efpga_usr_irq_o
 );
 
     // =========================================================================
-    // Internal Interconnect Wires
+    // Internal Wires
     // =========================================================================
-    // CSR -> Sequencer / DMA
     wire        start_pulse;
     wire        soft_reset;
     wire [31:0] act_base;
@@ -157,11 +157,9 @@ module npu_minimal_controller #(
     wire [31:0] reg_quant_param;
     wire [31:0] reg_config;
 
-    // Sequencer <-> CSR
     wire        busy_sig;
     wire        done_pulse;
 
-    // Sequencer <-> DMA
     wire        start_bias;
     wire        bias_done;
     wire        start_act;
@@ -175,37 +173,25 @@ module npu_minimal_controller #(
     wire [PSUM_ADDR_WIDTH-1:0] drain_psum_addr;
     wire [8:0]  dma_drain_pixel_cnt;
 
-    // DMA Dedicated Memory Wires
-    wire [PSUM_ADDR_WIDTH-1:0] dma_bias_psum_A_addr;
-    wire [ARRAY_WIDTH-1:0]     dma_bias_psum_A_we;
-    wire signed [PSUM_WIDTH-1:0] dma_bias_psum_A_wdata;
-    wire [PSUM_ADDR_WIDTH-1:0] dma_bias_psum_B_addr;
-    wire [ARRAY_WIDTH-1:0]     dma_bias_psum_B_we;
-    wire signed [PSUM_WIDTH-1:0] dma_bias_psum_B_wdata;
+    // Dedicated DMA ports
+    wire [ARRAY_WIDTH-1:0]     dma_bias_psum_we;
+    wire signed [PSUM_WIDTH-1:0] dma_bias_psum_wdata;
+    wire [ACT_ADDR_WIDTH-1:0]  dma_ext_act_sram_addr;
 
-    wire [NUM_ACT_BANKS-1:0]                     dma_ext_act_sram_we;
-    wire [NUM_ACT_BANKS-1:0][ACT_ADDR_WIDTH-1:0] dma_ext_act_sram_addr;
-    wire signed [NUM_ACT_BANKS-1:0][ACTIVATION_WIDTH-1:0] dma_ext_act_sram_wdata;
-
-    // Sequencer Dedicated Memory Wires
+    // Dedicated Sequencer ports
     wire [PSUM_ADDR_WIDTH-1:0] seq_psum_A_addr;
     wire [ARRAY_WIDTH-1:0]     seq_psum_A_we;
-    wire signed [PSUM_WIDTH-1:0] seq_psum_A_wdata;
-
     wire [PSUM_ADDR_WIDTH-1:0] seq_psum_B_addr;
     wire [ARRAY_WIDTH-1:0]     seq_psum_B_we;
-    wire signed [PSUM_WIDTH-1:0] seq_psum_B_wdata;
-
     wire [NUM_ACT_BANKS-1:0][ACT_ADDR_WIDTH-1:0] seq_act_sram_addr;
 
-    // Monitoring Wires for Testbench Inspection
+    // Diagnostic/monitoring signals for testbench
     wire [3:0] seq_state_code;
     wire [3:0] seq_pass_idx;
     wire [1:0] seq_ky;
     wire [1:0] seq_kx;
     wire [8:0] seq_comp_k;
 
-    // Hierarchical Aliases for Verification Compatibility
     wire [3:0] state_reg     = seq_state_code;
     wire [3:0] pass_idx      = seq_pass_idx;
     wire [1:0] ky            = seq_ky;
@@ -213,31 +199,30 @@ module npu_minimal_controller #(
     wire [8:0] comp_k        = seq_comp_k;
     wire [8:0] out_pixel_cnt = dma_drain_pixel_cnt;
 
-    // Static read bank selects
+    // Static read bank selects and unused flags
     assign npu_psum_A_read_bank_sel = '0;
     assign npu_psum_B_read_bank_sel = '0;
+    assign npu_psum_lut_en          = 1'b0;
 
     // =========================================================================
-    // Memory Port Multiplexing
+    // Pruned Memory Port Routing
     // =========================================================================
-    // Activation SRAM: DMA writes during Act Fetch; Sequencer reads during Compute
-    assign npu_ext_act_sram_we    = dma_ext_act_sram_we;
-    assign npu_ext_act_sram_wdata = dma_ext_act_sram_wdata;
-    assign npu_ext_act_sram_addr  = (|dma_ext_act_sram_we) ? dma_ext_act_sram_addr : seq_act_sram_addr;
+    // Activation SRAM: DMA broadcasts single address during preload; Sequencer reads during compute
+    assign npu_ext_act_sram_addr  = (npu_ext_act_sram_we[0]) ? {(NUM_ACT_BANKS){dma_ext_act_sram_addr}} :
+                                                               seq_act_sram_addr;
 
-    // PSUM Bank A: Addressed by DMA during Bias Preload / Output Drain; by Sequencer during Compute
-    assign npu_psum_A_addr  = (|dma_bias_psum_A_we) ? dma_bias_psum_A_addr :
-                              (seq_state_code == 4'd10) ? drain_psum_addr : seq_psum_A_addr;
-    assign npu_psum_A_we    = (|dma_bias_psum_A_we) ? dma_bias_psum_A_we : seq_psum_A_we;
-    assign npu_psum_A_wdata = (|dma_bias_psum_A_we) ? dma_bias_psum_A_wdata : seq_psum_A_wdata;
+    // PSUM Bank A: Drain reads during DMA drain; Sequencer accesses during compute; DMA preloads bias at addr 0
+    assign npu_psum_A_addr  = (seq_state_code == 4'd10) ? drain_psum_addr : seq_psum_A_addr;
+    assign npu_psum_A_we    = dma_bias_psum_we | seq_psum_A_we;
+    assign npu_psum_A_wdata = dma_bias_psum_wdata;
 
-    // PSUM Bank B: Addressed by DMA during Bias Preload; by Sequencer during Compute
-    assign npu_psum_B_addr  = (|dma_bias_psum_B_we) ? dma_bias_psum_B_addr : seq_psum_B_addr;
-    assign npu_psum_B_we    = (|dma_bias_psum_B_we) ? dma_bias_psum_B_we : seq_psum_B_we;
-    assign npu_psum_B_wdata = (|dma_bias_psum_B_we) ? dma_bias_psum_B_wdata : seq_psum_B_wdata;
+    // PSUM Bank B: Addressed by Sequencer during compute; 0 during bias preload
+    assign npu_psum_B_addr  = seq_psum_B_addr;
+    assign npu_psum_B_we    = dma_bias_psum_we | seq_psum_B_we;
+    assign npu_psum_B_wdata = dma_bias_psum_wdata;
 
     // =========================================================================
-    // Module 1: AXI4-Lite Slave Register File
+    // Submodule Instantiations
     // =========================================================================
     npu_min_csr #(
         .AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
@@ -278,15 +263,11 @@ module npu_minimal_controller #(
         .irq_pulse_i      (done_pulse)
     );
 
-    // =========================================================================
-    // Module 2: AXI4 Master DMA Engine
-    // =========================================================================
     npu_min_dma #(
         .KERNEL_SIZE     (KERNEL_SIZE),
         .ARRAY_HEIGHT    (ARRAY_HEIGHT),
         .ARRAY_WIDTH     (ARRAY_WIDTH),
         .TILE_SIZE       (TILE_SIZE),
-        .ACT_HALO_PAD    (ACT_HALO_PAD),
         .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
         .WEIGHT_WIDTH    (WEIGHT_WIDTH),
         .PSUM_WIDTH      (PSUM_WIDTH),
@@ -339,20 +320,13 @@ module npu_minimal_controller #(
         .drain_psum_addr_o   (drain_psum_addr),
         .npu_out_act_i       (npu_out_act),
         .drain_pixel_cnt_o   (dma_drain_pixel_cnt),
-        .bias_psum_A_addr_o  (dma_bias_psum_A_addr),
-        .bias_psum_A_we_o    (dma_bias_psum_A_we),
-        .bias_psum_A_wdata_o (dma_bias_psum_A_wdata),
-        .bias_psum_B_addr_o  (dma_bias_psum_B_addr),
-        .bias_psum_B_we_o    (dma_bias_psum_B_we),
-        .bias_psum_B_wdata_o (dma_bias_psum_B_wdata),
-        .ext_act_sram_we_o   (dma_ext_act_sram_we),
+        .bias_psum_we_o      (dma_bias_psum_we),
+        .bias_psum_wdata_o   (dma_bias_psum_wdata),
+        .ext_act_sram_we_o   (npu_ext_act_sram_we),
         .ext_act_sram_addr_o (dma_ext_act_sram_addr),
-        .ext_act_sram_wdata_o(dma_ext_act_sram_wdata)
+        .ext_act_sram_wdata_o(npu_ext_act_sram_wdata)
     );
 
-    // =========================================================================
-    // Module 3: Central Orchestration FSM & Address Generator
-    // =========================================================================
     npu_min_sequencer #(
         .KERNEL_SIZE     (KERNEL_SIZE),
         .ARRAY_HEIGHT    (ARRAY_HEIGHT),
@@ -384,7 +358,6 @@ module npu_minimal_controller #(
         .drain_done_i             (drain_done),
         .npu_array_en_o           (npu_array_en),
         .npu_psum_systolic_en_o   (npu_psum_systolic_en),
-        .npu_psum_lut_en_o        (npu_psum_lut_en),
         .npu_psum_skew_en_o       (npu_psum_skew_en),
         .npu_compute_bank_swap_o  (npu_compute_bank_swap),
         .npu_crossbar_sel_o       (npu_crossbar_sel),
@@ -394,10 +367,8 @@ module npu_minimal_controller #(
         .npu_stochastic_round_en_o(npu_stochastic_round_en),
         .seq_psum_A_addr_o        (seq_psum_A_addr),
         .seq_psum_A_we_o          (seq_psum_A_we),
-        .seq_psum_A_wdata_o       (seq_psum_A_wdata),
         .seq_psum_B_addr_o        (seq_psum_B_addr),
         .seq_psum_B_we_o          (seq_psum_B_we),
-        .seq_psum_B_wdata_o       (seq_psum_B_wdata),
         .seq_act_sram_addr_o      (seq_act_sram_addr),
         .state_code_o             (seq_state_code),
         .pass_idx_o               (seq_pass_idx),
@@ -407,4 +378,3 @@ module npu_minimal_controller #(
     );
 
 endmodule
-

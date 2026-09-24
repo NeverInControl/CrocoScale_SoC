@@ -642,7 +642,7 @@ module tb_npu_full_sys_3x3_benchmark;
 			for (ch = 0; ch < 8; ch = ch + 1)
 				begin
 					ram_write_word((BIAS_BASE_ADDR + (cb * 32)) + (ch * 4), b1_flat[(cb * 8) + ch]);
-					ram_write_word((QUANT_BASE_ADDR + (cb * 32)) + (ch * 4), p1_cfg[(cb * 8) + ch]);
+					ram_write_word((QUANT_BASE_ADDR + (cb * 32)) + (ch * 4), p1_cfg[(cb * 8) + (7 - ch)]);
 				end
 		for (cb = 0; cb < 4; cb = cb + 1)
 			for (p = 0; p < 144; p = p + 1)
@@ -714,15 +714,23 @@ module tb_npu_full_sys_3x3_benchmark;
 										flat_idx = (((y_global * POOL_W) * COUT) + (x_global * COUT)) + ch_global;
 										gold_val = gold_l1[flat_idx];
 										act_val = ram_pix[ch_idx];
-										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-										if (diff_val == 0)
-											exact_ok = exact_ok + 1;
-										else if (diff_val <= 1)
-											tol_ok = tol_ok + 1;
-										else
+										if ($isunknown(act_val)) begin
 											errs = errs + 1;
-										if (diff_val > max_diff)
-											max_diff = diff_val;
+											max_diff = 255;
+											if (errs <= 10)
+												$display("[FATAL] RAM activation at flat_idx=%0d (x=%0d, y=%0d, ch=%0d) is UNKNOWN (X)!", flat_idx, x_global, y_global, ch_global);
+										end
+										else begin
+											diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+											if (diff_val == 0)
+												exact_ok = exact_ok + 1;
+											else if (diff_val <= 1)
+												tol_ok = tol_ok + 1;
+											else
+												errs = errs + 1;
+											if (diff_val > max_diff)
+												max_diff = diff_val;
+										end
 									end
 							end
 					end
@@ -748,7 +756,7 @@ module tb_npu_full_sys_3x3_benchmark;
 			$display(">>> SUCCESS: Full 36-Block Benchmark with MaxPool2D PASSED 100%%! <<<");
 		else begin
 			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:735:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:745:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
 			$finish(1);
 		end
 		$finish;

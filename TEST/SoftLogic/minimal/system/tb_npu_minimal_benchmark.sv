@@ -238,8 +238,8 @@ module tb_npu_minimal_benchmark;
         .out_act            (npu_out_act)
     );
 
-    // DUT: npu_minimal_controller with KERNEL_SIZE = 3
-    npu_minimal_controller #(
+    // DUT: npu_min_controller with KERNEL_SIZE = 3
+    npu_min_controller #(
         .KERNEL_SIZE     (3),
         .ARRAY_HEIGHT    (ARRAY_HEIGHT),
         .ARRAY_WIDTH     (ARRAY_WIDTH),

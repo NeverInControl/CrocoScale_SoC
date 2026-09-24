@@ -551,7 +551,7 @@ module tb_npu_full_sys_functional;
 						npu_ext_act_sram_wdata[b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 8'sd0;
 				end
 			end
-			else if (dut.sequencer_inst.addr_1x1_inst.act_sram_we_o != 8'h00) begin
+			else if (npu_ext_act_sram_we != 8'h00) begin
 				feeder_p_idx = sv2v_cast_32_signed(dut.cycle_in_pass);
 				feeder_y_idx = feeder_p_idx / 16;
 				feeder_x_idx = feeder_p_idx % 16;
@@ -733,7 +733,7 @@ module tb_npu_full_sys_functional;
 		for (ch = 0; ch < 8; ch = ch + 1)
 			ram_write_word(BIAS_BASE_ADDR + (ch * 4), c1_b[ch]);
 		for (ch = 0; ch < 8; ch = ch + 1)
-			ram_write_word(QUANT_BASE_ADDR + (ch * 4), c1_cfg[ch]);
+			ram_write_word(QUANT_BASE_ADDR + (ch * 4), c1_cfg[7 - ch]);
 		for (p = 0; p < 6; p = p + 1)
 			for (s = 0; s < 8; s = s + 1)
 				begin
@@ -810,21 +810,27 @@ module tb_npu_full_sys_functional;
 					begin
 						gold_val = c1_gold_lin[(p_idx * 8) + ch_idx];
 						act_val = ram_pix[ch_idx];
-						diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-						if (diff_val == 0)
-							exact_ok = exact_ok + 1;
-						else if (diff_val <= 1)
-							tol_ok = tol_ok + 1;
-						else
+						if ($isunknown(act_val)) begin
 							errs = errs + 1;
-						if (diff_val > max_diff)
-							max_diff = diff_val;
+							max_diff = 255;
+						end
+						else begin
+							diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+							if (diff_val == 0)
+								exact_ok = exact_ok + 1;
+							else if (diff_val <= 1)
+								tol_ok = tol_ok + 1;
+							else
+								errs = errs + 1;
+							if (diff_val > max_diff)
+								max_diff = diff_val;
+						end
 					end
 			end
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode A Linear: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:790:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:795:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s 60%% [Phase 1: Draining & Validating Mode B (Mish LUT)...]", get_progress_bar(3, 5));
@@ -857,21 +863,27 @@ module tb_npu_full_sys_functional;
 					begin
 						gold_val = c1_gold_mish[(p_idx * 8) + ch_idx];
 						act_val = ram_pix[ch_idx];
-						diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-						if (diff_val == 0)
-							exact_ok = exact_ok + 1;
-						else if (diff_val <= 1)
-							tol_ok = tol_ok + 1;
-						else
+						if ($isunknown(act_val)) begin
 							errs = errs + 1;
-						if (diff_val > max_diff)
-							max_diff = diff_val;
+							max_diff = 255;
+						end
+						else begin
+							diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+							if (diff_val == 0)
+								exact_ok = exact_ok + 1;
+							else if (diff_val <= 1)
+								tol_ok = tol_ok + 1;
+							else
+								errs = errs + 1;
+							if (diff_val > max_diff)
+								max_diff = diff_val;
+						end
 					end
 			end
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode B Mish LUT: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:818:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:828:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s 80%% [Phase 1: Draining & Validating Mode C (2x2 MaxPool)...]", get_progress_bar(4, 5));
@@ -904,21 +916,27 @@ module tb_npu_full_sys_functional;
 					begin
 						gold_val = c1_gold_pool[(p_idx * 8) + ch_idx];
 						act_val = ram_pix[ch_idx];
-						diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-						if (diff_val == 0)
-							exact_ok = exact_ok + 1;
-						else if (diff_val <= 1)
-							tol_ok = tol_ok + 1;
-						else
+						if ($isunknown(act_val)) begin
 							errs = errs + 1;
-						if (diff_val > max_diff)
-							max_diff = diff_val;
+							max_diff = 255;
+						end
+						else begin
+							diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+							if (diff_val == 0)
+								exact_ok = exact_ok + 1;
+							else if (diff_val <= 1)
+								tol_ok = tol_ok + 1;
+							else
+								errs = errs + 1;
+							if (diff_val > max_diff)
+								max_diff = diff_val;
+						end
 					end
 			end
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode C MaxPool: 512/512 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:846:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:861:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s100%% [Phase 1: Draining & Validating Mode D (Mish LUT + MaxPool)...]", get_progress_bar(5, 5));
@@ -951,21 +969,27 @@ module tb_npu_full_sys_functional;
 					begin
 						gold_val = c1_gold_mpool[(p_idx * 8) + ch_idx];
 						act_val = ram_pix[ch_idx];
-						diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-						if (diff_val == 0)
-							exact_ok = exact_ok + 1;
-						else if (diff_val <= 1)
-							tol_ok = tol_ok + 1;
-						else
+						if ($isunknown(act_val)) begin
 							errs = errs + 1;
-						if (diff_val > max_diff)
-							max_diff = diff_val;
+							max_diff = 255;
+						end
+						else begin
+							diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+							if (diff_val == 0)
+								exact_ok = exact_ok + 1;
+							else if (diff_val <= 1)
+								tol_ok = tol_ok + 1;
+							else
+								errs = errs + 1;
+							if (diff_val > max_diff)
+								max_diff = diff_val;
+						end
 					end
 			end
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode D Mish+MaxPool: 512/512 matches (exact: %0d, tol: %0d)!\n", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:874:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:894:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("-----------------------------------------------------------------------------------------");
@@ -975,7 +999,7 @@ module tb_npu_full_sys_functional;
 		for (ch = 0; ch < 8; ch = ch + 1)
 			ram_write_word(BIAS_BASE_ADDR + (ch * 4), c3_b[ch]);
 		for (ch = 0; ch < 8; ch = ch + 1)
-			ram_write_word(QUANT_BASE_ADDR + (ch * 4), c3_cfg[ch]);
+			ram_write_word(QUANT_BASE_ADDR + (ch * 4), c3_cfg[7 - ch]);
 		for (p = 0; p < 9; p = p + 1)
 			for (s = 0; s < 8; s = s + 1)
 				begin
@@ -1020,7 +1044,7 @@ module tb_npu_full_sys_functional;
 								end
 						end
 					if (errs != 0) begin
-						$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:938:32 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Tile (%0d,%0d) Raw PSUM peek failed with %0d errors!", curr_ty, curr_tx, errs);
+						$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:958:32 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Tile (%0d,%0d) Raw PSUM peek failed with %0d errors!", curr_ty, curr_tx, errs);
 						$finish(1);
 					end
 					axil_write(32'h00000008, 32'h00000900);
@@ -1087,22 +1111,28 @@ module tb_npu_full_sys_functional;
 								begin
 									gold_val = c3_gold_lin[(((y_idx * 32) * 8) + (x_idx * 8)) + ch_idx];
 									act_val = ram_pix[ch_idx];
-									diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-									if (diff_val == 0)
-										exact_ok = exact_ok + 1;
-									else if (diff_val <= 1)
-										tol_ok = tol_ok + 1;
-									else
+									if ($isunknown(act_val)) begin
 										errs = errs + 1;
-									if (diff_val > max_diff)
-										max_diff = diff_val;
+										max_diff = 255;
+									end
+									else begin
+										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+										if (diff_val == 0)
+											exact_ok = exact_ok + 1;
+										else if (diff_val <= 1)
+											tol_ok = tol_ok + 1;
+										else
+											errs = errs + 1;
+										if (diff_val > max_diff)
+											max_diff = diff_val;
+									end
 								end
 						end
 				end
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 32x32 Mode A Linear: 8192/8192 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:998:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1023:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 32x32 Mode B (Mish LUT) Across All 4 Tiles...");
@@ -1132,22 +1162,28 @@ module tb_npu_full_sys_functional;
 								begin
 									gold_val = c3_gold_mish[(((y_idx * 32) * 8) + (x_idx * 8)) + ch_idx];
 									act_val = ram_pix[ch_idx];
-									diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-									if (diff_val == 0)
-										exact_ok = exact_ok + 1;
-									else if (diff_val <= 1)
-										tol_ok = tol_ok + 1;
-									else
+									if ($isunknown(act_val)) begin
 										errs = errs + 1;
-									if (diff_val > max_diff)
-										max_diff = diff_val;
+										max_diff = 255;
+									end
+									else begin
+										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+										if (diff_val == 0)
+											exact_ok = exact_ok + 1;
+										else if (diff_val <= 1)
+											tol_ok = tol_ok + 1;
+										else
+											errs = errs + 1;
+										if (diff_val > max_diff)
+											max_diff = diff_val;
+									end
 								end
 						end
 				end
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 32x32 Mode B Mish LUT: 8192/8192 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1028:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1058:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 16x16 Mode C (2x2 MaxPool) Across All 4 Tiles...");
@@ -1177,22 +1213,28 @@ module tb_npu_full_sys_functional;
 								begin
 									gold_val = c3_gold_pool[(((y_idx * 16) * 8) + (x_idx * 8)) + ch_idx];
 									act_val = ram_pix[ch_idx];
-									diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-									if (diff_val == 0)
-										exact_ok = exact_ok + 1;
-									else if (diff_val <= 1)
-										tol_ok = tol_ok + 1;
-									else
+									if ($isunknown(act_val)) begin
 										errs = errs + 1;
-									if (diff_val > max_diff)
-										max_diff = diff_val;
+										max_diff = 255;
+									end
+									else begin
+										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+										if (diff_val == 0)
+											exact_ok = exact_ok + 1;
+										else if (diff_val <= 1)
+											tol_ok = tol_ok + 1;
+										else
+											errs = errs + 1;
+										if (diff_val > max_diff)
+											max_diff = diff_val;
+									end
 								end
 						end
 				end
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 16x16 Mode C MaxPool: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1058:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1093:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 16x16 Mode D (Mish LUT + MaxPool) Across All 4 Tiles...");
@@ -1222,22 +1264,28 @@ module tb_npu_full_sys_functional;
 								begin
 									gold_val = c3_gold_mpool[(((y_idx * 16) * 8) + (x_idx * 8)) + ch_idx];
 									act_val = ram_pix[ch_idx];
-									diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
-									if (diff_val == 0)
-										exact_ok = exact_ok + 1;
-									else if (diff_val <= 1)
-										tol_ok = tol_ok + 1;
-									else
+									if ($isunknown(act_val)) begin
 										errs = errs + 1;
-									if (diff_val > max_diff)
-										max_diff = diff_val;
+										max_diff = 255;
+									end
+									else begin
+										diff_val = (act_val > gold_val ? act_val - gold_val : gold_val - act_val);
+										if (diff_val == 0)
+											exact_ok = exact_ok + 1;
+										else if (diff_val <= 1)
+											tol_ok = tol_ok + 1;
+										else
+											errs = errs + 1;
+										if (diff_val > max_diff)
+											max_diff = diff_val;
+									end
 								end
 						end
 				end
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 16x16 Mode D Mish+MaxPool: 2048/2048 matches (exact: %0d, tol: %0d)!\n", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1088:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1128:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("=========================================================================================");

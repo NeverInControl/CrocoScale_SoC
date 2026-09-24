@@ -1,20 +1,19 @@
-`timescale 1ns / 1ps
+`default_nettype none
 
 module Frame_Data_Reg #(
-    parameter integer               FrameBitsPerRow = 32,
-    parameter integer               RowSelectWidth  = 5,
-    parameter [RowSelectWidth-1:0]  Row             = 1
+    parameter integer FrameBitsPerRow = 32,
+    parameter integer RowSelectWidth = 5,
+    parameter reg [RowSelectWidth-1:0] Row = 1
 ) (
-    input  wire                       CLK,
-    input  wire [FrameBitsPerRow-1:0] FrameData_I,
-    output reg  [FrameBitsPerRow-1:0] FrameData_O,
-    input  wire [RowSelectWidth-1:0]  RowSelect
+    input wire CLK,
+    input wire [FrameBitsPerRow-1:0] FrameData_I,
+    output reg [FrameBitsPerRow-1:0] FrameData_O,
+    input wire [RowSelectWidth-1:0] RowSelect
 );
 
     always @(posedge CLK) begin
-        if (RowSelect == Row) begin
-            FrameData_O <= FrameData_I;
-        end
+        if (RowSelect == Row) FrameData_O <= FrameData_I;
     end
 
 endmodule
+`resetall

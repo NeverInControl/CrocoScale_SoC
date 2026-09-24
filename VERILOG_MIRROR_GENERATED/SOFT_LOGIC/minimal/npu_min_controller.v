@@ -1,4 +1,4 @@
-module npu_minimal_controller (
+module npu_min_controller (
 	clk_i,
 	rst_n,
 	s_axil_awaddr,
@@ -74,6 +74,7 @@ module npu_minimal_controller (
 	npu_out_act,
 	efpga_usr_irq_o
 );
+	parameter signed [31:0] KERNEL_SIZE = 3;
 	parameter signed [31:0] ARRAY_HEIGHT = 8;
 	parameter signed [31:0] ARRAY_WIDTH = 8;
 	parameter signed [31:0] TILE_SIZE = 16;
@@ -86,9 +87,9 @@ module npu_minimal_controller (
 	parameter signed [31:0] AXI_ADDR_WIDTH = 32;
 	parameter signed [31:0] AXI_DATA_WIDTH = 32;
 	localparam signed [31:0] PSUM_WORDS = TILE_SIZE * TILE_SIZE;
-	localparam signed [31:0] ACT_WORDS = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD;
+	localparam signed [31:0] ACT_WORDS = (KERNEL_SIZE == 1 ? 256 : (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD);
 	localparam signed [31:0] PSUM_ADDR_WIDTH = $clog2(PSUM_WORDS);
-	localparam signed [31:0] ACT_ADDR_WIDTH = $clog2(ACT_WORDS);
+	localparam signed [31:0] ACT_ADDR_WIDTH = 9;
 	localparam signed [31:0] NUM_ACT_BANKS = ARRAY_HEIGHT;
 	localparam signed [31:0] XBAR_SEL_WIDTH = 4;
 	localparam signed [31:0] QUANT_CFG_WIDTH = 30;
@@ -188,21 +189,13 @@ module npu_minimal_controller (
 	wire drain_done;
 	wire [PSUM_ADDR_WIDTH - 1:0] drain_psum_addr;
 	wire [8:0] dma_drain_pixel_cnt;
-	wire [PSUM_ADDR_WIDTH - 1:0] dma_bias_psum_A_addr;
-	wire [ARRAY_WIDTH - 1:0] dma_bias_psum_A_we;
-	wire signed [PSUM_WIDTH - 1:0] dma_bias_psum_A_wdata;
-	wire [PSUM_ADDR_WIDTH - 1:0] dma_bias_psum_B_addr;
-	wire [ARRAY_WIDTH - 1:0] dma_bias_psum_B_we;
-	wire signed [PSUM_WIDTH - 1:0] dma_bias_psum_B_wdata;
-	wire [NUM_ACT_BANKS - 1:0] dma_ext_act_sram_we;
-	wire [(NUM_ACT_BANKS * ACT_ADDR_WIDTH) - 1:0] dma_ext_act_sram_addr;
-	wire signed [(NUM_ACT_BANKS * ACTIVATION_WIDTH) - 1:0] dma_ext_act_sram_wdata;
+	wire [ARRAY_WIDTH - 1:0] dma_bias_psum_we;
+	wire signed [PSUM_WIDTH - 1:0] dma_bias_psum_wdata;
+	wire [8:0] dma_ext_act_sram_addr;
 	wire [PSUM_ADDR_WIDTH - 1:0] seq_psum_A_addr;
 	wire [ARRAY_WIDTH - 1:0] seq_psum_A_we;
-	wire signed [PSUM_WIDTH - 1:0] seq_psum_A_wdata;
 	wire [PSUM_ADDR_WIDTH - 1:0] seq_psum_B_addr;
 	wire [ARRAY_WIDTH - 1:0] seq_psum_B_we;
-	wire signed [PSUM_WIDTH - 1:0] seq_psum_B_wdata;
 	wire [(NUM_ACT_BANKS * ACT_ADDR_WIDTH) - 1:0] seq_act_sram_addr;
 	wire [3:0] seq_state_code;
 	wire [3:0] seq_pass_idx;
@@ -217,19 +210,18 @@ module npu_minimal_controller (
 	wire [8:0] out_pixel_cnt = dma_drain_pixel_cnt;
 	assign npu_psum_A_read_bank_sel = 1'sb0;
 	assign npu_psum_B_read_bank_sel = 1'sb0;
-	assign npu_ext_act_sram_we = dma_ext_act_sram_we;
-	assign npu_ext_act_sram_wdata = dma_ext_act_sram_wdata;
-	assign npu_ext_act_sram_addr = (|dma_ext_act_sram_we ? dma_ext_act_sram_addr : seq_act_sram_addr);
-	assign npu_psum_A_addr = (|dma_bias_psum_A_we ? dma_bias_psum_A_addr : (seq_state_code == 4'd10 ? drain_psum_addr : seq_psum_A_addr));
-	assign npu_psum_A_we = (|dma_bias_psum_A_we ? dma_bias_psum_A_we : seq_psum_A_we);
-	assign npu_psum_A_wdata = (|dma_bias_psum_A_we ? dma_bias_psum_A_wdata : seq_psum_A_wdata);
-	assign npu_psum_B_addr = (|dma_bias_psum_B_we ? dma_bias_psum_B_addr : seq_psum_B_addr);
-	assign npu_psum_B_we = (|dma_bias_psum_B_we ? dma_bias_psum_B_we : seq_psum_B_we);
-	assign npu_psum_B_wdata = (|dma_bias_psum_B_we ? dma_bias_psum_B_wdata : seq_psum_B_wdata);
-	npu_minimal_regs #(
+	assign npu_psum_lut_en = 1'b0;
+	assign npu_ext_act_sram_addr = (npu_ext_act_sram_we[0] ? {NUM_ACT_BANKS {dma_ext_act_sram_addr}} : seq_act_sram_addr);
+	assign npu_psum_A_addr = (seq_state_code == 4'd10 ? drain_psum_addr : seq_psum_A_addr);
+	assign npu_psum_A_we = dma_bias_psum_we | seq_psum_A_we;
+	assign npu_psum_A_wdata = dma_bias_psum_wdata;
+	assign npu_psum_B_addr = seq_psum_B_addr;
+	assign npu_psum_B_we = dma_bias_psum_we | seq_psum_B_we;
+	assign npu_psum_B_wdata = dma_bias_psum_wdata;
+	npu_min_csr #(
 		.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
 		.AXI_DATA_WIDTH(AXI_DATA_WIDTH)
-	) regs_inst(
+	) csr_inst(
 		.clk_i(clk_i),
 		.rst_n(rst_n),
 		.s_axil_awaddr(s_axil_awaddr),
@@ -264,11 +256,11 @@ module npu_minimal_controller (
 		.fsm_done_i(done_pulse),
 		.irq_pulse_i(done_pulse)
 	);
-	npu_minimal_dma #(
+	npu_min_dma #(
+		.KERNEL_SIZE(KERNEL_SIZE),
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
 		.ARRAY_WIDTH(ARRAY_WIDTH),
 		.TILE_SIZE(TILE_SIZE),
-		.ACT_HALO_PAD(ACT_HALO_PAD),
 		.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
 		.WEIGHT_WIDTH(WEIGHT_WIDTH),
 		.PSUM_WIDTH(PSUM_WIDTH),
@@ -321,17 +313,14 @@ module npu_minimal_controller (
 		.drain_psum_addr_o(drain_psum_addr),
 		.npu_out_act_i(npu_out_act),
 		.drain_pixel_cnt_o(dma_drain_pixel_cnt),
-		.bias_psum_A_addr_o(dma_bias_psum_A_addr),
-		.bias_psum_A_we_o(dma_bias_psum_A_we),
-		.bias_psum_A_wdata_o(dma_bias_psum_A_wdata),
-		.bias_psum_B_addr_o(dma_bias_psum_B_addr),
-		.bias_psum_B_we_o(dma_bias_psum_B_we),
-		.bias_psum_B_wdata_o(dma_bias_psum_B_wdata),
-		.ext_act_sram_we_o(dma_ext_act_sram_we),
+		.bias_psum_we_o(dma_bias_psum_we),
+		.bias_psum_wdata_o(dma_bias_psum_wdata),
+		.ext_act_sram_we_o(npu_ext_act_sram_we),
 		.ext_act_sram_addr_o(dma_ext_act_sram_addr),
-		.ext_act_sram_wdata_o(dma_ext_act_sram_wdata)
+		.ext_act_sram_wdata_o(npu_ext_act_sram_wdata)
 	);
-	npu_minimal_sequencer #(
+	npu_min_sequencer #(
+		.KERNEL_SIZE(KERNEL_SIZE),
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
 		.ARRAY_WIDTH(ARRAY_WIDTH),
 		.TILE_SIZE(TILE_SIZE),
@@ -361,7 +350,6 @@ module npu_minimal_controller (
 		.drain_done_i(drain_done),
 		.npu_array_en_o(npu_array_en),
 		.npu_psum_systolic_en_o(npu_psum_systolic_en),
-		.npu_psum_lut_en_o(npu_psum_lut_en),
 		.npu_psum_skew_en_o(npu_psum_skew_en),
 		.npu_compute_bank_swap_o(npu_compute_bank_swap),
 		.npu_crossbar_sel_o(npu_crossbar_sel),
@@ -371,10 +359,8 @@ module npu_minimal_controller (
 		.npu_stochastic_round_en_o(npu_stochastic_round_en),
 		.seq_psum_A_addr_o(seq_psum_A_addr),
 		.seq_psum_A_we_o(seq_psum_A_we),
-		.seq_psum_A_wdata_o(seq_psum_A_wdata),
 		.seq_psum_B_addr_o(seq_psum_B_addr),
 		.seq_psum_B_we_o(seq_psum_B_we),
-		.seq_psum_B_wdata_o(seq_psum_B_wdata),
 		.seq_act_sram_addr_o(seq_act_sram_addr),
 		.state_code_o(seq_state_code),
 		.pass_idx_o(seq_pass_idx),

@@ -299,8 +299,11 @@ EOF
             if "${SV2V_BIN}" "${sv_file}" > "${out_v}" 2>/dev/null; then
                 echo "Transpiled Testbench: ${rel_path} -> $(basename "${out_v}")"
             else
-                cp -p "${sv_file}" "${out_v}"
-                echo "Mirrored Testbench:   ${rel_path} -> $(basename "${out_v}") (preserved for simulation)"
+                : > "${out_v}"
+                echo "================================================================================" >&2
+                echo "[WARNING] FAILED TO TRANSPILE TESTBENCH: ${rel_path}" >&2
+                echo "          Contains unsupported SystemVerilog constructs. Left blank in mirror." >&2
+                echo "================================================================================" >&2
             fi
         done
         echo "TEST SystemVerilog transpilation complete."
@@ -338,8 +341,11 @@ else
             if "${SV2V_BIN}" "${sv_file}" > "${out_v}" 2>/dev/null; then
                 echo "Transpiled Testbench: ${rel_path} -> $(basename "${out_v}")"
             else
-                cp -p "${sv_file}" "${out_v}"
-                echo "Mirrored Testbench:   ${rel_path} -> $(basename "${out_v}") (preserved for simulation)"
+                : > "${out_v}"
+                echo "================================================================================" >&2
+                echo "[WARNING] FAILED TO TRANSPILE TESTBENCH: ${rel_path}" >&2
+                echo "          Contains unsupported SystemVerilog constructs. Left blank in mirror." >&2
+                echo "================================================================================" >&2
             fi
         else
             "${SV2V_BIN}" "${sv_file}" > "${out_v}"
@@ -573,18 +579,18 @@ if [[ -z "${TARGET_SUBDIR}" && "${EQUIV_MODE}" != "none" ]]; then
     echo "Running automated Icarus Verilog linter on eFPGA soft-logic..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/soft_logic.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/soft_logic_full.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
 
-    echo "Running automated verification simulation on mirrored soft-logic controller..."
+    echo "Running automated verification simulation on mirrored soft-logic sequencer..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_minimal_system.f -s tb_npu_minimal_system -o /tmp/sim_soft_ctrl.vvp
+        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_full_sequencer.f -s tb_npu_full_sequencer -o /tmp/sim_soft_ctrl.vvp
         vvp /tmp/sim_soft_ctrl.vvp > /dev/null
         rm -f /tmp/sim_soft_ctrl.vvp
     )
-    echo "Icarus Verilog test passed: Mirrored eFPGA soft-logic NPU controller simulation successful."
+    echo "Icarus Verilog test passed: Mirrored eFPGA soft-logic sequencer simulation successful."
 fi
 
 echo ""

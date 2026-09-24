@@ -1,4 +1,7 @@
-# --- Shared Primitives (Single copies only) ---
+# Auto-generated flat file list
+# Source: FILE_LISTS/efpga_subsystem.f
+# Total files: 110
+
 RTL/eFPGA_Subsystem/FABulous/Fabric/models_pack.v
 RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/LUT4c_frame_config_dffesr.v
 RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/MUX8LUT_frame_config_mux.v
@@ -13,8 +16,6 @@ RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_BEL.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXI_M_IO_W/AXI_M_BEL.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACT_ROW/NPU_ACT_ROW_BEL.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_PSUM_PORT/NPU_PSUM_PORT_BEL.v
-
-# --- Switch Matrices & Config Memories ---
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_0/AXIL_S_IO_W_0_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_0/AXIL_S_IO_W_0_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_1/AXIL_S_IO_W_1_ConfigMem.v
@@ -56,8 +57,6 @@ RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_IO/S_IO_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_term_RAM_IO/S_term_RAM_IO_switch_matrix.v
-
-# --- Tile Tops ---
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_0/AXIL_S_IO_W_0.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_1/AXIL_S_IO_W_1.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W_2/AXIL_S_IO_W_2.v
@@ -82,8 +81,6 @@ RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO/RAM_IO.v
 RTL/eFPGA_Subsystem/FABulous/Tile/RAM_IO_W/RAM_IO_W.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_IO/S_IO.v
 RTL/eFPGA_Subsystem/FABulous/Tile/S_term_RAM_IO/S_term_RAM_IO.v
-
-# --- Fabric Assembly ---
 RTL/eFPGA_Subsystem/FABulous/Fabric/ConfigFSM.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/config_UART.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/bitbang.v
@@ -92,3 +89,26 @@ RTL/eFPGA_Subsystem/FABulous/Fabric/Frame_Select.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_Config.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_top.v
+RTL/eFPGA_Subsystem/NPU_complex/sram/sram_bank.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_prng_16bit.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer_lane.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/pe.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/npu_crossbar.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/systolic_array.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/NPU_TOP/npu_top.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_complex_TOP/npu_wrapper.sv
+RTL/eFPGA_Subsystem/AXI_Connector/pmp_math.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_timer.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_slave_monitor.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_master_monitor.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_slave_monitor.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_master_monitor.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axil_decoupler.sv
+RTL/eFPGA_Subsystem/AXI_Connector/axi_decoupler.sv
+RTL/eFPGA_Subsystem/AXI_Connector/bridge_fabric_master_to_soc.sv
+RTL/eFPGA_Subsystem/AXI_Connector/bridge_soc_to_fabric_slave.sv
+RTL/eFPGA_Subsystem/AXI_Connector/efpga_connector.sv
+RTL/eFPGA_Subsystem/AXI_Connector/efpga_manager.sv
+RTL/eFPGA_Subsystem/Integration/efpga_axi_subsystem_wrapper.sv
+RTL/eFPGA_Subsystem/eFPGA_Subsystem_TOP/efpga_subsystem_top.sv

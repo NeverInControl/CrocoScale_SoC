@@ -264,7 +264,7 @@ module tb_npu_minimal_functional;
 
     wire rst_n_1x1 = rst_n && (test_mode == 1'b0);
 
-    npu_minimal_controller #(
+    npu_min_controller #(
         .KERNEL_SIZE     (1),
         .ARRAY_HEIGHT    (8),
         .ARRAY_WIDTH     (8),
@@ -383,7 +383,7 @@ module tb_npu_minimal_functional;
 
     wire rst_n_3x3 = rst_n && (test_mode == 1'b1);
 
-    npu_minimal_controller #(
+    npu_min_controller #(
         .KERNEL_SIZE     (3),
         .ARRAY_HEIGHT    (8),
         .ARRAY_WIDTH     (8),

@@ -6,11 +6,10 @@
  * Project: CrocoScale SoC -- eFPGA Minimal NPU Address Scheduler
  *
  * Description:
- *   Schedules activation SRAM read addresses for systolic matrix operations.
- *   Compile-time parameterizable via KERNEL_SIZE:
- *   - KERNEL_SIZE == 1: 1x1 convolution (direct 16x16 linear spatial skew, 0 halo overhead).
- *   - KERNEL_SIZE == 3: 3x3 halo convolution (18x18 halo 2D spatial iteration across 9 passes).
- *   Unused mode logic is completely eliminated at elaboration/synthesis time.
+ *   Ultra-low area systolic activation SRAM address scheduler:
+ *   - Only Row 0 computes/steps the memory address incrementally.
+ *   - Rows 1..7 directly shift Row r-1's address by 1 cycle (systolic skew chain).
+ *   - Eliminates 7 parallel multiplier/subtractor blocks for minimum LUT footprint.
  * =============================================================================================== */
 
 module npu_min_addr_gen #(
@@ -27,56 +26,55 @@ module npu_min_addr_gen #(
 
 generate
     if (KERNEL_SIZE == 1) begin : gen_1x1
-        // 1x1 Mode: 16x16 Tile (256 pixels), direct linear spatial skew
+        // 1x1 Mode: Row 0 addresses linear pixel (comp_k_i), Rows 1..7 shift
         always_ff @(posedge clk_i) begin
             if (!rst_n) begin
                 act_sram_addr_o <= '0;
             end else begin
-                for (int r = 0; r < ARRAY_HEIGHT; r++) begin
-                    if ((comp_k_i >= 9'(r)) && ((comp_k_i - 9'(r)) < 9'd256)) begin
-                        act_sram_addr_o[r] <= (ACT_ADDR_WIDTH)'(comp_k_i - 9'(r));
-                    end else begin
-                        act_sram_addr_o[r] <= '0;
-                    end
+                act_sram_addr_o[0] <= (comp_k_i < 9'd256) ? (ACT_ADDR_WIDTH)'(comp_k_i) : '0;
+                for (int r = 1; r < ARRAY_HEIGHT; r++) begin
+                    act_sram_addr_o[r] <= act_sram_addr_o[r-1];
                 end
             end
         end
     end else begin : gen_3x3
-        // 3x3 Mode: 18x18 Halo Tile, 2D spatial iteration across (ky, kx)
-        logic [1:0] ky;
-        logic [1:0] kx;
+        // 3x3 Mode: Incremental coordinate stepper for Row 0, Rows 1..7 shift
+        logic [ACT_ADDR_WIDTH-1:0] pass_start_addr;
+        logic [ACT_ADDR_WIDTH-1:0] next_row0_addr;
+        logic [3:0]                col_cnt_reg;
 
         always_comb begin
             case (pass_idx_i)
-                4'd0: begin ky = 2'd0; kx = 2'd0; end
-                4'd1: begin ky = 2'd0; kx = 2'd1; end
-                4'd2: begin ky = 2'd0; kx = 2'd2; end
-                4'd3: begin ky = 2'd1; kx = 2'd0; end
-                4'd4: begin ky = 2'd1; kx = 2'd1; end
-                4'd5: begin ky = 2'd1; kx = 2'd2; end
-                4'd6: begin ky = 2'd2; kx = 2'd0; end
-                4'd7: begin ky = 2'd2; kx = 2'd1; end
-                4'd8: begin ky = 2'd2; kx = 2'd2; end
-                default: begin ky = 2'd0; kx = 2'd0; end
+                4'd0: pass_start_addr = 9'd0;
+                4'd1: pass_start_addr = 9'd1;
+                4'd2: pass_start_addr = 9'd2;
+                4'd3: pass_start_addr = 9'd18;
+                4'd4: pass_start_addr = 9'd19;
+                4'd5: pass_start_addr = 9'd20;
+                4'd6: pass_start_addr = 9'd36;
+                4'd7: pass_start_addr = 9'd37;
+                4'd8: pass_start_addr = 9'd38;
+                default: pass_start_addr = 9'd0;
             endcase
         end
 
+        assign next_row0_addr = (comp_k_i == 9'd0) ? pass_start_addr :
+                                (act_sram_addr_o[0] + {7'd0, (&col_cnt_reg), 1'b1});
+
         always_ff @(posedge clk_i) begin
             if (!rst_n) begin
+                col_cnt_reg     <= '0;
                 act_sram_addr_o <= '0;
             end else begin
-                for (int r = 0; r < ARRAY_HEIGHT; r++) begin
-                    if ((comp_k_i >= 9'(r)) && ((comp_k_i - 9'(r)) < 9'd256)) begin
-                        logic [4:0] iy;
-                        logic [4:0] ix;
-                        logic [8:0] p;
-                        p  = comp_k_i - 9'(r);
-                        iy = (p >> 4) + {3'b0, ky};
-                        ix = (p & 9'd15) + {3'b0, kx};
-                        act_sram_addr_o[r] <= (ACT_ADDR_WIDTH)'((iy * 18) + ix);
-                    end else begin
-                        act_sram_addr_o[r] <= '0;
-                    end
+                if (comp_k_i == 9'd0) begin
+                    col_cnt_reg <= 4'd0;
+                end else if (comp_k_i < 9'd256) begin
+                    col_cnt_reg <= col_cnt_reg + 1'b1;
+                end
+
+                act_sram_addr_o[0] <= (comp_k_i < 9'd256) ? next_row0_addr : '0;
+                for (int r = 1; r < ARRAY_HEIGHT; r++) begin
+                    act_sram_addr_o[r] <= act_sram_addr_o[r-1];
                 end
             end
         end
