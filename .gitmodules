@@ -1,0 +1,3 @@
+[submodule "FABulousProject/CrocoScaleFabric"]
+	path = FABulousProject/CrocoScaleFabric
+	url = https://github.com/NeverInControl/CrocoScale_Fabric
