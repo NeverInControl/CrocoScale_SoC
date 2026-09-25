@@ -30,6 +30,8 @@ module axi_watchdog_master_monitor #(
     output wire protocol_r_fault_o
 );
     localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
+    localparam logic [TIMER_W:0] LIMIT_VAL = (TIMER_W + 1)'(WATCHDOG_LIMIT);
+    localparam logic [TIMER_W:0] TIMER_ONE  = (TIMER_W + 1)'(1);
 
     // ===================================================================
     // 1. TIMEOUT LOGIC
@@ -45,14 +47,14 @@ module axi_watchdog_master_monitor #(
     
     reg [TIMER_W:0] w_timer, r_timer;
     always_ff @(posedge clk_i or negedge rstn_i) begin
-        if (!rstn_i) begin w_timer <= 0; r_timer <= 0; end
+        if (!rstn_i) begin w_timer <= '0; r_timer <= '0; end
         else begin
-            w_timer <= (w_stall && ENABLE_TIMEOUT) ? (w_timer > WATCHDOG_LIMIT ? w_timer : w_timer + 1) : 0;
-            r_timer <= (r_stall && ENABLE_TIMEOUT) ? (r_timer > WATCHDOG_LIMIT ? r_timer : r_timer + 1) : 0;
+            w_timer <= (w_stall && ENABLE_TIMEOUT) ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : '0;
+            r_timer <= (r_stall && ENABLE_TIMEOUT) ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : '0;
         end
     end
-    assign timeout_w_fault_o = (w_timer >= WATCHDOG_LIMIT);
-    assign timeout_r_fault_o = (r_timer >= WATCHDOG_LIMIT);
+    assign timeout_w_fault_o = (w_timer >= LIMIT_VAL);
+    assign timeout_r_fault_o = (r_timer >= LIMIT_VAL);
 
     // ===================================================================
     // 2. PROTOCOL & STABILITY LOGIC

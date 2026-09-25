@@ -248,8 +248,9 @@ module npu_top #(
     );
 
     // 6. Direct Outputs
-    assign psum_A_rdata = psum_sram_rdata[psum_A_read_bank_sel];
-    assign psum_B_rdata = psum_sram_rdata[psum_B_read_bank_sel + ARRAY_WIDTH];
+    localparam int BANK_SEL_W = $clog2(2 * ARRAY_WIDTH);
+    assign psum_A_rdata = psum_sram_rdata[BANK_SEL_W'(psum_A_read_bank_sel)];
+    assign psum_B_rdata = psum_sram_rdata[BANK_SEL_W'(psum_B_read_bank_sel) + BANK_SEL_W'(ARRAY_WIDTH)];
 
     generate
         for (ch = 0; ch < ARRAY_WIDTH; ch++) begin : gen_act_out

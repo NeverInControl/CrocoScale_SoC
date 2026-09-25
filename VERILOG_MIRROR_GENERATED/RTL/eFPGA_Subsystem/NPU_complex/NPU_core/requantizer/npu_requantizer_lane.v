@@ -65,15 +65,15 @@ module npu_requantizer_lane (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		if (stage1_stochastic && (stage1_shift > 0))
+		if (stage1_stochastic && (stage1_shift > 6'd0))
 			round_offset = $signed(dither_val);
-		else if (stage1_shift > 0)
-			round_offset = (ONE << (stage1_shift - 1)) - (stage1_prod[PROD_WIDTH - 1] ? ONE : {PROD_WIDTH {1'sb0}});
+		else if (stage1_shift > 6'd0)
+			round_offset = (ONE << (stage1_shift - 1'b1)) - (stage1_prod[PROD_WIDTH - 1] ? ONE : {PROD_WIDTH {1'sb0}});
 		else
 			round_offset = 1'sb0;
 		rounded_prod = stage1_prod + round_offset;
 		shifted_val = rounded_prod >>> stage1_shift;
-		offset_val = shifted_val + $signed(stage1_zp);
+		offset_val = shifted_val + sv2v_cast_614BF_signed($signed(stage1_zp));
 		if (offset_val > SIGNED_MAX)
 			clamped_val = SIGNED_MAX[ACTIVATION_WIDTH - 1:0];
 		else if (offset_val < SIGNED_MIN)

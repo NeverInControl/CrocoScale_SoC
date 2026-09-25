@@ -100,8 +100,9 @@ module pmp_math #(
             wire [16:0] aw_burst_bytes = 17'((17'(awlen_i) + 17'd1) << awsize_i);
             wire [16:0] ar_burst_bytes = 17'((17'(arlen_i) + 17'd1) << arsize_i);
 
-            wire [MAX_ADDRESS_WIDTH:0] aw_end_addr_full = {1'b0, awaddr_i[MAX_ADDRESS_WIDTH-1:0]} + 33'(aw_burst_bytes) - 33'd1;
-            wire [MAX_ADDRESS_WIDTH:0] ar_end_addr_full = {1'b0, araddr_i[MAX_ADDRESS_WIDTH-1:0]} + 33'(ar_burst_bytes) - 33'd1;
+            localparam int CALC_W = MAX_ADDRESS_WIDTH + 1;
+            wire [MAX_ADDRESS_WIDTH:0] aw_end_addr_full = {1'b0, awaddr_i[MAX_ADDRESS_WIDTH-1:0]} + CALC_W'(aw_burst_bytes) - CALC_W'(1);
+            wire [MAX_ADDRESS_WIDTH:0] ar_end_addr_full = {1'b0, araddr_i[MAX_ADDRESS_WIDTH-1:0]} + CALC_W'(ar_burst_bytes) - CALC_W'(1);
 
             assign aw_malicious_wrap = aw_end_addr_full[MAX_ADDRESS_WIDTH];
             assign ar_malicious_wrap = ar_end_addr_full[MAX_ADDRESS_WIDTH];

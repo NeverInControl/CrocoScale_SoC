@@ -214,7 +214,7 @@ module npu_axi_writer #(
                                     wlast_o <= 1'b1;
                                 end
                                 if (drain_w_beat <= 5'd8) begin
-                                    drain_psum_addr_o <= burst_base_p + 8'((drain_w_beat >> 1) + 3);
+                                    drain_psum_addr_o <= burst_base_p + 8'(drain_w_beat[4:1]) + 8'd3;
                                 end
                             end else begin
                                 lat_upper <= {npu_out_act_i[7], npu_out_act_i[6], npu_out_act_i[5], npu_out_act_i[4]};

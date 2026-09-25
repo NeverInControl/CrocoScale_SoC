@@ -27,40 +27,42 @@ module axi_watchdog_slave_monitor #(
     output wire protocol_r_fault_o
 );
     localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
+    localparam logic [TIMER_W:0] LIMIT_VAL = (TIMER_W + 1)'(WATCHDOG_LIMIT);
+    localparam logic [TIMER_W:0] TIMER_ONE  = (TIMER_W + 1)'(1);
 
     // ===================================================================
     // 1. TIMEOUT LOGIC
     // ===================================================================
     reg [7:0] b_owed, r_owed;
     always_ff @(posedge clk_i or negedge rstn_i) begin
-        if (!rstn_i) begin b_owed <= 0; r_owed <= 0; end
+        if (!rstn_i) begin b_owed <= '0; r_owed <= '0; end
         else begin
             case ({(awvalid & awready), (bvalid & bready)})
-                2'b10: b_owed <= b_owed + 1;
-                2'b01: if (b_owed > 0) b_owed <= b_owed - 1;
+                2'b10: b_owed <= b_owed + 8'd1;
+                2'b01: if (b_owed > 8'd0) b_owed <= b_owed - 8'd1;
                 default: ;
             endcase
             case ({(arvalid & arready), (rvalid & rready & rlast)})
-                2'b10: r_owed <= r_owed + 1;
-                2'b01: if (r_owed > 0) r_owed <= r_owed - 1;
+                2'b10: r_owed <= r_owed + 8'd1;
+                2'b01: if (r_owed > 8'd0) r_owed <= r_owed - 8'd1;
                 default: ;
             endcase
         end
     end
 
-    wire w_stall = (awvalid & ~awready) | (wvalid & ~wready) | ((b_owed > 0) & ~bvalid);
-    wire r_stall = (arvalid & ~arready) | ((r_owed > 0) & ~rvalid); 
+    wire w_stall = (awvalid & ~awready) | (wvalid & ~wready) | ((b_owed > 8'd0) & ~bvalid);
+    wire r_stall = (arvalid & ~arready) | ((r_owed > 8'd0) & ~rvalid); 
     
     reg [TIMER_W:0] w_timer, r_timer;
     always_ff @(posedge clk_i or negedge rstn_i) begin
-        if (!rstn_i) begin w_timer <= 0; r_timer <= 0; end
+        if (!rstn_i) begin w_timer <= '0; r_timer <= '0; end
         else begin
-            w_timer <= (w_stall && ENABLE_TIMEOUT) ? (w_timer > WATCHDOG_LIMIT ? w_timer : w_timer + 1) : 0;
-            r_timer <= (r_stall && ENABLE_TIMEOUT) ? (r_timer > WATCHDOG_LIMIT ? r_timer : r_timer + 1) : 0;
+            w_timer <= (w_stall && ENABLE_TIMEOUT) ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : '0;
+            r_timer <= (r_stall && ENABLE_TIMEOUT) ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : '0;
         end
     end
-    assign timeout_w_fault_o = (w_timer >= WATCHDOG_LIMIT);
-    assign timeout_r_fault_o = (r_timer >= WATCHDOG_LIMIT);
+    assign timeout_w_fault_o = (w_timer >= LIMIT_VAL);
+    assign timeout_r_fault_o = (r_timer >= LIMIT_VAL);
 
     // ===================================================================
     // 2. PROTOCOL & STABILITY LOGIC

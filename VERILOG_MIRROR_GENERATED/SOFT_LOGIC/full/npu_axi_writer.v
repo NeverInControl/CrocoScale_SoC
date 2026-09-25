@@ -180,7 +180,7 @@ module npu_axi_writer (
 								if (drain_w_beat == 5'd14)
 									wlast_o <= 1'b1;
 								if (drain_w_beat <= 5'd8)
-									drain_psum_addr_o <= burst_base_p + sv2v_cast_8((drain_w_beat >> 1) + 3);
+									drain_psum_addr_o <= (burst_base_p + sv2v_cast_8(drain_w_beat[4:1])) + 8'd3;
 							end
 							else begin
 								lat_upper <= {npu_out_act_i[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};

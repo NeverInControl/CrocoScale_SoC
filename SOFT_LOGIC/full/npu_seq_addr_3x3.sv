@@ -135,10 +135,10 @@ module npu_seq_addr_3x3 #(
             ly_mod  = ly_data[7:6];
             ly_mul9 = ly_data[5:0];
 
-            bank      = {1'b0, ly_mod, h};
+            bank      = {ly_mod, h};
             page_addr = ly_mul9 + {2'b0, x_off};
 
-            row_active[r]      = (state_i == SEQ_COMPUTE) && m_p_valid && (g_idx < K_TOTAL);
+            row_active[r]      = (state_i == SEQ_COMPUTE) && m_p_valid && (g_idx < 11'(K_TOTAL));
             row_target_bank[r] = bank;
             row_target_addr[r] = {cin_curr[2:0], page_addr};
             crossbar_sel_o[r]  = row_active[r] ? {1'b0, bank} : 4'b1000;

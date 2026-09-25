@@ -146,9 +146,9 @@ module npu_seq_addr_3x3 (
 					ly_data = get_ly_data(target_ly);
 					ly_mod = ly_data[7:6];
 					ly_mul9 = ly_data[5:0];
-					bank = {1'b0, ly_mod, h};
+					bank = {ly_mod, h};
 					page_addr = ly_mul9 + {2'b00, x_off};
-					row_active[r] = ((state_i == SEQ_COMPUTE) && m_p_valid) && (g_idx < K_TOTAL);
+					row_active[r] = ((state_i == SEQ_COMPUTE) && m_p_valid) && (g_idx < sv2v_cast_11_signed(K_TOTAL));
 					row_target_bank[r * 3+:3] = bank;
 					row_target_addr[r * 9+:9] = {cin_curr[2:0], page_addr};
 					crossbar_sel_o[r * 4+:4] = (row_active[r] ? {1'b0, bank} : 4'b1000);

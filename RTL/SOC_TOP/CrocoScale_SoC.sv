@@ -27,10 +27,10 @@ module crocoscale_soc #(
 
     always_ff @(posedge clk_i) begin
         if (clk_div == 3'd4) begin
-            clk_div         <= 0;
+            clk_div         <= 3'd0;
             clk_10mhz_unbuf <= ~clk_10mhz_unbuf;
         end else begin
-            clk_div         <= clk_div + 1;
+            clk_div         <= clk_div + 3'd1;
         end
     end
 

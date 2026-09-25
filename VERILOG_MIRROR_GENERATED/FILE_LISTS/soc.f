@@ -1,5 +1,5 @@
 # Sub-modules
--f axi_lib.f
+-f libs/axi_lib.f
 -f efpga_subsystem.f
 
 # SoC Top

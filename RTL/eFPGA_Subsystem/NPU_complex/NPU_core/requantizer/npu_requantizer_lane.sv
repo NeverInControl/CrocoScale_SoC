@@ -68,12 +68,12 @@ module npu_requantizer_lane #(
     wire [PROD_WIDTH-1:0] dither_val = PROD_WIDTH'(stage1_noise) & noise_mask;
 
     always_comb begin
-        if (stage1_stochastic && (stage1_shift > 0)) begin
+        if (stage1_stochastic && (stage1_shift > 6'd0)) begin
             round_offset = $signed(dither_val);
-        end else if (stage1_shift > 0) begin
+        end else if (stage1_shift > 6'd0) begin
             // Google Edge TPU Standard: Round-Half-Away-From-Zero
             // (Add half-LSB, subtract 1 if negative for symmetrical rounding)
-            round_offset = (ONE << (stage1_shift - 1)) - (stage1_prod[PROD_WIDTH-1] ? ONE : '0);
+            round_offset = (ONE << (stage1_shift - 1'b1)) - (stage1_prod[PROD_WIDTH-1] ? ONE : '0);
         end else begin
             round_offset = '0;
         end
@@ -81,8 +81,7 @@ module npu_requantizer_lane #(
         rounded_prod = stage1_prod + round_offset;
         shifted_val  = rounded_prod >>> stage1_shift;
         
-        // Native SystemVerilog signed expansion (no manual concatenation needed)
-        offset_val   = shifted_val + $signed(stage1_zp);
+        offset_val   = shifted_val + PROD_WIDTH'($signed(stage1_zp));
 
         if (offset_val > SIGNED_MAX)
             clamped_val = SIGNED_MAX[ACTIVATION_WIDTH-1:0];

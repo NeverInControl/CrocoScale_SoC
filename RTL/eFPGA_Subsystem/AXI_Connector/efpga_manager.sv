@@ -103,8 +103,12 @@ module efpga_manager #(
 
     wire [15:0] local_awaddr = s_axil_awaddr[15:0];
     wire [15:0] local_araddr = s_axil_araddr[15:0];
-    wire [3:0]  aw_slot_idx  = (local_awaddr - 16'h1000) >> 12;
-    wire [3:0]  ar_slot_idx  = (local_araddr - 16'h1000) >> 12;
+    wire [3:0]  aw_slot_idx  = 4'((local_awaddr - 16'h1000) >> 12);
+    wire [3:0]  ar_slot_idx  = 4'((local_araddr - 16'h1000) >> 12);
+
+    localparam int SLOT_IDX_W = (NUM_SLOTS > 1) ? $clog2(NUM_SLOTS) : 1;
+    wire [SLOT_IDX_W-1:0] aw_slot_sel = aw_slot_idx[SLOT_IDX_W-1:0];
+    wire [SLOT_IDX_W-1:0] ar_slot_sel = ar_slot_idx[SLOT_IDX_W-1:0];
 
     // AXI Registers
     logic axi_awready, axi_wready, axi_bvalid, axi_arready, axi_rvalid;
@@ -182,15 +186,15 @@ module efpga_manager #(
     logic [NUM_SLOTS-1:0] clr_pmp_r, clr_pmp_w, clr_dm_pr, clr_dm_to, clr_cs_pr, clr_cs_to, clr_soc;
     always_comb begin
         clr_pmp_r = '0; clr_pmp_w = '0; clr_dm_pr = '0; clr_dm_to = '0; clr_cs_pr = '0; clr_cs_to = '0; clr_soc = '0;
-        if (axi_write_en && (local_awaddr >= 16'h1000) && aw_slot_idx < NUM_SLOTS) begin
+        if (axi_write_en && (local_awaddr >= 16'h1000) && (aw_slot_idx < 4'(NUM_SLOTS))) begin
             if ((local_awaddr[11:0] & 12'hFFC) == 12'h008) begin // FAULT_CLEAR
-                if (s_axil_wstrb[1] && s_axil_wdata[8])  clr_pmp_r[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[1] && s_axil_wdata[9])  clr_pmp_w[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[2] && s_axil_wdata[16]) clr_dm_pr[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[2] && s_axil_wdata[17]) clr_dm_to[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[2] && s_axil_wdata[18]) clr_cs_pr[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[2] && s_axil_wdata[19]) clr_cs_to[aw_slot_idx] = 1'b1;
-                if (s_axil_wstrb[2] && s_axil_wdata[20]) clr_soc[aw_slot_idx]   = 1'b1;
+                if (s_axil_wstrb[1] && s_axil_wdata[8])  clr_pmp_r[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[1] && s_axil_wdata[9])  clr_pmp_w[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[2] && s_axil_wdata[16]) clr_dm_pr[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[2] && s_axil_wdata[17]) clr_dm_to[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[2] && s_axil_wdata[18]) clr_cs_pr[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[2] && s_axil_wdata[19]) clr_cs_to[aw_slot_sel] = 1'b1;
+                if (s_axil_wstrb[2] && s_axil_wdata[20]) clr_soc[aw_slot_sel]   = 1'b1;
             end
         end
     end
@@ -207,9 +211,9 @@ module efpga_manager #(
 
     always_comb begin
         pmp_w_curr_val = 32'b0;
-        if (ENABLE_PMP && (aw_slot_idx < NUM_SLOTS) && (pmp_aw_region_idx < NUM_REGIONS)) begin
-            pmp_w_curr_val = (pmp_aw_offset[2] == 1'b0) ? pmp_base_o[aw_slot_idx][pmp_aw_region_idx]
-                                                        : pmp_limit_o[aw_slot_idx][pmp_aw_region_idx];
+        if (ENABLE_PMP && (aw_slot_idx < 4'(NUM_SLOTS)) && (pmp_aw_region_idx < 8'(NUM_REGIONS))) begin
+            pmp_w_curr_val = (pmp_aw_offset[2] == 1'b0) ? pmp_base_o[aw_slot_sel][pmp_aw_region_idx]
+                                                        : pmp_limit_o[aw_slot_sel][pmp_aw_region_idx];
         end
         pmp_w_next_val[7:0]   = s_axil_wstrb[0] ? s_axil_wdata[7:0]   : pmp_w_curr_val[7:0];
         pmp_w_next_val[15:8]  = s_axil_wstrb[1] ? s_axil_wdata[15:8]  : pmp_w_curr_val[15:8];
@@ -260,42 +264,42 @@ module efpga_manager #(
                         default: ;
                     endcase
                 end else begin
-                    if (aw_slot_idx < NUM_SLOTS) begin
+                    if (aw_slot_idx < 4'(NUM_SLOTS)) begin
                         if ((local_awaddr[11:0] & 12'hFFC) < 12'h014) begin
                             case (local_awaddr[11:0] & 12'hFFC)
                                 12'h000: begin 
-                                     if (s_axil_wstrb[0]) begin dec_req_reg[aw_slot_idx] <= s_axil_wdata[0]; dec_force_reg[aw_slot_idx] <= s_axil_wdata[1]; end
+                                     if (s_axil_wstrb[0]) begin dec_req_reg[aw_slot_sel] <= s_axil_wdata[0]; dec_force_reg[aw_slot_sel] <= s_axil_wdata[1]; end
                                      if (s_axil_wstrb[1]) begin
-                                         if (ENABLE_PMP) pmp_g_en_reg[aw_slot_idx] <= s_axil_wdata[8];
+                                         if (ENABLE_PMP) pmp_g_en_reg[aw_slot_sel] <= s_axil_wdata[8];
                                      end
                                      // Hardware Discovery: MODULE Enables
                                      if (s_axil_wstrb[2]) begin 
-                                         if (ENABLE_WDOG_DMA_MASTER)  wdog_en_dm[aw_slot_idx] <= s_axil_wdata[16];
-                                         if (ENABLE_WDOG_CTRL_SLAVE)  wdog_en_cs[aw_slot_idx] <= s_axil_wdata[17];
-                                         if (ENABLE_WDOG_DMA_SLAVE)   wdog_en_ds[aw_slot_idx] <= s_axil_wdata[18];
-                                         if (ENABLE_WDOG_CTRL_MASTER) wdog_en_cm[aw_slot_idx] <= s_axil_wdata[19];
+                                         if (ENABLE_WDOG_DMA_MASTER)  wdog_en_dm[aw_slot_sel] <= s_axil_wdata[16];
+                                         if (ENABLE_WDOG_CTRL_SLAVE)  wdog_en_cs[aw_slot_sel] <= s_axil_wdata[17];
+                                         if (ENABLE_WDOG_DMA_SLAVE)   wdog_en_ds[aw_slot_sel] <= s_axil_wdata[18];
+                                         if (ENABLE_WDOG_CTRL_MASTER) wdog_en_cm[aw_slot_sel] <= s_axil_wdata[19];
                                      end
                                      if (s_axil_wstrb[3]) begin 
-                                         if (ENABLE_BRIDGE_CTRL) wb_s_enable_reg[aw_slot_idx] <= s_axil_wdata[24]; 
-                                         if (ENABLE_BRIDGE_DMA)  wb_m_enable_reg[aw_slot_idx] <= s_axil_wdata[25]; 
+                                         if (ENABLE_BRIDGE_CTRL) wb_s_enable_reg[aw_slot_sel] <= s_axil_wdata[24]; 
+                                         if (ENABLE_BRIDGE_DMA)  wb_m_enable_reg[aw_slot_sel] <= s_axil_wdata[25]; 
                                      end
                                 end
                                 12'h00C: begin 
-                                     if (s_axil_wstrb[0]) slot_o_top_reg[aw_slot_idx][7:0]   <= s_axil_wdata[7:0];
-                                     if (s_axil_wstrb[1]) slot_o_top_reg[aw_slot_idx][15:8]  <= s_axil_wdata[15:8];
-                                     if (s_axil_wstrb[2]) slot_o_top_reg[aw_slot_idx][23:16] <= s_axil_wdata[23:16];
-                                     if (s_axil_wstrb[3]) slot_o_top_reg[aw_slot_idx][31:24] <= s_axil_wdata[31:24];
+                                     if (s_axil_wstrb[0]) slot_o_top_reg[aw_slot_sel][7:0]   <= s_axil_wdata[7:0];
+                                     if (s_axil_wstrb[1]) slot_o_top_reg[aw_slot_sel][15:8]  <= s_axil_wdata[15:8];
+                                     if (s_axil_wstrb[2]) slot_o_top_reg[aw_slot_sel][23:16] <= s_axil_wdata[23:16];
+                                     if (s_axil_wstrb[3]) slot_o_top_reg[aw_slot_sel][31:24] <= s_axil_wdata[31:24];
                                 end
                                 default: ;
                             endcase
-                        end else if (decoupler_is_decoupled_i[aw_slot_idx] && ENABLE_PMP) begin
-                            if (pmp_aw_region_idx < NUM_REGIONS) begin
+                        end else if (decoupler_is_decoupled_i[aw_slot_sel] && ENABLE_PMP) begin
+                            if (pmp_aw_region_idx < 8'(NUM_REGIONS)) begin
                                 if (pmp_aw_offset[2] == 1'b0) begin
-                                    pmp_base_addr_reg[aw_slot_idx][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
-                                    pmp_base_cfg_reg[aw_slot_idx][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
+                                    pmp_base_addr_reg[aw_slot_sel][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
+                                    pmp_base_cfg_reg[aw_slot_sel][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
                                 end else begin
-                                    pmp_limit_addr_reg[aw_slot_idx][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
-                                    pmp_limit_cfg_reg[aw_slot_idx][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
+                                    pmp_limit_addr_reg[aw_slot_sel][pmp_aw_region_idx] <= pmp_w_next_val[MAX_ADDRESS_WIDTH-1 : ADDR_SHIFT];
+                                    pmp_limit_cfg_reg[aw_slot_sel][pmp_aw_region_idx]  <= pmp_w_next_val[1:0];
                                 end
                             end
                         end
@@ -325,29 +329,29 @@ module efpga_manager #(
                         default: axi_rdata <= 32'hBAD00000;
                     endcase
                 end else begin
-                    if (ar_slot_idx < NUM_SLOTS) begin
+                    if (ar_slot_idx < 4'(NUM_SLOTS)) begin
                         if ((local_araddr[11:0] & 12'hFFC) < 12'h014) begin
                             case (local_araddr[11:0] & 12'hFFC)
                                 12'h000: axi_rdata <= { 
-                                    6'd0, wb_m_enable_reg[ar_slot_idx], wb_s_enable_reg[ar_slot_idx], 
-                                    4'd0, wdog_en_cm[ar_slot_idx], wdog_en_ds[ar_slot_idx], wdog_en_cs[ar_slot_idx], wdog_en_dm[ar_slot_idx],
-                                    7'd0, pmp_g_en_reg[ar_slot_idx],                                   
-                                    6'd0, dec_force_reg[ar_slot_idx], dec_req_reg[ar_slot_idx]        
+                                    6'd0, wb_m_enable_reg[ar_slot_sel], wb_s_enable_reg[ar_slot_sel], 
+                                    4'd0, wdog_en_cm[ar_slot_sel], wdog_en_ds[ar_slot_sel], wdog_en_cs[ar_slot_sel], wdog_en_dm[ar_slot_sel],
+                                    7'd0, pmp_g_en_reg[ar_slot_sel],                                   
+                                    6'd0, dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]        
                                 };
                                 12'h004: axi_rdata <= {
-                                    11'd0, wdog_soc_flag[ar_slot_idx], wdog_cs_to_flag[ar_slot_idx], wdog_cs_pr_flag[ar_slot_idx], wdog_dm_to_flag[ar_slot_idx], wdog_dm_pr_flag[ar_slot_idx], 
-                                    6'd0, pmp_w_flag_reg[ar_slot_idx], pmp_r_flag_reg[ar_slot_idx], 
-                                    5'd0, decoupler_dma_act_i[ar_slot_idx], decoupler_host_act_i[ar_slot_idx], decoupler_is_decoupled_i[ar_slot_idx]
+                                    11'd0, wdog_soc_flag[ar_slot_sel], wdog_cs_to_flag[ar_slot_sel], wdog_cs_pr_flag[ar_slot_sel], wdog_dm_to_flag[ar_slot_sel], wdog_dm_pr_flag[ar_slot_sel], 
+                                    6'd0, pmp_w_flag_reg[ar_slot_sel], pmp_r_flag_reg[ar_slot_sel], 
+                                    5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]
                                 };
                                 12'h008: axi_rdata <= 32'h00000000; // FAULT_CLEAR is WO
-                                12'h00C: axi_rdata <= slot_o_top_reg[ar_slot_idx]; // DEBUG_OUT
-                                12'h010: axi_rdata <= slot_i_top_i[ar_slot_idx];   // DEBUG_IN
+                                12'h00C: axi_rdata <= slot_o_top_reg[ar_slot_sel]; // DEBUG_OUT
+                                12'h010: axi_rdata <= slot_i_top_i[ar_slot_sel];   // DEBUG_IN
                                 default: axi_rdata <= 32'hBAD00001; 
                             endcase
                         end else if (ENABLE_PMP) begin
-                            if (pmp_ar_region_idx < NUM_REGIONS) begin
-                                if (pmp_ar_offset[2] == 1'b0) axi_rdata <= pmp_base_o[ar_slot_idx][pmp_ar_region_idx];
-                                else                          axi_rdata <= pmp_limit_o[ar_slot_idx][pmp_ar_region_idx];
+                            if (pmp_ar_region_idx < 8'(NUM_REGIONS)) begin
+                                if (pmp_ar_offset[2] == 1'b0) axi_rdata <= pmp_base_o[ar_slot_sel][pmp_ar_region_idx];
+                                else                          axi_rdata <= pmp_limit_o[ar_slot_sel][pmp_ar_region_idx];
                             end else begin
                                 axi_rdata <= 32'hBAD00002;
                             end
@@ -362,5 +366,4 @@ module efpga_manager #(
             end
         end
     end
-
 endmodule
