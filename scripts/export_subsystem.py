@@ -252,11 +252,7 @@ def export_subsystem(
     rtl_out_dir = output_dir / "RTL"
     rtl_out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check whether all basenames are unique (allows clean flat RTL layout)
-    basenames = [Path(f).name for f in raw_files]
-    can_flatten_rtl = (len(basenames) == len(set(basenames)))
-
-    # 5. Copy RTL Files
+    # 5. Copy RTL Files Preserving Full Directory Hierarchy
     copied_rtl_entries = []
     formats_to_export = ["sv", "v"] if fmt == "both" else [fmt]
 
@@ -270,17 +266,13 @@ def export_subsystem(
                 print(f"[WARNING] Source file not found: {src_file}")
                 continue
 
-            if can_flatten_rtl:
-                dst_file = curr_rtl_dir / src_file.name
-                rel_entry = f"RTL/{src_file.name}" if fmt != "both" else f"RTL/{f_fmt}/{src_file.name}"
-            else:
-                p = Path(rel_path)
-                parts = p.parts[1:] if p.parts[0] in ("RTL", "MACROS", "VERILOG_MIRROR_GENERATED") else p.parts
-                dst_file = curr_rtl_dir.joinpath(*parts).with_suffix(src_file.suffix)
-                dst_file.parent.mkdir(parents=True, exist_ok=True)
-                rel_entry = f"RTL/{dst_file.relative_to(curr_rtl_dir).as_posix()}" if fmt != "both" else f"RTL/{f_fmt}/{dst_file.relative_to(curr_rtl_dir).as_posix()}"
+            p = Path(rel_path)
+            parts = p.parts[1:] if p.parts[0] in ("RTL", "MACROS", "VERILOG_MIRROR_GENERATED") else p.parts
+            dst_file = curr_rtl_dir.joinpath(*parts).with_suffix(src_file.suffix)
+            dst_file.parent.mkdir(parents=True, exist_ok=True)
 
             shutil.copy2(src_file, dst_file)
+            rel_entry = dst_file.relative_to(output_dir).as_posix()
             if rel_entry not in copied_rtl_entries:
                 copied_rtl_entries.append(rel_entry)
 

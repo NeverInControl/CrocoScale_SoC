@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `npu`
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `22f3fab`
+* **Commit**: `c13b900`
 * **Format**: `v`
 * **RTL Modules**: 9 files
 

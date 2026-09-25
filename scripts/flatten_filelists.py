@@ -112,7 +112,7 @@ def main():
             output_path = repo_root / output_path
     else:
         out_name = f"{input_path.stem}_global.f"
-        output_path = repo_root / "FILE_LISTS" / "global_filelists" / out_name
+        output_path = repo_root / "FILE_LISTS" / out_name
 
     generate_flat_filelist(input_path, output_path, repo_root)
 

@@ -124,13 +124,13 @@ python3 scripts/flatten_filelists.py [OPTIONS]
 | Argument | Type | Default | Description |
 | :--- | :---: | :---: | :--- |
 | `-f`, `--filelist` | `path` | `FILE_LISTS/soc.f` | Root filelist to parse and recursively flatten. |
-| `-o`, `--output` | `path` | `stdout` | Destination file (e.g. `FILE_LISTS/global_filelists/soc_global.f`). |
+| `-o`, `--output` | `path` | `stdout` | Destination file (e.g. `FILE_LISTS/soc_global.f`). |
 | `--repo-root` | `path` | Repository root | Root directory used for resolving relative paths. |
 
 #### Examples
 ```bash
-# Generate flat global filelist for eFPGA subsystem:
-python3 scripts/flatten_filelists.py -f FILE_LISTS/efpga_subsystem.f -o FILE_LISTS/global_filelists/efpga_subsystem_global.f
+# Generate flat filelist for eFPGA subsystem:
+python3 scripts/flatten_filelists.py -f FILE_LISTS/efpga_subsystem.f -o FILE_LISTS/efpga_subsystem_global.f
 
 # Output flattened SoC filelist directly to console:
 python3 scripts/flatten_filelists.py -f FILE_LISTS/soc.f
