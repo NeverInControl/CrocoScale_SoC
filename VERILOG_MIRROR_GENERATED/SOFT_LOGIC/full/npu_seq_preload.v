@@ -56,7 +56,7 @@ module npu_seq_preload (
 		input reg signed [7:0] inp;
 		sv2v_cast_8_signed = inp;
 	endfunction
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			dma_channel_reg <= 7'd0;
 			dma_mod9_cnt <= 4'd0;

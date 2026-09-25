@@ -195,7 +195,7 @@ module npu_seq_addr_3x3 (
 			assign act_sram_addr_o[gb * 9+:9] = (state_i == SEQ_PRELOAD ? {3'b000, preload_cnt_i[5:0]} : ((state_i == SEQ_COMPUTE) && bank_read_used[gb] ? bank_read_addr[gb * 9+:9] : dma_addr_i[gb * 9+:9]));
 		end
 	endgenerate
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			cin_0 <= 7'd0;
 			tap_0 <= 4'd0;

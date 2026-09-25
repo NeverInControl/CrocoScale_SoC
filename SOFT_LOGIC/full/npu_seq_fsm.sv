@@ -80,7 +80,7 @@ module npu_seq_fsm #(
     assign drain_phase_o    = (state_reg == SEQ_DRAIN);
     assign drain_cnt_o      = drain_cnt;
 
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             state_reg        <= SEQ_IDLE;
             busy_o           <= 1'b0;

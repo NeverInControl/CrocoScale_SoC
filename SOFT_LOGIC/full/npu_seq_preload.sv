@@ -51,7 +51,7 @@ module npu_seq_preload #(
         assign dma_addr_o[gb] = dma_write_active ? {dma_channel_reg[2:0], dma_bank_ptr[gb]} : 9'd0;
     end
 
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             dma_channel_reg <= 7'd0;
             dma_mod9_cnt    <= 4'd0;

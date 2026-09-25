@@ -173,7 +173,7 @@ module npu_axi_reader #(
         endcase
     end
 
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             state               <= IDLE;
             m_axi_araddr        <= '0;

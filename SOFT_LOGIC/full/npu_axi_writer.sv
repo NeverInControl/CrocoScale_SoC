@@ -100,7 +100,7 @@ module npu_axi_writer #(
     assign awburst_o = 2'b01;  // INCR
     assign wstrb_o   = 4'hF;
 
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             state             <= IDLE;
             drain_burst_idx   <= '0;

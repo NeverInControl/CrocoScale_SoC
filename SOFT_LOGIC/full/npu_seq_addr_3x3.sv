@@ -179,7 +179,7 @@ module npu_seq_addr_3x3 #(
     end
 
     // Pass and tap progression
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             cin_0 <= 7'd0;
             tap_0 <= 4'd0;

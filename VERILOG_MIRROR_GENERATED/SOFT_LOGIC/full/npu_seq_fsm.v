@@ -62,7 +62,7 @@ module npu_seq_fsm (
 	assign lut_phase_o = state_reg == 3'd3;
 	assign drain_phase_o = state_reg == 3'd4;
 	assign drain_cnt_o = drain_cnt;
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			state_reg <= 3'd0;
 			busy_o <= 1'b0;

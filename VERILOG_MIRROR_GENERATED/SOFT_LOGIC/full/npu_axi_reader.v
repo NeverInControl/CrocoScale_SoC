@@ -148,7 +148,7 @@ module npu_axi_reader (
 			end
 		endcase
 	end
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			state <= 4'd0;
 			m_axi_araddr <= 1'sb0;

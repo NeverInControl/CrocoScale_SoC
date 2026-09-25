@@ -82,7 +82,7 @@ module npu_axi_writer (
 		input reg [7:0] inp;
 		sv2v_cast_8 = inp;
 	endfunction
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			state <= 4'd0;
 			drain_burst_idx <= 1'sb0;

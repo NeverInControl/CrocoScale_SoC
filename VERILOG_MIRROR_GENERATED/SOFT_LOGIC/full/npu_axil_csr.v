@@ -110,7 +110,7 @@ module npu_axil_csr (
 	assign s_axil_awready = !s_axil_bvalid;
 	assign s_axil_wready = !s_axil_bvalid;
 	assign s_axil_bresp = 2'b00;
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n) begin
 			s_axil_bvalid <= 1'b0;
 			start_pulse_o <= 1'b0;
@@ -194,7 +194,7 @@ module npu_axil_csr (
 	assign s_axil_rdata = rdata_comb;
 	assign s_axil_rresp = 2'b00;
 	assign s_axil_arready = !s_axil_rvalid;
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n)
 			s_axil_rvalid <= 1'b0;
 		else if (s_axil_arvalid && s_axil_arready)
