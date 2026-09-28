@@ -1,8 +1,7 @@
 `timescale 1ns / 1ps
 
 module NPU_SLICE_DATA_SRAM_BEL #(
-    parameter integer NoConfigBits = 3,
-    parameter integer SLICE_ID     = 0
+    parameter integer NoConfigBits = 6
 )(
     // =========================================================================
     // NPU / ASIC Facing Pins (External Macro Boundary - East Edge Slice)
@@ -40,17 +39,22 @@ module NPU_SLICE_DATA_SRAM_BEL #(
 );
 
     // -------------------------------------------------------------------------
-    // Bit 0: DIRECT_XBAR     -> Clamps [2:0] to SLICE_ID (1:1 bank connection)
-    // Bit 1: FORCE_ZERO_XBAR -> Clamps [3] to 1'b1 (crossbar MSB=1 forces zero)
-    // Bit 2: WRITE_LOCK      -> Clamps NPU_ACT_WE to 1'b0 (SRAM write protect)
+    // Bit 0:   FORCE_ZERO_XBAR     -> Clamps [3] to 1'b1 (crossbar MSB=1 forces zero)
+    //                                 0 = dynamic FAB_XBAR_SEL[3]
+    // Bit 1:   STATIC_XBAR_EN      -> Clamps [2:0] to STATIC_XBAR_VAL[2:0]
+    //                                 0 = dynamic FAB_XBAR_SEL[2:0]
+    // Bits 4:2: STATIC_XBAR_VAL[2:0] -> Static 3-bit crossbar select value
+    // Bit 5:   WRITE_LOCK          -> Clamps NPU_ACT_WE to 1'b0 (SRAM write protect)
+    //                                 0 = dynamic FAB_ACT_WE
     // -------------------------------------------------------------------------
-    wire DIRECT_XBAR     = ConfigBits[0];
-    wire FORCE_ZERO_XBAR = ConfigBits[1];
-    wire WRITE_LOCK      = ConfigBits[2];
+    wire       FORCE_ZERO_XBAR = ConfigBits[0];
+    wire       STATIC_XBAR_EN  = ConfigBits[1];
+    wire [2:0] STATIC_XBAR_VAL = ConfigBits[4:2];
+    wire       WRITE_LOCK      = ConfigBits[5];
 
     wire [3:0] active_xbar_sel;
-    assign active_xbar_sel[2:0] = DIRECT_XBAR     ? SLICE_ID[2:0] : FAB_XBAR_SEL[2:0];
-    assign active_xbar_sel[3]   = FORCE_ZERO_XBAR ? 1'b1          : FAB_XBAR_SEL[3];
+    assign active_xbar_sel[3]   = FORCE_ZERO_XBAR ? 1'b1            : FAB_XBAR_SEL[3];
+    assign active_xbar_sel[2:0] = STATIC_XBAR_EN  ? STATIC_XBAR_VAL : FAB_XBAR_SEL[2:0];
 
     wire active_act_we = WRITE_LOCK ? 1'b0 : FAB_ACT_WE;
 

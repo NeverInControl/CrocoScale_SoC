@@ -45,4 +45,4 @@ Row 15 high)  |                                                                 
 | [`NPU_CTRL_CFG_BEL`](./NPU_CTRL_CFG_BEL.v) | **North** | 2 Cols | 1 Row | Cols 3..4 | None |
 | [`NPU_ACCUM_SRAM_BEL`](./NPU_ACCUM_SRAM_BEL.v) *(2 instances)* | **North** (Bank A) AND **South** (Bank B) | 4 Cols | 1 Row | Cols 5..8 | None |
 | [`SOC_DEBUG_CTRL_BEL`](./SOC_DEBUG_CTRL_BEL.v) *(4 instances)* | **South** | 1 Col (each) | 1 Row | Cols 1, 2, 3, 4 | None |
-| [`NPU_SLICE_DATA_SRAM_BEL`](./NPU_SLICE_DATA_SRAM_BEL.v) *(8 instances)* | **East** | 1 Col | 2 Rows (each) | Rows 0..15 | **3 bits** |
+| [`NPU_SLICE_DATA_SRAM_BEL`](./NPU_SLICE_DATA_SRAM_BEL.v) *(8 instances)* | **East** | 1 Col | 2 Rows (each) | Rows 0..15 | **6 bits** |
