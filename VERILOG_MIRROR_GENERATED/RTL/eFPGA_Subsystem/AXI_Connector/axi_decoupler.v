@@ -319,15 +319,18 @@ module axi_decoupler (
 	wire recouple_pending = (decoupled_reg & !decouple_req_i) & !force_decouple_i;
 	always @(posedge clk_i or negedge rstn_i)
 		if (!rstn_i)
-			decoupled_reg <= 1'b0;
+			decoupled_reg <= 1'b1;
 		else if (force_decouple_i)
 			decoupled_reg <= 1'b1;
-		else if (decouple_req_i) begin
-			if (is_safe)
-				decoupled_reg <= 1'b1;
-		end
-		else if (is_drained)
-			decoupled_reg <= 1'b0;
+		else
+			case (decoupled_reg)
+				1'b1:
+					if (!decouple_req_i && is_drained)
+						decoupled_reg <= 1'b0;
+				1'b0:
+					if (decouple_req_i && is_safe)
+						decoupled_reg <= 1'b1;
+			endcase
 	wire effective_decouple = decoupled_reg | force_decouple_i;
 	wire fake_awready = ~recouple_pending & ~ctrl_aw_pending;
 	wire fake_wready = ~recouple_pending & ~ctrl_w_pending;

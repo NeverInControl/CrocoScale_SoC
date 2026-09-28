@@ -291,7 +291,7 @@ module efpga_manager (
 			user_design_loaded_reg <= 1'b0;
 			com_active_q <= 1'b0;
 			dec_req_reg <= 1'sb1;
-			dec_force_reg <= 1'sb0;
+			dec_force_reg <= 1'sb1;
 			pmp_r_flag_reg <= 1'sb0;
 			pmp_w_flag_reg <= 1'sb0;
 			pmp_g_en_reg <= 1'sb0;

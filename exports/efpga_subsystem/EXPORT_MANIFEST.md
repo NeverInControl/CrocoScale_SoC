@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `efpga_subsystem`
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `c13b900`
+* **Commit**: `fdd14ca`
 * **Format**: `v`
 * **RTL Modules**: 110 files
 
@@ -9,6 +9,7 @@
 
 * `efpga_subsystem_global.f`: Flat, standalone filelist (all paths relative to package root).
 * `RTL/`: Synthesizable module sources.
+* `TEST/`: Verification testbenches (1 files) and vectors (0 `.mem` files).
 * `HAL/`: C hardware abstraction layer drivers (2 files).
 
 ## Simulation Quickstart

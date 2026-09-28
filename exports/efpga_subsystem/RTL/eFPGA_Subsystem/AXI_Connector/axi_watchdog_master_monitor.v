@@ -78,6 +78,12 @@ module axi_watchdog_master_monitor (
 	output wire protocol_w_fault_o;
 	output wire protocol_r_fault_o;
 	localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
+	function automatic signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] sv2v_cast_B8BED_signed;
+		input reg signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] inp;
+		sv2v_cast_B8BED_signed = inp;
+	endfunction
+	localparam [TIMER_W:0] LIMIT_VAL = sv2v_cast_B8BED_signed(WATCHDOG_LIMIT);
+	localparam [TIMER_W:0] TIMER_ONE = sv2v_cast_B8BED_signed(1);
 	reg w_in_flight;
 	always @(posedge clk_i or negedge rstn_i)
 		if (!rstn_i)
@@ -90,15 +96,15 @@ module axi_watchdog_master_monitor (
 	reg [TIMER_W:0] r_timer;
 	always @(posedge clk_i or negedge rstn_i)
 		if (!rstn_i) begin
-			w_timer <= 0;
-			r_timer <= 0;
+			w_timer <= 1'sb0;
+			r_timer <= 1'sb0;
 		end
 		else begin
-			w_timer <= (w_stall && ENABLE_TIMEOUT ? (w_timer > WATCHDOG_LIMIT ? w_timer : w_timer + 1) : 0);
-			r_timer <= (r_stall && ENABLE_TIMEOUT ? (r_timer > WATCHDOG_LIMIT ? r_timer : r_timer + 1) : 0);
+			w_timer <= (w_stall && ENABLE_TIMEOUT ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+			r_timer <= (r_stall && ENABLE_TIMEOUT ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
 		end
-	assign timeout_w_fault_o = w_timer >= WATCHDOG_LIMIT;
-	assign timeout_r_fault_o = r_timer >= WATCHDOG_LIMIT;
+	assign timeout_w_fault_o = w_timer >= LIMIT_VAL;
+	assign timeout_r_fault_o = r_timer >= LIMIT_VAL;
 	localparam AW_W = AXI_ID_WIDTH + 53;
 	localparam W_W = 37;
 	localparam AR_W = AXI_ID_WIDTH + 53;

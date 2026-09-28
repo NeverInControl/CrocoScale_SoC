@@ -237,8 +237,17 @@ module npu_top (
 		.lfsr_data_out(lfsr_data_out),
 		.act_out(quant_direct_act)
 	);
-	assign psum_A_rdata = psum_sram_rdata[psum_A_read_bank_sel * PSUM_WIDTH+:PSUM_WIDTH];
-	assign psum_B_rdata = psum_sram_rdata[(psum_B_read_bank_sel + ARRAY_WIDTH) * PSUM_WIDTH+:PSUM_WIDTH];
+	localparam signed [31:0] BANK_SEL_W = $clog2(2 * ARRAY_WIDTH);
+	function automatic [BANK_SEL_W - 1:0] sv2v_cast_76F34;
+		input reg [BANK_SEL_W - 1:0] inp;
+		sv2v_cast_76F34 = inp;
+	endfunction
+	assign psum_A_rdata = psum_sram_rdata[sv2v_cast_76F34(psum_A_read_bank_sel) * PSUM_WIDTH+:PSUM_WIDTH];
+	function automatic signed [BANK_SEL_W - 1:0] sv2v_cast_76F34_signed;
+		input reg signed [BANK_SEL_W - 1:0] inp;
+		sv2v_cast_76F34_signed = inp;
+	endfunction
+	assign psum_B_rdata = psum_sram_rdata[(sv2v_cast_76F34(psum_B_read_bank_sel) + sv2v_cast_76F34_signed(ARRAY_WIDTH)) * PSUM_WIDTH+:PSUM_WIDTH];
 	generate
 		for (_gv_ch_1 = 0; _gv_ch_1 < ARRAY_WIDTH; _gv_ch_1 = _gv_ch_1 + 1) begin : gen_act_out
 			localparam ch = _gv_ch_1;

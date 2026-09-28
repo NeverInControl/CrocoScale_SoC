@@ -47,10 +47,6 @@ module pmp_math (
 		input reg [16:0] inp;
 		sv2v_cast_17 = inp;
 	endfunction
-	function automatic [32:0] sv2v_cast_33;
-		input reg [32:0] inp;
-		sv2v_cast_33 = inp;
-	endfunction
 	function automatic [12:0] sv2v_cast_13;
 		input reg [12:0] inp;
 		sv2v_cast_13 = inp;
@@ -87,8 +83,17 @@ module pmp_math (
 		else begin : gen_exact_word_math
 			wire [16:0] aw_burst_bytes = sv2v_cast_17((sv2v_cast_17(awlen_i) + 17'd1) << awsize_i);
 			wire [16:0] ar_burst_bytes = sv2v_cast_17((sv2v_cast_17(arlen_i) + 17'd1) << arsize_i);
-			wire [MAX_ADDRESS_WIDTH:0] aw_end_addr_full = ({1'b0, awaddr_i[MAX_ADDRESS_WIDTH - 1:0]} + sv2v_cast_33(aw_burst_bytes)) - 33'd1;
-			wire [MAX_ADDRESS_WIDTH:0] ar_end_addr_full = ({1'b0, araddr_i[MAX_ADDRESS_WIDTH - 1:0]} + sv2v_cast_33(ar_burst_bytes)) - 33'd1;
+			localparam signed [31:0] CALC_W = MAX_ADDRESS_WIDTH + 1;
+			function automatic [CALC_W - 1:0] sv2v_cast_C12C6;
+				input reg [CALC_W - 1:0] inp;
+				sv2v_cast_C12C6 = inp;
+			endfunction
+			function automatic signed [CALC_W - 1:0] sv2v_cast_C12C6_signed;
+				input reg signed [CALC_W - 1:0] inp;
+				sv2v_cast_C12C6_signed = inp;
+			endfunction
+			wire [MAX_ADDRESS_WIDTH:0] aw_end_addr_full = ({1'b0, awaddr_i[MAX_ADDRESS_WIDTH - 1:0]} + sv2v_cast_C12C6(aw_burst_bytes)) - sv2v_cast_C12C6_signed(1);
+			wire [MAX_ADDRESS_WIDTH:0] ar_end_addr_full = ({1'b0, araddr_i[MAX_ADDRESS_WIDTH - 1:0]} + sv2v_cast_C12C6(ar_burst_bytes)) - sv2v_cast_C12C6_signed(1);
 			assign aw_malicious_wrap = aw_end_addr_full[MAX_ADDRESS_WIDTH];
 			assign ar_malicious_wrap = ar_end_addr_full[MAX_ADDRESS_WIDTH];
 			wire [COMP_WIDTH - 1:0] aw_start = awaddr_i[MAX_ADDRESS_WIDTH - 1:2];

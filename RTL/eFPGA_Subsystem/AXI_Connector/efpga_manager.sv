@@ -227,7 +227,7 @@ module efpga_manager #(
             axi_awready <= 1'b0; axi_wready <= 1'b0; axi_bvalid <= 1'b0;
             config_count_reg <= '0; efpga_config_data_o <= '0;
             efpga_config_we_o <= 1'b0; soft_reset_reg <= 1'b0; user_design_loaded_reg <= 1'b0; com_active_q <= 1'b0;
-            dec_req_reg <= '1; dec_force_reg <= '0; 
+            dec_req_reg <= '1; dec_force_reg <= '1; 
             pmp_r_flag_reg <= '0; pmp_w_flag_reg <= '0; pmp_g_en_reg <= '0; slot_o_top_reg <= '0;
             wb_s_enable_reg <= '0; wb_m_enable_reg <= '0; 
             pmp_base_addr_reg <= '0; pmp_base_cfg_reg <= '0; pmp_limit_addr_reg <= '0; pmp_limit_cfg_reg <= '0;

@@ -214,15 +214,18 @@ module axil_decoupler_bidir (
 	wire is_safe = ~host_active_o & ~dma_active_o;
 	always @(posedge clk_i or negedge rstn_i)
 		if (!rstn_i)
-			decoupled_reg <= 1'b0;
+			decoupled_reg <= 1'b1;
 		else if (force_decouple_i)
 			decoupled_reg <= 1'b1;
-		else if (decouple_req_i) begin
-			if (is_safe)
-				decoupled_reg <= 1'b1;
-		end
 		else
-			decoupled_reg <= 1'b0;
+			case (decoupled_reg)
+				1'b1:
+					if (!decouple_req_i)
+						decoupled_reg <= 1'b0;
+				1'b0:
+					if (decouple_req_i && is_safe)
+						decoupled_reg <= 1'b1;
+			endcase
 	assign h2f_m_axil_awaddr = (decoupled_reg ? 32'b00000000000000000000000000000000 : h2f_s_axil_awaddr);
 	assign h2f_m_axil_awprot = (decoupled_reg ? 3'b000 : h2f_s_axil_awprot);
 	assign h2f_m_axil_awvalid = (decoupled_reg ? 1'b0 : h2f_s_axil_awvalid);
