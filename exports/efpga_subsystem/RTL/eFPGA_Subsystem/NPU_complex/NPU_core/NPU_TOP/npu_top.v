@@ -41,7 +41,7 @@ module npu_top (
 	parameter signed [31:0] PSUM_WIDTH = 32;
 	parameter signed [31:0] SCALE_WIDTH = 16;
 	parameter [0:0] ENABLE_LFSR = 0;
-	parameter signed [31:0] WEIGHT_SPLIT = 2;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
 	localparam signed [31:0] PSUM_WORDS = TILE_SIZE * TILE_SIZE;
 	localparam signed [31:0] ACT_WORDS = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD;
 	localparam signed [31:0] PSUM_ADDR_WIDTH = $clog2(PSUM_WORDS);
@@ -127,9 +127,15 @@ module npu_top (
 	reg [PSUM_ADDR_WIDTH - 1:0] pipe_A_addr [1:ARRAY_WIDTH - 1];
 	reg [PSUM_ADDR_WIDTH - 1:0] pipe_B_addr [1:ARRAY_WIDTH - 1];
 	reg pipe_bank_swap [1:ARRAY_WIDTH - 1];
+	reg compute_bank_swap_reg;
+	always @(posedge clk_i or negedge rst_n)
+		if (!rst_n)
+			compute_bank_swap_reg <= 1'b0;
+		else
+			compute_bank_swap_reg <= compute_bank_swap;
 	assign psum_A_addr_col[0] = psum_A_addr;
 	assign psum_B_addr_col[0] = psum_B_addr;
-	assign bank_swap_col[0] = compute_bank_swap;
+	assign bank_swap_col[0] = compute_bank_swap_reg;
 	always @(posedge clk_i or negedge rst_n)
 		if (!rst_n) begin : sv2v_autoblock_2
 			reg signed [31:0] col;
@@ -160,7 +166,7 @@ module npu_top (
 			localparam col = _gv_col_1;
 			assign psum_A_addr_col[col] = (psum_skew_en ? pipe_A_addr[col] : psum_A_addr);
 			assign psum_B_addr_col[col] = (psum_skew_en ? pipe_B_addr[col] : psum_B_addr);
-			assign bank_swap_col[col] = (psum_skew_en ? pipe_bank_swap[col] : compute_bank_swap);
+			assign bank_swap_col[col] = (psum_skew_en ? pipe_bank_swap[col] : compute_bank_swap_reg);
 		end
 	endgenerate
 	wire signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] quant_direct_act;

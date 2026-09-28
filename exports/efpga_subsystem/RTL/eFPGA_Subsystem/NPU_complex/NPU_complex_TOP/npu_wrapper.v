@@ -39,7 +39,7 @@ module npu_wrapper (
 	parameter signed [31:0] PSUM_WIDTH = 32;
 	parameter signed [31:0] SCALE_WIDTH = 16;
 	parameter [0:0] ENABLE_LFSR = 0;
-	parameter signed [31:0] WEIGHT_SPLIT = 2;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
 	localparam signed [31:0] PSUM_WORDS = TILE_SIZE * TILE_SIZE;
 	localparam signed [31:0] ACT_WORDS = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD;
 	localparam signed [31:0] PSUM_ADDR_WIDTH = $clog2(PSUM_WORDS);

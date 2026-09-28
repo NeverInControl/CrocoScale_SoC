@@ -68,6 +68,8 @@ module efpga_axi_subsystem_wrapper (
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
+	parameter [0:0] ENABLE_LFSR = 0;
 	input wire clk_i;
 	input wire rstn_i;
 	input wire [(NUM_SLOTS * 32) - 1:0] ctrl_m_awaddr;
@@ -160,7 +162,9 @@ module efpga_axi_subsystem_wrapper (
 	wire [15:0] ram_a_o;
 	wire [7:0] ram_c_o;
 	wire [31:0] ram_d_o;
-	wire [31:0] ram_d_i = 32'd0;
+	wire [15:0] npu_lfsr_data_out;
+	wire [31:0] ram_d_i;
+	assign ram_d_i = {16'd0, npu_lfsr_data_out};
 	wire [119:0] uio_top_uin;
 	wire [119:0] uio_top_uout;
 	wire [199:0] uio_bot_uin;
@@ -246,6 +250,19 @@ module efpga_axi_subsystem_wrapper (
 		.NPU_WE(npu_we),
 		.NPU_WEIGHT_IN(npu_weight_in)
 	);
+	wire [WEIGHT_SPLIT - 1:0] npu_weight_shift_en;
+	generate
+		if (WEIGHT_SPLIT == 8) begin : gen_shift_en_8
+			assign npu_weight_shift_en = {{4 {ram_a_o[0]}}, {4 {ram_c_o[3]}}};
+		end
+		else if (WEIGHT_SPLIT == 2) begin : gen_shift_en_2
+			assign npu_weight_shift_en = {ram_a_o[0], ram_c_o[3]};
+		end
+		else begin : gen_shift_en_broadcast
+			assign npu_weight_shift_en = {WEIGHT_SPLIT {ram_c_o[3]}};
+		end
+	endgenerate
+	wire [3:0] slot_soft_rst_n = {4 {rstn_i}};
 	npu_wrapper #(
 		.ARRAY_HEIGHT(8),
 		.ARRAY_WIDTH(8),
@@ -255,8 +272,8 @@ module efpga_axi_subsystem_wrapper (
 		.WEIGHT_WIDTH(8),
 		.PSUM_WIDTH(32),
 		.SCALE_WIDTH(16),
-		.ENABLE_LFSR(0),
-		.WEIGHT_SPLIT(2)
+		.ENABLE_LFSR(ENABLE_LFSR),
+		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) npu_inst(
 		.clk_i(clk_i),
 		.rst_n(rstn_i & ~efpga_soft_reset_i),
@@ -264,7 +281,7 @@ module efpga_axi_subsystem_wrapper (
 		.array_en(ram_c_o[0]),
 		.psum_systolic_en(ram_c_o[1]),
 		.psum_lut_en(ram_c_o[2]),
-		.weight_shift_en({ram_a_o[0], ram_c_o[3]}),
+		.weight_shift_en(npu_weight_shift_en),
 		.swap_weights(ram_c_o[4]),
 		.stochastic_round_en(ram_c_o[5]),
 		.psum_skew_en(ram_c_o[6]),
@@ -272,7 +289,7 @@ module efpga_axi_subsystem_wrapper (
 		.weight_shift_in(npu_weight_in),
 		.quant_shift_in(uio_top_uout[118:89]),
 		.quant_shift_en(uio_top_uout[119]),
-		.lfsr_data_out(),
+		.lfsr_data_out(npu_lfsr_data_out),
 		.psum_A_addr(npu_addr[7:0]),
 		.psum_A_we(npu_we[7:0]),
 		.psum_A_wdata(npu_wdata[31:0]),

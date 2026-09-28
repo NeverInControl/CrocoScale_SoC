@@ -3,7 +3,8 @@
 module efpga_axi_subsystem_wrapper #(
     parameter int NUM_SLOTS    = 1,
     parameter int AXI_ID_WIDTH = 8,
-    parameter int WEIGHT_SPLIT = 8
+    parameter int WEIGHT_SPLIT = 8,
+    parameter bit ENABLE_LFSR  = 0
 )(
     input  logic clk_i,
     input  logic rstn_i,
@@ -115,7 +116,9 @@ module efpga_axi_subsystem_wrapper #(
     wire [15:0] ram_a_o;
     wire [7:0]  ram_c_o;
     wire [31:0] ram_d_o;
-    wire [31:0] ram_d_i = 32'd0;
+    wire [15:0] npu_lfsr_data_out;
+    wire [31:0] ram_d_i;
+    assign ram_d_i = {16'd0, npu_lfsr_data_out};
 
     // 3. UIO Top (North Edge: X=1..6, Y=0)
     wire [119:0] uio_top_uin;
@@ -353,7 +356,7 @@ module efpga_axi_subsystem_wrapper #(
         .WEIGHT_WIDTH        (8),
         .PSUM_WIDTH          (32),
         .SCALE_WIDTH         (16),
-        .ENABLE_LFSR         (0),
+        .ENABLE_LFSR         (ENABLE_LFSR),
         .WEIGHT_SPLIT        (WEIGHT_SPLIT)
     ) npu_inst (
         .clk_i               (clk_i),
@@ -374,7 +377,7 @@ module efpga_axi_subsystem_wrapper #(
 
         .quant_shift_in      (uio_top_uout[118:89]),
         .quant_shift_en      (uio_top_uout[119]),
-        .lfsr_data_out       (),
+        .lfsr_data_out       (npu_lfsr_data_out),
 
         .psum_A_addr         (npu_addr[7:0]),
         .psum_A_we           (npu_we[7:0]),

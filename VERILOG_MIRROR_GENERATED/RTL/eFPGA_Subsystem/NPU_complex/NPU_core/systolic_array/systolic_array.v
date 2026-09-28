@@ -14,7 +14,7 @@ module systolic_array (
 	parameter signed [31:0] ACTIVATION_WIDTH = 8;
 	parameter signed [31:0] WEIGHT_WIDTH = 8;
 	parameter signed [31:0] PSUM_WIDTH = 32;
-	parameter signed [31:0] WEIGHT_SPLIT = 2;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
 	localparam signed [31:0] ROWS_PER_SPLIT = ARRAY_HEIGHT / WEIGHT_SPLIT;
 	input wire clk_i;
 	input wire rst_n;

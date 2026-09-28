@@ -84,6 +84,7 @@ module efpga_subsystem_top (
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
 	input wire clk_i;
 	input wire rstn_i;
 	input wire rst_i;
@@ -370,7 +371,8 @@ module efpga_subsystem_top (
 	);
 	efpga_axi_subsystem_wrapper #(
 		.NUM_SLOTS(NUM_SLOTS),
-		.AXI_ID_WIDTH(AXI_ID_WIDTH)
+		.AXI_ID_WIDTH(AXI_ID_WIDTH),
+		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) efpga_subsystem_inst(
 		.clk_i(clk_i),
 		.rstn_i(rstn_i),
