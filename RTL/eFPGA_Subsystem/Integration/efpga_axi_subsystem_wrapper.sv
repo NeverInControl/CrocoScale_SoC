@@ -2,7 +2,8 @@
 
 module efpga_axi_subsystem_wrapper #(
     parameter int NUM_SLOTS    = 1,
-    parameter int AXI_ID_WIDTH = 8
+    parameter int AXI_ID_WIDTH = 8,
+    parameter int WEIGHT_SPLIT = 8
 )(
     input  logic clk_i,
     input  logic rstn_i,
@@ -326,6 +327,23 @@ module efpga_axi_subsystem_wrapper #(
     // =========================================================================
     // 2. Single NPU Core Instance
     // =========================================================================
+    // -------------------------------------------------------------------------
+    // Shift Enable & Soft Reset Lines (Dynamically Scaled via WEIGHT_SPLIT)
+    // -------------------------------------------------------------------------
+    wire [WEIGHT_SPLIT-1:0] npu_weight_shift_en;
+    generate
+        if (WEIGHT_SPLIT == 8) begin : gen_shift_en_8
+            assign npu_weight_shift_en = {{4{ram_a_o[0]}}, {4{ram_c_o[3]}}};
+        end else if (WEIGHT_SPLIT == 2) begin : gen_shift_en_2
+            assign npu_weight_shift_en = {ram_a_o[0], ram_c_o[3]};
+        end else begin : gen_shift_en_broadcast
+            assign npu_weight_shift_en = {WEIGHT_SPLIT{ram_c_o[3]}};
+        end
+    endgenerate
+
+    // User soft resets tied off for now (will connect to manager REG_SLOT_CTRL later)
+    wire [3:0] slot_soft_rst_n = {4{rstn_i}};
+
     npu_wrapper #(
         .ARRAY_HEIGHT        (8),
         .ARRAY_WIDTH         (8),
@@ -336,7 +354,7 @@ module efpga_axi_subsystem_wrapper #(
         .PSUM_WIDTH          (32),
         .SCALE_WIDTH         (16),
         .ENABLE_LFSR         (0),
-        .WEIGHT_SPLIT        (2)
+        .WEIGHT_SPLIT        (WEIGHT_SPLIT)
     ) npu_inst (
         .clk_i               (clk_i),
         .rst_n               (rstn_i & ~efpga_soft_reset_i),
@@ -346,7 +364,7 @@ module efpga_axi_subsystem_wrapper #(
         .array_en            (ram_c_o[0]),
         .psum_systolic_en    (ram_c_o[1]),
         .psum_lut_en         (ram_c_o[2]),
-        .weight_shift_en     ({ram_a_o[0], ram_c_o[3]}), // [1]: Rows 4..7, [0]: Rows 0..3
+        .weight_shift_en     (npu_weight_shift_en),
         .swap_weights        (ram_c_o[4]),
         .stochastic_round_en (ram_c_o[5]),
         .psum_skew_en        (ram_c_o[6]),

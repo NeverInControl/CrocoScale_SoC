@@ -10,7 +10,7 @@ module npu_top #(
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
     parameter bit ENABLE_LFSR      = 0,
-    parameter int WEIGHT_SPLIT     = 2,
+    parameter int WEIGHT_SPLIT     = 8,
     
     localparam int PSUM_WORDS      = TILE_SIZE * TILE_SIZE,
     localparam int ACT_WORDS       = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD,
@@ -136,9 +136,20 @@ module npu_top #(
     reg   [PSUM_ADDR_WIDTH-1:0] pipe_B_addr     [1:ARRAY_WIDTH-1];
     reg                         pipe_bank_swap  [1:ARRAY_WIDTH-1];
 
+    // 1-Cycle Input Boundary Register for Bank Swap
+    logic compute_bank_swap_reg;
+
+    always_ff @(posedge clk_i or negedge rst_n) begin
+        if (!rst_n) begin
+            compute_bank_swap_reg <= 1'b0;
+        end else begin
+            compute_bank_swap_reg <= compute_bank_swap;
+        end
+    end
+
     assign psum_A_addr_col[0] = psum_A_addr;
     assign psum_B_addr_col[0] = psum_B_addr;
-    assign bank_swap_col[0]   = compute_bank_swap;
+    assign bank_swap_col[0]   = compute_bank_swap_reg;
 
     always_ff @(posedge clk_i or negedge rst_n) begin
         if (!rst_n) begin
@@ -165,7 +176,7 @@ module npu_top #(
         for (col = 1; col < ARRAY_WIDTH; col++) begin : gen_col_skew_mux
             assign psum_A_addr_col[col] = psum_skew_en ? pipe_A_addr[col]    : psum_A_addr;
             assign psum_B_addr_col[col] = psum_skew_en ? pipe_B_addr[col]    : psum_B_addr;
-            assign bank_swap_col[col]   = psum_skew_en ? pipe_bank_swap[col] : compute_bank_swap;
+            assign bank_swap_col[col]   = psum_skew_en ? pipe_bank_swap[col] : compute_bank_swap_reg;
         end
     endgenerate
 

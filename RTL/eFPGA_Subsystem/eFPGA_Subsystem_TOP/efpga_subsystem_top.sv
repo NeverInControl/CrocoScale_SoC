@@ -3,7 +3,8 @@
 module efpga_subsystem_top #(
     parameter int NUM_SLOTS        = 1,
     parameter int AXI_ID_WIDTH     = 8,
-    parameter logic [31:0] HW_VERSION = 32'hFAB00001
+    parameter logic [31:0] HW_VERSION = 32'hFAB00001,
+    parameter int WEIGHT_SPLIT     = 8
 ) (
     // Global Clock & Synchronized System Resets (from Top Level)
     input  logic                                clk_i,
@@ -312,7 +313,8 @@ module efpga_subsystem_top #(
 `ifndef EXCLUDE_FPGA
     efpga_axi_subsystem_wrapper #(
         .NUM_SLOTS(NUM_SLOTS),
-        .AXI_ID_WIDTH(AXI_ID_WIDTH)
+        .AXI_ID_WIDTH(AXI_ID_WIDTH),
+        .WEIGHT_SPLIT(WEIGHT_SPLIT)
     ) efpga_subsystem_inst (
         .clk_i               (clk_i),
         .rstn_i              (rstn_i),

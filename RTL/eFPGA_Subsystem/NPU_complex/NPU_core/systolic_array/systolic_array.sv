@@ -6,7 +6,7 @@ module systolic_array #(
     parameter int ACTIVATION_WIDTH = 8,
     parameter int WEIGHT_WIDTH     = 8,
     parameter int PSUM_WIDTH       = 32,
-    parameter int WEIGHT_SPLIT     = 2, // 1 = 64-bit (8 rows), 2 = 32-bit (4 rows/block)
+    parameter int WEIGHT_SPLIT     = 8, // 1 = 64-bit (8 rows), 2 = 32-bit (4 rows/block), 8 = per-row (1 bit/row)
 
     localparam int ROWS_PER_SPLIT  = ARRAY_HEIGHT / WEIGHT_SPLIT
 )(

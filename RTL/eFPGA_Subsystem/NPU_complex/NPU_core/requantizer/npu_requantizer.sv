@@ -95,7 +95,8 @@ module npu_requantizer #(
             npu_requantizer_lane #(
                 .PSUM_WIDTH      (PSUM_WIDTH),
                 .SCALE_WIDTH     (SCALE_WIDTH),
-                .ACTIVATION_WIDTH(ACTIVATION_WIDTH)
+                .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
+                .ENABLE_LFSR     (ENABLE_LFSR)
             ) lane_inst (
                 .clk_i              (clk_i),
                 .rst_n              (rst_n),
