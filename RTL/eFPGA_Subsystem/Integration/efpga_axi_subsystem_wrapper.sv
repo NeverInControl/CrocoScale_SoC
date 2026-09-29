@@ -73,8 +73,8 @@ module efpga_axi_subsystem_wrapper #(
     input  logic [NUM_SLOTS-1:0][3:0]         slot_fabric_rst_n_i,
     input  logic [NUM_SLOTS-1:0]              slot_npu_rst_n_i,
     output logic                              efpga_com_active_o,
-    output logic [NUM_SLOTS-1:0][31:0]        slot_i_top_o,
-    input  logic [NUM_SLOTS-1:0][31:0]        slot_o_top_i,
+    output logic [NUM_SLOTS-1:0][31:0]        slot_debug_in_o,
+    input  logic [NUM_SLOTS-1:0][31:0]        slot_debug_out_i,
 
     // --- External PMOD Padring Interface (24 Wires) ---
     input  logic [7:0]                        pmod_io_i,
@@ -138,8 +138,8 @@ module efpga_axi_subsystem_wrapper #(
     // =========================================================================
     // South-West: Debug I/O (Slot 0) & Fabric Soft Reset Compatibility
     assign uio_bot_uin[0]      = slot_fabric_rst_n_i[0][0];
-    assign uio_bot_uin[31:1]   = slot_o_top_i[0][31:1];
-    assign slot_i_top_o[0]     = uio_bot_uout[31:0]; // DEBUG_IN  (eFPGA -> Manager)
+    assign uio_bot_uin[31:1]   = slot_debug_out_i[0][31:1];
+    assign slot_debug_in_o[0]  = uio_bot_uout[31:0]; // DEBUG_IN  (eFPGA -> Manager)
 
     // South: PMOD Padring Interface (24 Wires)
     assign uio_bot_uin[39:32]  = pmod_io_i;          // External PMOD In -> eFPGA

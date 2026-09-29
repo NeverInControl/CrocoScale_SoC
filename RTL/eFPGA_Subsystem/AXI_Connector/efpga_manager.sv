@@ -68,8 +68,8 @@ module efpga_manager #(
     output logic [31:0] efpga_config_data_o, output logic efpga_config_we_o, input logic efpga_com_active_i,
     
     // --- Per-Slot Control Arrays ---
-    input  logic [NUM_SLOTS-1:0][31:0] slot_i_top_i,
-    output logic [NUM_SLOTS-1:0][31:0] slot_o_top_o,
+    input  logic [NUM_SLOTS-1:0][31:0] slot_debug_in_i,
+    output logic [NUM_SLOTS-1:0][31:0] slot_debug_out_o,
     output logic [NUM_SLOTS-1:0][31:0] slot_reset_o,
     
     output logic [NUM_SLOTS-1:0]       decoupler_req_o,
@@ -132,7 +132,7 @@ module efpga_manager #(
     logic [NUM_SLOTS-1:0]       dec_req_reg, dec_force_reg;
     logic [NUM_SLOTS-1:0]       pmp_r_flag_reg, pmp_w_flag_reg, pmp_g_en_reg;
     logic [NUM_SLOTS-1:0]       wb_s_enable_reg, wb_m_enable_reg;
-    logic [NUM_SLOTS-1:0][31:0] slot_o_top_reg;
+    logic [NUM_SLOTS-1:0][31:0] slot_debug_out_reg;
     logic [NUM_SLOTS-1:0][2:0]  dma_awprot_reg, dma_arprot_reg;
     
     // Watchdog MODULE Enables [19:16]
@@ -147,7 +147,7 @@ module efpga_manager #(
     logic [NUM_SLOTS-1:0][NUM_PMP_REGIONS-1:0][1:0]            pmp_limit_cfg_reg;
 
     assign slot_reset_o       = slot_reset_reg;
-    assign slot_o_top_o       = slot_o_top_reg;
+    assign slot_debug_out_o   = slot_debug_out_reg;
     assign decoupler_req_o    = dec_req_reg;
     assign pmp_g_en_o         = pmp_g_en_reg;
     assign wb_s_enable_o      = wb_s_enable_reg;
@@ -239,7 +239,7 @@ module efpga_manager #(
             efpga_config_we_o <= 1'b0; user_design_loaded_reg <= 1'b0; com_active_q <= 1'b0;
             slot_reset_reg <= '0;
             dec_req_reg <= '1; dec_force_reg <= '1; 
-            pmp_r_flag_reg <= '0; pmp_w_flag_reg <= '0; pmp_g_en_reg <= '0; slot_o_top_reg <= '0;
+            pmp_r_flag_reg <= '0; pmp_w_flag_reg <= '0; pmp_g_en_reg <= '0; slot_debug_out_reg <= '0;
             dma_awprot_reg <= '0; dma_arprot_reg <= '0;
             wb_s_enable_reg <= '0; wb_m_enable_reg <= '0; 
             pmp_base_addr_reg <= '0; pmp_base_cfg_reg <= '0; pmp_limit_addr_reg <= '0; pmp_limit_cfg_reg <= '0;
@@ -310,10 +310,10 @@ module efpga_manager #(
                                      end
                                 end
                                 12'h010: begin 
-                                     if (s_axil_wstrb[0]) slot_o_top_reg[aw_slot_sel][7:0]   <= s_axil_wdata[7:0];
-                                     if (s_axil_wstrb[1]) slot_o_top_reg[aw_slot_sel][15:8]  <= s_axil_wdata[15:8];
-                                     if (s_axil_wstrb[2]) slot_o_top_reg[aw_slot_sel][23:16] <= s_axil_wdata[23:16];
-                                     if (s_axil_wstrb[3]) slot_o_top_reg[aw_slot_sel][31:24] <= s_axil_wdata[31:24];
+                                     if (s_axil_wstrb[0]) slot_debug_out_reg[aw_slot_sel][7:0]   <= s_axil_wdata[7:0];
+                                     if (s_axil_wstrb[1]) slot_debug_out_reg[aw_slot_sel][15:8]  <= s_axil_wdata[15:8];
+                                     if (s_axil_wstrb[2]) slot_debug_out_reg[aw_slot_sel][23:16] <= s_axil_wdata[23:16];
+                                     if (s_axil_wstrb[3]) slot_debug_out_reg[aw_slot_sel][31:24] <= s_axil_wdata[31:24];
                                 end
                                 default: ;
                             endcase
@@ -370,8 +370,8 @@ module efpga_manager #(
                                     5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]
                                 };
                                 12'h00C: axi_rdata <= 32'h00000000; // FAULT_CLEAR is WO
-                                12'h010: axi_rdata <= slot_o_top_reg[ar_slot_sel]; // DEBUG_OUT
-                                12'h014: axi_rdata <= slot_i_top_i[ar_slot_sel];   // DEBUG_IN
+                                12'h010: axi_rdata <= slot_debug_out_reg[ar_slot_sel]; // DEBUG_OUT
+                                12'h014: axi_rdata <= slot_debug_in_i[ar_slot_sel];    // DEBUG_IN
                                 default: axi_rdata <= 32'hBAD00001; 
                             endcase
                         end else if (ENABLE_PMP) begin

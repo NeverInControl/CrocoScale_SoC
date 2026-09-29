@@ -134,8 +134,8 @@ module efpga_connector (
 	slot_fabric_rst_n_o,
 	slot_npu_rst_n_o,
 	efpga_com_active_i,
-	slot_i_top_i,
-	slot_o_top_o,
+	slot_debug_in_i,
+	slot_debug_out_o,
 	fault_irq_o,
 	slot_dma_awprot_o,
 	slot_dma_arprot_o
@@ -291,8 +291,8 @@ module efpga_connector (
 	output wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n_o;
 	output wire [NUM_SLOTS - 1:0] slot_npu_rst_n_o;
 	input wire efpga_com_active_i;
-	input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
-	output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
+	input wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in_i;
+	output wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out_o;
 	output wire [NUM_SLOTS - 1:0] fault_irq_o;
 	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot_o;
 	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot_o;
@@ -369,8 +369,8 @@ module efpga_connector (
 		.efpga_config_data_o(efpga_config_data_o),
 		.efpga_config_we_o(efpga_config_we_o),
 		.efpga_com_active_i(efpga_com_active_i),
-		.slot_i_top_i(slot_i_top_i),
-		.slot_o_top_o(slot_o_top_o),
+		.slot_debug_in_i(slot_debug_in_i),
+		.slot_debug_out_o(slot_debug_out_o),
 		.slot_reset_o(slot_reset_reg),
 		.decoupler_req_o(dec_req),
 		.decoupler_force_o(dec_force),

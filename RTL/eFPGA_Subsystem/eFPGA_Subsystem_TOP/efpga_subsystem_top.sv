@@ -135,8 +135,8 @@ module efpga_subsystem_top #(
     logic [NUM_SLOTS-1:0][3:0]          slot_fabric_rst_n;
     logic [NUM_SLOTS-1:0]               slot_npu_rst_n;
     logic                               efpga_com_active;
-    logic [NUM_SLOTS-1:0][31:0]         slot_i_top_arr;
-    logic [NUM_SLOTS-1:0][31:0]         slot_o_top_arr;
+    logic [NUM_SLOTS-1:0][31:0]         slot_debug_in;
+    logic [NUM_SLOTS-1:0][31:0]         slot_debug_out;
     logic [NUM_SLOTS*3-1:0]             slot_dma_awprot;
     logic [NUM_SLOTS*3-1:0]             slot_dma_arprot;
 
@@ -295,8 +295,8 @@ module efpga_subsystem_top #(
         .slot_fabric_rst_n_o (slot_fabric_rst_n),
         .slot_npu_rst_n_o    (slot_npu_rst_n),
         .efpga_com_active_i  (efpga_com_active),
-        .slot_i_top_i        (slot_i_top_arr),
-        .slot_o_top_o        (slot_o_top_arr),
+        .slot_debug_in_i     (slot_debug_in),
+        .slot_debug_out_o    (slot_debug_out),
         .slot_dma_awprot_o   (slot_dma_awprot),
         .slot_dma_arprot_o   (slot_dma_arprot),
         .fault_irq_o         (efpga_fault_irq_o)
@@ -386,8 +386,8 @@ module efpga_subsystem_top #(
         .slot_fabric_rst_n_i (slot_fabric_rst_n),
         .slot_npu_rst_n_i    (slot_npu_rst_n),
         .efpga_com_active_o  (efpga_com_active),
-        .slot_i_top_o        (slot_i_top_arr),
-        .slot_o_top_i        (slot_o_top_arr),
+        .slot_debug_in_o     (slot_debug_in),
+        .slot_debug_out_i    (slot_debug_out),
         .slot_dma_awprot_i   (slot_dma_awprot),
         .slot_dma_arprot_i   (slot_dma_arprot),
 
@@ -432,7 +432,7 @@ module efpga_subsystem_top #(
     assign axi4_dma_s_rready   = '0;
 
     assign efpga_com_active    = 1'b0;
-    assign slot_i_top_arr      = slot_o_top_arr;
+    assign slot_debug_in       = slot_debug_out;
 
     assign pmod_io_o           = '0;
     assign pmod_io_oe_o        = '0;

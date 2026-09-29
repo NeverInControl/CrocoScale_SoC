@@ -27,8 +27,8 @@ module tb_efpga_manager;
 	wire efpga_config_we_o;
 	wire [31:0] slot_reset_o;
 	reg efpga_com_active_i;
-	reg [31:0] slot_i_top_i;
-	wire [31:0] slot_o_top_o;
+	reg [31:0] slot_debug_in_i;
+	wire [31:0] slot_debug_out_o;
 	wire [0:0] decoupler_req_o;
 	wire [0:0] decoupler_force_o;
 	reg [0:0] decoupler_is_decoupled_i;
@@ -100,8 +100,8 @@ module tb_efpga_manager;
 		.efpga_config_we_o(efpga_config_we_o),
 		.slot_reset_o(slot_reset_o),
 		.efpga_com_active_i(efpga_com_active_i),
-		.slot_i_top_i(slot_i_top_i),
-		.slot_o_top_o(slot_o_top_o),
+		.slot_debug_in_i(slot_debug_in_i),
+		.slot_debug_out_o(slot_debug_out_o),
 		.decoupler_req_o(decoupler_req_o),
 		.decoupler_force_o(decoupler_force_o),
 		.decoupler_is_decoupled_i(decoupler_is_decoupled_i),
@@ -219,7 +219,7 @@ module tb_efpga_manager;
 		s_axil_arvalid = 0;
 		s_axil_rready = 0;
 		efpga_com_active_i = 0;
-		slot_i_top_i = 0;
+		slot_debug_in_i = 0;
 		decoupler_is_decoupled_i = 0;
 		decoupler_host_act_i = 0;
 		decoupler_dma_act_i = 0;
@@ -385,13 +385,13 @@ module tb_efpga_manager;
 		axi_write(32'h00001010, 32'hcafe1234);
 		#(10)
 			;
-		if (slot_o_top_o[0+:32] !== 32'hcafe1234) begin
-			$display("[FAIL] DEBUG_OUT: slot_o_top_o mismatch! Got 0x%08X", slot_o_top_o[0+:32]);
+		if (slot_debug_out_o[0+:32] !== 32'hcafe1234) begin
+			$display("[FAIL] DEBUG_OUT: slot_debug_out_o mismatch! Got 0x%08X", slot_debug_out_o[0+:32]);
 			errors = errors + 1;
 		end
 		else
 			$display("[PASS] DEBUG_OUT (0x1010): Drove 0xCAFE1234 to fabric wires");
-		slot_i_top_i[0+:32] = 32'h5678beef;
+		slot_debug_in_i[0+:32] = 32'h5678beef;
 		#(10)
 			;
 		axi_read(32'h00001014, rdata);

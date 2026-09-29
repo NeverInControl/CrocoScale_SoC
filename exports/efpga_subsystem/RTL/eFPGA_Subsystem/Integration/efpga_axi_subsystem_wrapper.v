@@ -60,8 +60,8 @@ module efpga_axi_subsystem_wrapper (
 	slot_fabric_rst_n_i,
 	slot_npu_rst_n_i,
 	efpga_com_active_o,
-	slot_i_top_o,
-	slot_o_top_i,
+	slot_debug_in_o,
+	slot_debug_out_i,
 	pmod_io_i,
 	pmod_io_o,
 	pmod_io_oe_o,
@@ -134,8 +134,8 @@ module efpga_axi_subsystem_wrapper (
 	input wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n_i;
 	input wire [NUM_SLOTS - 1:0] slot_npu_rst_n_i;
 	output wire efpga_com_active_o;
-	output wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_o;
-	input wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_i;
+	output wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in_o;
+	input wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out_i;
 	input wire [7:0] pmod_io_i;
 	output wire [7:0] pmod_io_o;
 	output wire [7:0] pmod_io_oe_o;
@@ -176,8 +176,8 @@ module efpga_axi_subsystem_wrapper (
 	wire [199:0] uio_bot_uin;
 	wire [199:0] uio_bot_uout;
 	assign uio_bot_uin[0] = slot_fabric_rst_n_i[0];
-	assign uio_bot_uin[31:1] = slot_o_top_i[31-:31];
-	assign slot_i_top_o[0+:32] = uio_bot_uout[31:0];
+	assign uio_bot_uin[31:1] = slot_debug_out_i[31-:31];
+	assign slot_debug_in_o[0+:32] = uio_bot_uout[31:0];
 	assign uio_bot_uin[39:32] = pmod_io_i;
 	assign pmod_io_o = uio_bot_uout[39:32];
 	assign pmod_io_oe_o = uio_bot_uout[47:40];

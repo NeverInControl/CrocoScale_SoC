@@ -23,8 +23,8 @@ module efpga_manager (
 	efpga_config_data_o,
 	efpga_config_we_o,
 	efpga_com_active_i,
-	slot_i_top_i,
-	slot_o_top_o,
+	slot_debug_in_i,
+	slot_debug_out_o,
 	slot_reset_o,
 	decoupler_req_o,
 	decoupler_force_o,
@@ -95,8 +95,8 @@ module efpga_manager (
 	output reg [31:0] efpga_config_data_o;
 	output reg efpga_config_we_o;
 	input wire efpga_com_active_i;
-	input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
-	output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
+	input wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in_i;
+	output wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out_o;
 	output wire [(NUM_SLOTS * 32) - 1:0] slot_reset_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_req_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_force_o;
@@ -167,7 +167,7 @@ module efpga_manager (
 	reg [NUM_SLOTS - 1:0] pmp_g_en_reg;
 	reg [NUM_SLOTS - 1:0] wb_s_enable_reg;
 	reg [NUM_SLOTS - 1:0] wb_m_enable_reg;
-	reg [(NUM_SLOTS * 32) - 1:0] slot_o_top_reg;
+	reg [(NUM_SLOTS * 32) - 1:0] slot_debug_out_reg;
 	reg [(NUM_SLOTS * 3) - 1:0] dma_awprot_reg;
 	reg [(NUM_SLOTS * 3) - 1:0] dma_arprot_reg;
 	reg [NUM_SLOTS - 1:0] wdog_en_dm;
@@ -184,7 +184,7 @@ module efpga_manager (
 	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * COMP_WIDTH) - 1:0] pmp_limit_addr_reg;
 	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * 2) - 1:0] pmp_limit_cfg_reg;
 	assign slot_reset_o = slot_reset_reg;
-	assign slot_o_top_o = slot_o_top_reg;
+	assign slot_debug_out_o = slot_debug_out_reg;
 	assign decoupler_req_o = dec_req_reg;
 	assign pmp_g_en_o = pmp_g_en_reg;
 	assign wb_s_enable_o = wb_s_enable_reg;
@@ -303,7 +303,7 @@ module efpga_manager (
 			pmp_r_flag_reg <= 1'sb0;
 			pmp_w_flag_reg <= 1'sb0;
 			pmp_g_en_reg <= 1'sb0;
-			slot_o_top_reg <= 1'sb0;
+			slot_debug_out_reg <= 1'sb0;
 			dma_awprot_reg <= 1'sb0;
 			dma_arprot_reg <= 1'sb0;
 			wb_s_enable_reg <= 1'sb0;
@@ -420,13 +420,13 @@ module efpga_manager (
 							end
 							12'h010: begin
 								if (s_axil_wstrb[0])
-									slot_o_top_reg[(aw_slot_sel * 32) + 7-:8] <= s_axil_wdata[7:0];
+									slot_debug_out_reg[(aw_slot_sel * 32) + 7-:8] <= s_axil_wdata[7:0];
 								if (s_axil_wstrb[1])
-									slot_o_top_reg[(aw_slot_sel * 32) + 15-:8] <= s_axil_wdata[15:8];
+									slot_debug_out_reg[(aw_slot_sel * 32) + 15-:8] <= s_axil_wdata[15:8];
 								if (s_axil_wstrb[2])
-									slot_o_top_reg[(aw_slot_sel * 32) + 23-:8] <= s_axil_wdata[23:16];
+									slot_debug_out_reg[(aw_slot_sel * 32) + 23-:8] <= s_axil_wdata[23:16];
 								if (s_axil_wstrb[3])
-									slot_o_top_reg[(aw_slot_sel * 32) + 31-:8] <= s_axil_wdata[31:24];
+									slot_debug_out_reg[(aw_slot_sel * 32) + 31-:8] <= s_axil_wdata[31:24];
 							end
 							default:
 								;
@@ -476,8 +476,8 @@ module efpga_manager (
 						12'h004: axi_rdata <= {6'd0, wb_m_enable_reg[ar_slot_sel], wb_s_enable_reg[ar_slot_sel], 4'd0, wdog_en_cm[ar_slot_sel], wdog_en_ds[ar_slot_sel], wdog_en_cs[ar_slot_sel], wdog_en_dm[ar_slot_sel], dma_arprot_reg[ar_slot_sel * 3+:3], dma_awprot_reg[ar_slot_sel * 3+:3], 1'b0, pmp_g_en_reg[ar_slot_sel], 6'd0, dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]};
 						12'h008: axi_rdata <= {11'd0, wdog_soc_flag[ar_slot_sel], wdog_cs_to_flag[ar_slot_sel], wdog_cs_pr_flag[ar_slot_sel], wdog_dm_to_flag[ar_slot_sel], wdog_dm_pr_flag[ar_slot_sel], 6'd0, pmp_w_flag_reg[ar_slot_sel], pmp_r_flag_reg[ar_slot_sel], 5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]};
 						12'h00c: axi_rdata <= 32'h00000000;
-						12'h010: axi_rdata <= slot_o_top_reg[ar_slot_sel * 32+:32];
-						12'h014: axi_rdata <= slot_i_top_i[ar_slot_sel * 32+:32];
+						12'h010: axi_rdata <= slot_debug_out_reg[ar_slot_sel * 32+:32];
+						12'h014: axi_rdata <= slot_debug_in_i[ar_slot_sel * 32+:32];
 						default: axi_rdata <= 32'hbad00001;
 					endcase
 				else if (ENABLE_PMP) begin
