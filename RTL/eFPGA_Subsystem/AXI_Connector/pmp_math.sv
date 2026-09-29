@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module pmp_math #(
-    parameter int NUM_REGIONS       = 2,
+    parameter int NUM_PMP_REGIONS   = 2,
     parameter bit PAGE_GRANULARITY  = 1'b1, // 1 = 4KB Aligned Pages, 0 = Exact Word Granularity
     parameter int MAX_ADDRESS_WIDTH = 32
 )(
@@ -10,8 +10,8 @@ module pmp_math #(
     // Base & Limit Registers:
     // When PAGE_GRANULARITY == 1: Base/Limit registers store Page Frame Numbers (bits [MAX_ADDRESS_WIDTH-1:12])
     // Control bits: base_i[r][1:0] = {Write_En, Read_En}, limit_i[r][1:0] = {Sec_Req, Priv_Req}
-    input  logic [NUM_REGIONS-1:0][31:0] base_i,
-    input  logic [NUM_REGIONS-1:0][31:0] limit_i,
+    input  logic [NUM_PMP_REGIONS-1:0][31:0] base_i,
+    input  logic [NUM_PMP_REGIONS-1:0][31:0] limit_i,
 
     input  logic [31:0] awaddr_i,
     input  logic [7:0]  awlen_i,
@@ -38,8 +38,8 @@ module pmp_math #(
     wire ar_is_priv = arprot_i[0]; 
     wire ar_is_sec  = ~arprot_i[1];
 
-    logic [NUM_REGIONS-1:0] aw_region_ok;
-    logic [NUM_REGIONS-1:0] ar_region_ok;
+    logic [NUM_PMP_REGIONS-1:0] aw_region_ok;
+    logic [NUM_PMP_REGIONS-1:0] ar_region_ok;
     
     wire aw_malicious_wrap;
     wire ar_malicious_wrap;
@@ -72,7 +72,7 @@ module pmp_math #(
             wire [COMP_WIDTH-1:0] aw_pfn = awaddr_i[MAX_ADDRESS_WIDTH-1 : 12];
             wire [COMP_WIDTH-1:0] ar_pfn = araddr_i[MAX_ADDRESS_WIDTH-1 : 12];
 
-            for (genvar r = 0; r < NUM_REGIONS; r++) begin : pmp_checks_4k
+            for (genvar r = 0; r < NUM_PMP_REGIONS; r++) begin : pmp_checks_4k
                 wire read_en   = base_i[r][0];
                 wire write_en  = base_i[r][1];
                 wire req_priv  = limit_i[r][0];
@@ -112,7 +112,7 @@ module pmp_math #(
             wire [COMP_WIDTH-1:0] ar_start = araddr_i[MAX_ADDRESS_WIDTH-1 : 2];
             wire [COMP_WIDTH-1:0] ar_end   = ar_end_addr_full[MAX_ADDRESS_WIDTH-1 : 2];
 
-            for (genvar r = 0; r < NUM_REGIONS; r++) begin : pmp_checks_word
+            for (genvar r = 0; r < NUM_PMP_REGIONS; r++) begin : pmp_checks_word
                 wire read_en   = base_i[r][0];
                 wire write_en  = base_i[r][1];
                 wire req_priv  = limit_i[r][0];

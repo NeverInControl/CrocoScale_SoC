@@ -132,10 +132,13 @@ module efpga_subsystem_top #(
 
     logic [31:0]                        efpga_config_data;
     logic                               efpga_config_we;
-    logic                               efpga_soft_reset;
+    logic [NUM_SLOTS-1:0][3:0]          slot_fabric_rst_n;
+    logic [NUM_SLOTS-1:0]               slot_npu_rst_n;
     logic                               efpga_com_active;
     logic [NUM_SLOTS-1:0][31:0]         slot_i_top_arr;
     logic [NUM_SLOTS-1:0][31:0]         slot_o_top_arr;
+    logic [NUM_SLOTS*3-1:0]             slot_dma_awprot;
+    logic [NUM_SLOTS*3-1:0]             slot_dma_arprot;
 
     // =========================================================================
     // eFPGA Connector (Isolation, Decouplers, Watchdogs, Dynamic PMP)
@@ -289,10 +292,13 @@ module efpga_subsystem_top #(
         // eFPGA Global Management Signals
         .efpga_config_data_o (efpga_config_data),
         .efpga_config_we_o   (efpga_config_we),
-        .efpga_soft_reset_o  (efpga_soft_reset),
+        .slot_fabric_rst_n_o (slot_fabric_rst_n),
+        .slot_npu_rst_n_o    (slot_npu_rst_n),
         .efpga_com_active_i  (efpga_com_active),
         .slot_i_top_i        (slot_i_top_arr),
         .slot_o_top_o        (slot_o_top_arr),
+        .slot_dma_awprot_o   (slot_dma_awprot),
+        .slot_dma_arprot_o   (slot_dma_arprot),
         .fault_irq_o         (efpga_fault_irq_o)
     );
 
@@ -377,10 +383,13 @@ module efpga_subsystem_top #(
 
         .efpga_config_we_i   (efpga_config_we),
         .efpga_config_data_i (efpga_config_data),
-        .efpga_soft_reset_i  (efpga_soft_reset),
+        .slot_fabric_rst_n_i (slot_fabric_rst_n),
+        .slot_npu_rst_n_i    (slot_npu_rst_n),
         .efpga_com_active_o  (efpga_com_active),
         .slot_i_top_o        (slot_i_top_arr),
         .slot_o_top_i        (slot_o_top_arr),
+        .slot_dma_awprot_i   (slot_dma_awprot),
+        .slot_dma_arprot_i   (slot_dma_arprot),
 
         .pmod_io_i           (pmod_io_i),
         .pmod_io_o           (pmod_io_o),
@@ -404,7 +413,7 @@ module efpga_subsystem_top #(
     assign axi4_dma_s_awburst  = '0;
     assign axi4_dma_s_awlock   = '0;
     assign axi4_dma_s_awcache  = '0;
-    assign axi4_dma_s_awprot   = '0;
+    assign axi4_dma_s_awprot   = slot_dma_awprot;
     assign axi4_dma_s_awvalid  = '0;
     assign axi4_dma_s_wdata    = '0;
     assign axi4_dma_s_wstrb    = '0;
@@ -418,7 +427,7 @@ module efpga_subsystem_top #(
     assign axi4_dma_s_arburst  = '0;
     assign axi4_dma_s_arlock   = '0;
     assign axi4_dma_s_arcache  = '0;
-    assign axi4_dma_s_arprot   = '0;
+    assign axi4_dma_s_arprot   = slot_dma_arprot;
     assign axi4_dma_s_arvalid  = '0;
     assign axi4_dma_s_rready   = '0;
 

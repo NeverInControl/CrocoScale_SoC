@@ -14,8 +14,8 @@ module crocoscale_soc (
 	output wire [7:0] gpio_o;
 	output wire uart0_txd_o;
 	input wire uart0_rxd_i;
-	wire [31:0] con_gpio_out;
-	assign gpio_o = con_gpio_out[7:0];
+	wire [7:0] con_gpio_out;
+	assign gpio_o = con_gpio_out;
 	wire clk_10mhz = clk_i;
 	reg rst_sync_0;
 	reg rst_sync_1;
@@ -139,10 +139,15 @@ module crocoscale_soc (
 	wire [M_COUNT - 1:0] m_axi_rlast;
 	wire [M_COUNT - 1:0] m_axi_rvalid;
 	wire [M_COUNT - 1:0] m_axi_rready;
+	wire [3:0] efpga_usr_irq;
+	wire [NUM_SLOTS - 1:0] efpga_fault_irq;
+	wire [7:0] cpu_gpio_in;
+	assign cpu_gpio_in = {3'b000, efpga_usr_irq, |efpga_fault_irq};
 	neorv32_axi_wrapper cpu_complex_inst(
 		.clk_i(clk_10mhz),
 		.rstn_i(sys_rstn),
 		.gpio_o(con_gpio_out),
+		.gpio_i(cpu_gpio_in),
 		.uart0_txd_o(uart0_txd_o),
 		.uart0_rxd_i(uart0_rxd_i),
 		.m_axi_awaddr(s_axi_awaddr[0+:32]),
@@ -502,6 +507,10 @@ module crocoscale_soc (
 			);
 		end
 	endgenerate
+	wire [7:0] pmod_io_i;
+	wire [7:0] pmod_io_o;
+	wire [7:0] pmod_io_oe_o;
+	assign pmod_io_i = 8'd0;
 	efpga_subsystem_top #(
 		.NUM_SLOTS(NUM_SLOTS),
 		.AXI_ID_WIDTH(AXI_ID_WIDTH),
@@ -583,10 +592,10 @@ module crocoscale_soc (
 		.m_axi_dma_rlast(s_axi_rlast[1+:NUM_SLOTS]),
 		.m_axi_dma_rvalid(s_axi_rvalid[1+:NUM_SLOTS]),
 		.m_axi_dma_rready(s_axi_rready[1+:NUM_SLOTS]),
-		.pmod_io_i(8'd0),
-		.pmod_io_o(),
-		.pmod_io_oe_o(),
-		.efpga_usr_irq_o(),
-		.efpga_fault_irq_o()
+		.pmod_io_i(pmod_io_i),
+		.pmod_io_o(pmod_io_o),
+		.pmod_io_oe_o(pmod_io_oe_o),
+		.efpga_usr_irq_o(efpga_usr_irq),
+		.efpga_fault_irq_o(efpga_fault_irq)
 	);
 endmodule

@@ -17,13 +17,27 @@ void efpga_subsystem_set_soft_reset(uintptr_t mgr_base, bool assert_reset) {
         return;
     }
     mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
-    uint32_t ctrl = dev->GLOBAL_CTRL;
     if (assert_reset) {
-        ctrl |= EFPGA_GLOBAL_CTRL_SOFT_RESET;
+        dev->SLOT_RESET |= EFPGA_SLOT_RESET_ALL_MASK;
     } else {
-        ctrl &= ~EFPGA_GLOBAL_CTRL_SOFT_RESET;
+        dev->SLOT_RESET &= ~EFPGA_SLOT_RESET_ALL_MASK;
     }
-    dev->GLOBAL_CTRL = ctrl;
+}
+
+void efpga_subsystem_set_slot_reset(uintptr_t mgr_base, uint32_t reset_mask) {
+    if (mgr_base == 0) {
+        return;
+    }
+    mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
+    dev->SLOT_RESET = reset_mask;
+}
+
+uint32_t efpga_subsystem_get_slot_reset(uintptr_t mgr_base) {
+    if (mgr_base == 0) {
+        return 0;
+    }
+    mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
+    return dev->SLOT_RESET;
 }
 
 int efpga_subsystem_decouple(uintptr_t mgr_base, bool force, uint32_t timeout_cycles) {
@@ -119,20 +133,22 @@ int efpga_subsystem_load_bitstream(uintptr_t mgr_base, const uint8_t *bitstream_
     uint32_t initial_count = dev->CONFIG_COUNT;
     size_t words = (byte_count + 3) / 4;
 
-    /* Stream big-endian 32-bit frames into CONFIG_DATA */
-    for (size_t i = 0; i < words; i++) {
-        size_t offset = i * 4;
-        uint8_t b0 = (offset + 0 < byte_count) ? bitstream_bytes[offset + 0] : 0x00;
-        uint8_t b1 = (offset + 1 < byte_count) ? bitstream_bytes[offset + 1] : 0x00;
-        uint8_t b2 = (offset + 2 < byte_count) ? bitstream_bytes[offset + 2] : 0x00;
-        uint8_t b3 = (offset + 3 < byte_count) ? bitstream_bytes[offset + 3] : 0x00;
-
-        uint32_t word = ((uint32_t)b0 << 24) |
-                        ((uint32_t)b1 << 16) |
-                        ((uint32_t)b2 << 8)  |
-                        ((uint32_t)b3);
-
-        dev->CONFIG_DATA = word;
+    /* Stream 32-bit frames directly into CONFIG_DATA: hardware performs automatic byte translation */
+    if (((uintptr_t)bitstream_bytes & 0x3) == 0) {
+        const uint32_t *word_stream = (const uint32_t *)bitstream_bytes;
+        for (size_t i = 0; i < words; i++) {
+            dev->CONFIG_DATA = word_stream[i];
+        }
+    } else {
+        for (size_t i = 0; i < words; i++) {
+            size_t offset = i * 4;
+            uint32_t word = 0;
+            size_t rem = (offset + 4 <= byte_count) ? 4 : (byte_count - offset);
+            for (size_t b = 0; b < rem; b++) {
+                word |= ((uint32_t)bitstream_bytes[offset + b]) << (b * 8);
+            }
+            dev->CONFIG_DATA = word;
+        }
     }
 
     /* Verify written word count against hardware monitor */
@@ -178,7 +194,7 @@ int efpga_subsystem_load_fragments(uintptr_t mgr_base,
         }
 
         for (size_t i = 0; i < size; i++) {
-            staging_word = (staging_word << 8) | (uint32_t)data[i];
+            staging_word |= ((uint32_t)data[i]) << (staged_bytes * 8);
             staged_bytes++;
             if (staged_bytes == 4) {
                 dev->CONFIG_DATA = staging_word;
@@ -190,7 +206,6 @@ int efpga_subsystem_load_fragments(uintptr_t mgr_base,
     }
 
     if (staged_bytes > 0) {
-        staging_word <<= (8 * (4 - staged_bytes));
         dev->CONFIG_DATA = staging_word;
         total_words++;
     }
@@ -285,3 +300,28 @@ uint32_t efpga_subsystem_read_debug_io(uintptr_t mgr_base) {
     mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
     return dev->DEBUG_IN;
 }
+
+int efpga_subsystem_set_dma_prot(uintptr_t mgr_base, uint8_t awprot, uint8_t arprot) {
+    if (mgr_base == 0) {
+        return -1;
+    }
+    mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
+    uint32_t ctrl = dev->SLOT_CTRL;
+    ctrl &= ~(EFPGA_SLOT_CTRL_AWPROT_MASK | EFPGA_SLOT_CTRL_ARPROT_MASK);
+    ctrl |= (((uint32_t)(awprot & 0x7)) << EFPGA_SLOT_CTRL_AWPROT_SHIFT);
+    ctrl |= (((uint32_t)(arprot & 0x7)) << EFPGA_SLOT_CTRL_ARPROT_SHIFT);
+    dev->SLOT_CTRL = ctrl;
+    return 0;
+}
+
+int efpga_subsystem_get_dma_prot(uintptr_t mgr_base, uint8_t *awprot, uint8_t *arprot) {
+    if (mgr_base == 0 || !awprot || !arprot) {
+        return -1;
+    }
+    mmio_efpga_manager_t *dev = EFPGA_MGR(mgr_base);
+    uint32_t ctrl = dev->SLOT_CTRL;
+    *awprot = (uint8_t)((ctrl & EFPGA_SLOT_CTRL_AWPROT_MASK) >> EFPGA_SLOT_CTRL_AWPROT_SHIFT);
+    *arprot = (uint8_t)((ctrl & EFPGA_SLOT_CTRL_ARPROT_MASK) >> EFPGA_SLOT_CTRL_ARPROT_SHIFT);
+    return 0;
+}
+

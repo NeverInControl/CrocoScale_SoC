@@ -22,10 +22,10 @@ module efpga_manager (
 	s_axil_rready,
 	efpga_config_data_o,
 	efpga_config_we_o,
-	efpga_soft_reset_o,
 	efpga_com_active_i,
 	slot_i_top_i,
 	slot_o_top_o,
+	slot_reset_o,
 	decoupler_req_o,
 	decoupler_force_o,
 	decoupler_is_decoupled_i,
@@ -54,11 +54,13 @@ module efpga_manager (
 	pmp_limit_o,
 	wb_s_enable_o,
 	wb_m_enable_o,
-	slot_fault_irq_o
+	slot_fault_irq_o,
+	slot_dma_awprot_o,
+	slot_dma_arprot_o
 );
 	reg _sv2v_0;
 	parameter signed [31:0] NUM_SLOTS = 1;
-	parameter signed [31:0] NUM_REGIONS = 2;
+	parameter signed [31:0] NUM_PMP_REGIONS = 2;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter [0:0] PAGE_GRANULARITY = 1'b1;
 	parameter signed [31:0] MAX_ADDRESS_WIDTH = 32;
@@ -92,10 +94,10 @@ module efpga_manager (
 	input wire s_axil_rready;
 	output reg [31:0] efpga_config_data_o;
 	output reg efpga_config_we_o;
-	output wire efpga_soft_reset_o;
 	input wire efpga_com_active_i;
 	input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
 	output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
+	output wire [(NUM_SLOTS * 32) - 1:0] slot_reset_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_req_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_force_o;
 	input wire [NUM_SLOTS - 1:0] decoupler_is_decoupled_i;
@@ -120,11 +122,13 @@ module efpga_manager (
 	input wire [NUM_SLOTS - 1:0] slot_wdog_ds_pr_w_i;
 	input wire [NUM_SLOTS - 1:0] slot_wdog_ds_pr_r_i;
 	output wire [NUM_SLOTS - 1:0] pmp_g_en_o;
-	output wire [((NUM_SLOTS * NUM_REGIONS) * 32) - 1:0] pmp_base_o;
-	output wire [((NUM_SLOTS * NUM_REGIONS) * 32) - 1:0] pmp_limit_o;
+	output wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] pmp_base_o;
+	output wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] pmp_limit_o;
 	output wire [NUM_SLOTS - 1:0] wb_s_enable_o;
 	output wire [NUM_SLOTS - 1:0] wb_m_enable_o;
 	output wire [NUM_SLOTS - 1:0] slot_fault_irq_o;
+	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot_o;
+	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot_o;
 	localparam signed [31:0] ADDR_SHIFT = (PAGE_GRANULARITY ? 12 : 2);
 	localparam signed [31:0] COMP_WIDTH = MAX_ADDRESS_WIDTH - ADDR_SHIFT;
 	wire [15:0] local_awaddr = s_axil_awaddr[15:0];
@@ -153,9 +157,9 @@ module efpga_manager (
 	assign s_axil_rdata = axi_rdata;
 	assign s_axil_rresp = 2'b00;
 	reg [31:0] config_count_reg;
-	reg soft_reset_reg;
 	reg user_design_loaded_reg;
 	reg com_active_q;
+	reg [(NUM_SLOTS * 32) - 1:0] slot_reset_reg;
 	reg [NUM_SLOTS - 1:0] dec_req_reg;
 	reg [NUM_SLOTS - 1:0] dec_force_reg;
 	reg [NUM_SLOTS - 1:0] pmp_r_flag_reg;
@@ -164,6 +168,8 @@ module efpga_manager (
 	reg [NUM_SLOTS - 1:0] wb_s_enable_reg;
 	reg [NUM_SLOTS - 1:0] wb_m_enable_reg;
 	reg [(NUM_SLOTS * 32) - 1:0] slot_o_top_reg;
+	reg [(NUM_SLOTS * 3) - 1:0] dma_awprot_reg;
+	reg [(NUM_SLOTS * 3) - 1:0] dma_arprot_reg;
 	reg [NUM_SLOTS - 1:0] wdog_en_dm;
 	reg [NUM_SLOTS - 1:0] wdog_en_cs;
 	reg [NUM_SLOTS - 1:0] wdog_en_ds;
@@ -173,16 +179,18 @@ module efpga_manager (
 	reg [NUM_SLOTS - 1:0] wdog_cs_pr_flag;
 	reg [NUM_SLOTS - 1:0] wdog_cs_to_flag;
 	reg [NUM_SLOTS - 1:0] wdog_soc_flag;
-	reg [((NUM_SLOTS * NUM_REGIONS) * COMP_WIDTH) - 1:0] pmp_base_addr_reg;
-	reg [((NUM_SLOTS * NUM_REGIONS) * 2) - 1:0] pmp_base_cfg_reg;
-	reg [((NUM_SLOTS * NUM_REGIONS) * COMP_WIDTH) - 1:0] pmp_limit_addr_reg;
-	reg [((NUM_SLOTS * NUM_REGIONS) * 2) - 1:0] pmp_limit_cfg_reg;
-	assign efpga_soft_reset_o = soft_reset_reg;
+	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * COMP_WIDTH) - 1:0] pmp_base_addr_reg;
+	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * 2) - 1:0] pmp_base_cfg_reg;
+	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * COMP_WIDTH) - 1:0] pmp_limit_addr_reg;
+	reg [((NUM_SLOTS * NUM_PMP_REGIONS) * 2) - 1:0] pmp_limit_cfg_reg;
+	assign slot_reset_o = slot_reset_reg;
 	assign slot_o_top_o = slot_o_top_reg;
 	assign decoupler_req_o = dec_req_reg;
 	assign pmp_g_en_o = pmp_g_en_reg;
 	assign wb_s_enable_o = wb_s_enable_reg;
 	assign wb_m_enable_o = wb_m_enable_reg;
+	assign slot_dma_awprot_o = dma_awprot_reg;
+	assign slot_dma_arprot_o = dma_arprot_reg;
 	reg [NUM_SLOTS - 1:0] raw_dm_pr;
 	reg [NUM_SLOTS - 1:0] raw_dm_to;
 	reg [NUM_SLOTS - 1:0] raw_cs_pr;
@@ -208,10 +216,10 @@ module efpga_manager (
 	generate
 		for (_gv_i_1 = 0; _gv_i_1 < NUM_SLOTS; _gv_i_1 = _gv_i_1 + 1) begin : gen_pmp_out
 			localparam i = _gv_i_1;
-			for (_gv_r_1 = 0; _gv_r_1 < NUM_REGIONS; _gv_r_1 = _gv_r_1 + 1) begin : gen_pmp_out_r
+			for (_gv_r_1 = 0; _gv_r_1 < NUM_PMP_REGIONS; _gv_r_1 = _gv_r_1 + 1) begin : gen_pmp_out_r
 				localparam r = _gv_r_1;
-				assign pmp_base_o[((i * NUM_REGIONS) + r) * 32+:32] = {{32 - MAX_ADDRESS_WIDTH {1'b0}}, pmp_base_addr_reg[((i * NUM_REGIONS) + r) * COMP_WIDTH+:COMP_WIDTH], {ADDR_SHIFT - 2 {1'b0}}, pmp_base_cfg_reg[((i * NUM_REGIONS) + r) * 2+:2]};
-				assign pmp_limit_o[((i * NUM_REGIONS) + r) * 32+:32] = {{32 - MAX_ADDRESS_WIDTH {1'b0}}, pmp_limit_addr_reg[((i * NUM_REGIONS) + r) * COMP_WIDTH+:COMP_WIDTH], {ADDR_SHIFT - 2 {1'b0}}, pmp_limit_cfg_reg[((i * NUM_REGIONS) + r) * 2+:2]};
+				assign pmp_base_o[((i * NUM_PMP_REGIONS) + r) * 32+:32] = {{32 - MAX_ADDRESS_WIDTH {1'b0}}, pmp_base_addr_reg[((i * NUM_PMP_REGIONS) + r) * COMP_WIDTH+:COMP_WIDTH], {ADDR_SHIFT - 2 {1'b0}}, pmp_base_cfg_reg[((i * NUM_PMP_REGIONS) + r) * 2+:2]};
+				assign pmp_limit_o[((i * NUM_PMP_REGIONS) + r) * 32+:32] = {{32 - MAX_ADDRESS_WIDTH {1'b0}}, pmp_limit_addr_reg[((i * NUM_PMP_REGIONS) + r) * COMP_WIDTH+:COMP_WIDTH], {ADDR_SHIFT - 2 {1'b0}}, pmp_limit_cfg_reg[((i * NUM_PMP_REGIONS) + r) * 2+:2]};
 			end
 			assign decoupler_force_o[i] = (((((((((((((dec_force_reg[i] | raw_dm_pr[i]) | raw_dm_to[i]) | raw_cs_pr[i]) | raw_cs_to[i]) | raw_soc[i]) | wdog_dm_pr_flag[i]) | wdog_dm_to_flag[i]) | wdog_cs_pr_flag[i]) | wdog_cs_to_flag[i]) | wdog_soc_flag[i]) | slot_pmp_r_violation_i[i]) | pmp_r_flag_reg[i]) | slot_pmp_w_violation_i[i]) | pmp_w_flag_reg[i];
 			assign slot_fault_irq_o[i] = (((((pmp_r_flag_reg[i] | pmp_w_flag_reg[i]) | wdog_dm_to_flag[i]) | wdog_dm_pr_flag[i]) | wdog_cs_to_flag[i]) | wdog_cs_pr_flag[i]) | wdog_soc_flag[i];
@@ -240,7 +248,7 @@ module efpga_manager (
 		clr_cs_to = 1'sb0;
 		clr_soc = 1'sb0;
 		if ((axi_write_en && (local_awaddr >= 16'h1000)) && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))) begin
-			if ((local_awaddr[11:0] & 12'hffc) == 12'h008) begin
+			if ((local_awaddr[11:0] & 12'hffc) == 12'h00c) begin
 				if (s_axil_wstrb[1] && s_axil_wdata[8])
 					clr_pmp_r[aw_slot_sel] = 1'b1;
 				if (s_axil_wstrb[1] && s_axil_wdata[9])
@@ -258,9 +266,9 @@ module efpga_manager (
 			end
 		end
 	end
-	wire [11:0] pmp_aw_offset = (local_awaddr[11:0] & 12'hffc) - 12'h014;
+	wire [11:0] pmp_aw_offset = (local_awaddr[11:0] & 12'hffc) - 12'h018;
 	wire [7:0] pmp_aw_region_idx = pmp_aw_offset[10:3];
-	wire [11:0] pmp_ar_offset = (local_araddr[11:0] & 12'hffc) - 12'h014;
+	wire [11:0] pmp_ar_offset = (local_araddr[11:0] & 12'hffc) - 12'h018;
 	wire [7:0] pmp_ar_region_idx = pmp_ar_offset[10:3];
 	reg [31:0] pmp_w_curr_val;
 	reg [31:0] pmp_w_next_val;
@@ -272,8 +280,8 @@ module efpga_manager (
 		if (_sv2v_0)
 			;
 		pmp_w_curr_val = 32'b00000000000000000000000000000000;
-		if ((ENABLE_PMP && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))) && (pmp_aw_region_idx < sv2v_cast_8_signed(NUM_REGIONS)))
-			pmp_w_curr_val = (pmp_aw_offset[2] == 1'b0 ? pmp_base_o[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * 32+:32] : pmp_limit_o[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * 32+:32]);
+		if ((ENABLE_PMP && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))) && (pmp_aw_region_idx < sv2v_cast_8_signed(NUM_PMP_REGIONS)))
+			pmp_w_curr_val = (pmp_aw_offset[2] == 1'b0 ? pmp_base_o[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * 32+:32] : pmp_limit_o[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * 32+:32]);
 		pmp_w_next_val[7:0] = (s_axil_wstrb[0] ? s_axil_wdata[7:0] : pmp_w_curr_val[7:0]);
 		pmp_w_next_val[15:8] = (s_axil_wstrb[1] ? s_axil_wdata[15:8] : pmp_w_curr_val[15:8]);
 		pmp_w_next_val[23:16] = (s_axil_wstrb[2] ? s_axil_wdata[23:16] : pmp_w_curr_val[23:16]);
@@ -287,15 +295,17 @@ module efpga_manager (
 			config_count_reg <= 1'sb0;
 			efpga_config_data_o <= 1'sb0;
 			efpga_config_we_o <= 1'b0;
-			soft_reset_reg <= 1'b0;
 			user_design_loaded_reg <= 1'b0;
 			com_active_q <= 1'b0;
+			slot_reset_reg <= 1'sb0;
 			dec_req_reg <= 1'sb1;
 			dec_force_reg <= 1'sb1;
 			pmp_r_flag_reg <= 1'sb0;
 			pmp_w_flag_reg <= 1'sb0;
 			pmp_g_en_reg <= 1'sb0;
 			slot_o_top_reg <= 1'sb0;
+			dma_awprot_reg <= 1'sb0;
+			dma_arprot_reg <= 1'sb0;
 			wb_s_enable_reg <= 1'sb0;
 			wb_m_enable_reg <= 1'sb0;
 			pmp_base_addr_reg <= 1'sb0;
@@ -321,23 +331,23 @@ module efpga_manager (
 					begin
 						if (raw_dm_pr[j])
 							wdog_dm_pr_flag[j] <= 1'b1;
-						else if (clr_dm_pr[j])
+						else if (clr_dm_pr[j] || slot_reset_reg[(j * 32) + 16])
 							wdog_dm_pr_flag[j] <= 1'b0;
 						if (raw_dm_to[j])
 							wdog_dm_to_flag[j] <= 1'b1;
-						else if (clr_dm_to[j])
+						else if (clr_dm_to[j] || slot_reset_reg[(j * 32) + 16])
 							wdog_dm_to_flag[j] <= 1'b0;
 						if (raw_cs_pr[j])
 							wdog_cs_pr_flag[j] <= 1'b1;
-						else if (clr_cs_pr[j])
+						else if (clr_cs_pr[j] || slot_reset_reg[(j * 32) + 16])
 							wdog_cs_pr_flag[j] <= 1'b0;
 						if (raw_cs_to[j])
 							wdog_cs_to_flag[j] <= 1'b1;
-						else if (clr_cs_to[j])
+						else if (clr_cs_to[j] || slot_reset_reg[(j * 32) + 16])
 							wdog_cs_to_flag[j] <= 1'b0;
 						if (raw_soc[j])
 							wdog_soc_flag[j] <= 1'b1;
-						else if (clr_soc[j])
+						else if (clr_soc[j] || slot_reset_reg[(j * 32) + 16])
 							wdog_soc_flag[j] <= 1'b0;
 						if (slot_pmp_r_violation_i[j])
 							pmp_r_flag_reg[j] <= 1'b1;
@@ -356,13 +366,11 @@ module efpga_manager (
 				if (local_awaddr < 16'h1000)
 					case (local_awaddr[11:0] & 12'hffc)
 						12'h004:
-							if (s_axil_wstrb[0]) begin
-								soft_reset_reg <= s_axil_wdata[0];
+							if (s_axil_wstrb[0])
 								user_design_loaded_reg <= s_axil_wdata[2];
-							end
 						12'h008: begin
-							config_count_reg <= config_count_reg + 1;
-							efpga_config_data_o <= s_axil_wdata;
+							config_count_reg <= config_count_reg + 32'd1;
+							efpga_config_data_o <= {s_axil_wdata[7:0], s_axil_wdata[15:8], s_axil_wdata[23:16], s_axil_wdata[31:24]};
 							efpga_config_we_o <= 1'b1;
 							user_design_loaded_reg <= 1'b1;
 						end
@@ -370,9 +378,19 @@ module efpga_manager (
 							;
 					endcase
 				else if (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS)) begin
-					if ((local_awaddr[11:0] & 12'hffc) < 12'h014)
+					if ((local_awaddr[11:0] & 12'hffc) < 12'h018)
 						case (local_awaddr[11:0] & 12'hffc)
 							12'h000: begin
+								if (s_axil_wstrb[0])
+									slot_reset_reg[(aw_slot_sel * 32) + 7-:8] <= s_axil_wdata[7:0];
+								if (s_axil_wstrb[1])
+									slot_reset_reg[(aw_slot_sel * 32) + 15-:8] <= s_axil_wdata[15:8];
+								if (s_axil_wstrb[2])
+									slot_reset_reg[(aw_slot_sel * 32) + 23-:8] <= s_axil_wdata[23:16];
+								if (s_axil_wstrb[3])
+									slot_reset_reg[(aw_slot_sel * 32) + 31-:8] <= s_axil_wdata[31:24];
+							end
+							12'h004: begin
 								if (s_axil_wstrb[0]) begin
 									dec_req_reg[aw_slot_sel] <= s_axil_wdata[0];
 									dec_force_reg[aw_slot_sel] <= s_axil_wdata[1];
@@ -380,6 +398,8 @@ module efpga_manager (
 								if (s_axil_wstrb[1]) begin
 									if (ENABLE_PMP)
 										pmp_g_en_reg[aw_slot_sel] <= s_axil_wdata[8];
+									dma_awprot_reg[aw_slot_sel * 3+:3] <= s_axil_wdata[12:10];
+									dma_arprot_reg[aw_slot_sel * 3+:3] <= s_axil_wdata[15:13];
 								end
 								if (s_axil_wstrb[2]) begin
 									if (ENABLE_WDOG_DMA_MASTER)
@@ -398,7 +418,7 @@ module efpga_manager (
 										wb_m_enable_reg[aw_slot_sel] <= s_axil_wdata[25];
 								end
 							end
-							12'h00c: begin
+							12'h010: begin
 								if (s_axil_wstrb[0])
 									slot_o_top_reg[(aw_slot_sel * 32) + 7-:8] <= s_axil_wdata[7:0];
 								if (s_axil_wstrb[1])
@@ -412,14 +432,14 @@ module efpga_manager (
 								;
 						endcase
 					else if (decoupler_is_decoupled_i[aw_slot_sel] && ENABLE_PMP) begin
-						if (pmp_aw_region_idx < sv2v_cast_8_signed(NUM_REGIONS)) begin
+						if (pmp_aw_region_idx < sv2v_cast_8_signed(NUM_PMP_REGIONS)) begin
 							if (pmp_aw_offset[2] == 1'b0) begin
-								pmp_base_addr_reg[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * COMP_WIDTH+:COMP_WIDTH] <= pmp_w_next_val[MAX_ADDRESS_WIDTH - 1:ADDR_SHIFT];
-								pmp_base_cfg_reg[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * 2+:2] <= pmp_w_next_val[1:0];
+								pmp_base_addr_reg[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * COMP_WIDTH+:COMP_WIDTH] <= pmp_w_next_val[MAX_ADDRESS_WIDTH - 1:ADDR_SHIFT];
+								pmp_base_cfg_reg[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * 2+:2] <= pmp_w_next_val[1:0];
 							end
 							else begin
-								pmp_limit_addr_reg[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * COMP_WIDTH+:COMP_WIDTH] <= pmp_w_next_val[MAX_ADDRESS_WIDTH - 1:ADDR_SHIFT];
-								pmp_limit_cfg_reg[((aw_slot_sel * NUM_REGIONS) + pmp_aw_region_idx) * 2+:2] <= pmp_w_next_val[1:0];
+								pmp_limit_addr_reg[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * COMP_WIDTH+:COMP_WIDTH] <= pmp_w_next_val[MAX_ADDRESS_WIDTH - 1:ADDR_SHIFT];
+								pmp_limit_cfg_reg[((aw_slot_sel * NUM_PMP_REGIONS) + pmp_aw_region_idx) * 2+:2] <= pmp_w_next_val[1:0];
 							end
 						end
 					end
@@ -444,27 +464,28 @@ module efpga_manager (
 			if (local_araddr < 16'h1000)
 				case (local_araddr[11:0] & 12'hffc)
 					12'h000: axi_rdata <= HW_VERSION;
-					12'h004: axi_rdata <= {29'd0, user_design_loaded_reg, efpga_com_active_i, soft_reset_reg};
+					12'h004: axi_rdata <= {29'd0, user_design_loaded_reg, efpga_com_active_i, 1'b0};
 					12'h008: axi_rdata <= 32'h00000000;
 					12'h00c: axi_rdata <= config_count_reg;
 					default: axi_rdata <= 32'hbad00000;
 				endcase
 			else if (ar_slot_idx < sv2v_cast_4_signed(NUM_SLOTS)) begin
-				if ((local_araddr[11:0] & 12'hffc) < 12'h014)
+				if ((local_araddr[11:0] & 12'hffc) < 12'h018)
 					case (local_araddr[11:0] & 12'hffc)
-						12'h000: axi_rdata <= {6'd0, wb_m_enable_reg[ar_slot_sel], wb_s_enable_reg[ar_slot_sel], 4'd0, wdog_en_cm[ar_slot_sel], wdog_en_ds[ar_slot_sel], wdog_en_cs[ar_slot_sel], wdog_en_dm[ar_slot_sel], 7'd0, pmp_g_en_reg[ar_slot_sel], 6'd0, dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]};
-						12'h004: axi_rdata <= {11'd0, wdog_soc_flag[ar_slot_sel], wdog_cs_to_flag[ar_slot_sel], wdog_cs_pr_flag[ar_slot_sel], wdog_dm_to_flag[ar_slot_sel], wdog_dm_pr_flag[ar_slot_sel], 6'd0, pmp_w_flag_reg[ar_slot_sel], pmp_r_flag_reg[ar_slot_sel], 5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]};
-						12'h008: axi_rdata <= 32'h00000000;
-						12'h00c: axi_rdata <= slot_o_top_reg[ar_slot_sel * 32+:32];
-						12'h010: axi_rdata <= slot_i_top_i[ar_slot_sel * 32+:32];
+						12'h000: axi_rdata <= slot_reset_reg[ar_slot_sel * 32+:32];
+						12'h004: axi_rdata <= {6'd0, wb_m_enable_reg[ar_slot_sel], wb_s_enable_reg[ar_slot_sel], 4'd0, wdog_en_cm[ar_slot_sel], wdog_en_ds[ar_slot_sel], wdog_en_cs[ar_slot_sel], wdog_en_dm[ar_slot_sel], dma_arprot_reg[ar_slot_sel * 3+:3], dma_awprot_reg[ar_slot_sel * 3+:3], 1'b0, pmp_g_en_reg[ar_slot_sel], 6'd0, dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]};
+						12'h008: axi_rdata <= {11'd0, wdog_soc_flag[ar_slot_sel], wdog_cs_to_flag[ar_slot_sel], wdog_cs_pr_flag[ar_slot_sel], wdog_dm_to_flag[ar_slot_sel], wdog_dm_pr_flag[ar_slot_sel], 6'd0, pmp_w_flag_reg[ar_slot_sel], pmp_r_flag_reg[ar_slot_sel], 5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]};
+						12'h00c: axi_rdata <= 32'h00000000;
+						12'h010: axi_rdata <= slot_o_top_reg[ar_slot_sel * 32+:32];
+						12'h014: axi_rdata <= slot_i_top_i[ar_slot_sel * 32+:32];
 						default: axi_rdata <= 32'hbad00001;
 					endcase
 				else if (ENABLE_PMP) begin
-					if (pmp_ar_region_idx < sv2v_cast_8_signed(NUM_REGIONS)) begin
+					if (pmp_ar_region_idx < sv2v_cast_8_signed(NUM_PMP_REGIONS)) begin
 						if (pmp_ar_offset[2] == 1'b0)
-							axi_rdata <= pmp_base_o[((ar_slot_sel * NUM_REGIONS) + pmp_ar_region_idx) * 32+:32];
+							axi_rdata <= pmp_base_o[((ar_slot_sel * NUM_PMP_REGIONS) + pmp_ar_region_idx) * 32+:32];
 						else
-							axi_rdata <= pmp_limit_o[((ar_slot_sel * NUM_REGIONS) + pmp_ar_region_idx) * 32+:32];
+							axi_rdata <= pmp_limit_o[((ar_slot_sel * NUM_PMP_REGIONS) + pmp_ar_region_idx) * 32+:32];
 					end
 					else
 						axi_rdata <= 32'hbad00002;

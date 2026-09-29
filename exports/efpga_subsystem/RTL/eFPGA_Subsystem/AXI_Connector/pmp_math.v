@@ -15,12 +15,12 @@ module pmp_math (
 	violation_r_o,
 	violation_w_o
 );
-	parameter signed [31:0] NUM_REGIONS = 2;
+	parameter signed [31:0] NUM_PMP_REGIONS = 2;
 	parameter [0:0] PAGE_GRANULARITY = 1'b1;
 	parameter signed [31:0] MAX_ADDRESS_WIDTH = 32;
 	input wire g_en_i;
-	input wire [(NUM_REGIONS * 32) - 1:0] base_i;
-	input wire [(NUM_REGIONS * 32) - 1:0] limit_i;
+	input wire [(NUM_PMP_REGIONS * 32) - 1:0] base_i;
+	input wire [(NUM_PMP_REGIONS * 32) - 1:0] limit_i;
 	input wire [31:0] awaddr_i;
 	input wire [7:0] awlen_i;
 	input wire [2:0] awsize_i;
@@ -39,8 +39,8 @@ module pmp_math (
 	wire aw_is_sec = ~awprot_i[1];
 	wire ar_is_priv = arprot_i[0];
 	wire ar_is_sec = ~arprot_i[1];
-	wire [NUM_REGIONS - 1:0] aw_region_ok;
-	wire [NUM_REGIONS - 1:0] ar_region_ok;
+	wire [NUM_PMP_REGIONS - 1:0] aw_region_ok;
+	wire [NUM_PMP_REGIONS - 1:0] ar_region_ok;
 	wire aw_malicious_wrap;
 	wire ar_malicious_wrap;
 	function automatic [16:0] sv2v_cast_17;
@@ -64,7 +64,7 @@ module pmp_math (
 			wire [COMP_WIDTH - 1:0] aw_pfn = awaddr_i[MAX_ADDRESS_WIDTH - 1:12];
 			wire [COMP_WIDTH - 1:0] ar_pfn = araddr_i[MAX_ADDRESS_WIDTH - 1:12];
 			genvar _gv_r_1;
-			for (_gv_r_1 = 0; _gv_r_1 < NUM_REGIONS; _gv_r_1 = _gv_r_1 + 1) begin : pmp_checks_4k
+			for (_gv_r_1 = 0; _gv_r_1 < NUM_PMP_REGIONS; _gv_r_1 = _gv_r_1 + 1) begin : pmp_checks_4k
 				localparam r = _gv_r_1;
 				wire read_en = base_i[r * 32];
 				wire write_en = base_i[(r * 32) + 1];
@@ -101,7 +101,7 @@ module pmp_math (
 			wire [COMP_WIDTH - 1:0] ar_start = araddr_i[MAX_ADDRESS_WIDTH - 1:2];
 			wire [COMP_WIDTH - 1:0] ar_end = ar_end_addr_full[MAX_ADDRESS_WIDTH - 1:2];
 			genvar _gv_r_2;
-			for (_gv_r_2 = 0; _gv_r_2 < NUM_REGIONS; _gv_r_2 = _gv_r_2 + 1) begin : pmp_checks_word
+			for (_gv_r_2 = 0; _gv_r_2 < NUM_PMP_REGIONS; _gv_r_2 = _gv_r_2 + 1) begin : pmp_checks_word
 				localparam r = _gv_r_2;
 				wire read_en = base_i[r * 32];
 				wire write_en = base_i[(r * 32) + 1];

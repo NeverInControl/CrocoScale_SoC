@@ -78,7 +78,8 @@ architecture rtl of neorv32_axi_wrapper is
 
 begin
 
-  con_gpio_in <= (31 downto 8 => '0', 7 downto 0 => gpio_i);
+  con_gpio_in(31 downto 8) <= (others => '0');
+  con_gpio_in(7 downto 0)  <= gpio_i;
   gpio_o      <= con_gpio_out(7 downto 0);
 
   -- -------------------------------------------------------------------------------------------

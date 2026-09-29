@@ -70,7 +70,8 @@ module efpga_axi_subsystem_wrapper #(
     // --- Direct Configuration & Status ---
     input  logic                              efpga_config_we_i,
     input  logic [31:0]                       efpga_config_data_i,
-    input  logic                              efpga_soft_reset_i,
+    input  logic [NUM_SLOTS-1:0][3:0]         slot_fabric_rst_n_i,
+    input  logic [NUM_SLOTS-1:0]              slot_npu_rst_n_i,
     output logic                              efpga_com_active_o,
     output logic [NUM_SLOTS-1:0][31:0]        slot_i_top_o,
     input  logic [NUM_SLOTS-1:0][31:0]        slot_o_top_i,
@@ -81,7 +82,11 @@ module efpga_axi_subsystem_wrapper #(
     output logic [7:0]                        pmod_io_oe_o,
 
     // --- Fabric User Interrupts (4 Lines) ---
-    output logic [3:0]                        efpga_usr_irq_o
+    output logic [3:0]                        efpga_usr_irq_o,
+
+    // --- Host-Configured DMA Protection Levels ---
+    input  logic [NUM_SLOTS*3-1:0]            slot_dma_awprot_i,
+    input  logic [NUM_SLOTS*3-1:0]            slot_dma_arprot_i
 );
 
     // =========================================================================
@@ -93,8 +98,8 @@ module efpga_axi_subsystem_wrapper #(
     assign dma_s_arlock  = {NUM_SLOTS{1'b0}};
     assign dma_s_awcache = {NUM_SLOTS{4'd0}};
     assign dma_s_arcache = {NUM_SLOTS{4'd0}};
-    assign dma_s_awprot  = {NUM_SLOTS{3'b000}};
-    assign dma_s_arprot  = {NUM_SLOTS{3'b000}};
+    assign dma_s_awprot  = slot_dma_awprot_i;
+    assign dma_s_arprot  = slot_dma_arprot_i;
 
     // =========================================================================
     // Interconnect Buses (eFPGA <-> NPU & Floorplanned UIO)
@@ -131,8 +136,9 @@ module efpga_axi_subsystem_wrapper #(
     // =========================================================================
     // Floorplanned Mappings
     // =========================================================================
-    // South-West: Debug I/O (Slot 0)
-    assign uio_bot_uin[31:0]   = slot_o_top_i[0];    // DEBUG_OUT (Manager -> eFPGA)
+    // South-West: Debug I/O (Slot 0) & Fabric Soft Reset Compatibility
+    assign uio_bot_uin[0]      = slot_fabric_rst_n_i[0][0];
+    assign uio_bot_uin[31:1]   = slot_o_top_i[0][31:1];
     assign slot_i_top_o[0]     = uio_bot_uout[31:0]; // DEBUG_IN  (eFPGA -> Manager)
 
     // South: PMOD Padring Interface (24 Wires)
@@ -157,7 +163,7 @@ module efpga_axi_subsystem_wrapper #(
     eFPGA_top_macro fabric_inst (
         // --- Clocks and Resets ---
         .CLK                 (clk_i),
-        .resetn              (rstn_i & ~efpga_soft_reset_i),
+        .resetn              (rstn_i),
         
         // --- Configuration Interface ---
         .SelfWriteData       (efpga_config_data_i),
@@ -243,7 +249,7 @@ module efpga_axi_subsystem_wrapper #(
     eFPGA_top fabric_inst (
         // --- Clocks and Resets ---
         .CLK                 (clk_i),
-        .resetn              (rstn_i & ~efpga_soft_reset_i),
+        .resetn              (rstn_i),
         
         // --- Configuration Interface ---
         .SelfWriteData       (efpga_config_data_i),
@@ -344,8 +350,7 @@ module efpga_axi_subsystem_wrapper #(
         end
     endgenerate
 
-    // User soft resets tied off for now (will connect to manager REG_SLOT_CTRL later)
-    wire [3:0] slot_soft_rst_n = {4{rstn_i}};
+    wire [3:0] slot_soft_rst_n = slot_fabric_rst_n_i[0];
 
     npu_wrapper #(
         .ARRAY_HEIGHT        (8),
@@ -360,7 +365,7 @@ module efpga_axi_subsystem_wrapper #(
         .WEIGHT_SPLIT        (WEIGHT_SPLIT)
     ) npu_inst (
         .clk_i               (clk_i),
-        .rst_n               (rstn_i & ~efpga_soft_reset_i),
+        .rst_n               (slot_npu_rst_n_i[0]),
 
         .crossbar_sel        (ram_d_o),
 

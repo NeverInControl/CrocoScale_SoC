@@ -16,15 +16,15 @@ extern "C" {
  *    --------------------------------------------------------------------------------------------
  *    Offset Range     | Region Name            | Description
  *    --------------------------------------------------------------------------------------------
- *    0x0000 - 0x000C  | Global Management      | Identification, soft reset, bitstream streaming
+ *    0x0000 - 0x000C  | Global Management      | Identification, status flags, bitstream streaming
  *    0x0010 - 0x0FFF  | Reserved Gap           | Unused (padding to slot boundary)
- *    0x1000 - 0x1010  | Slot Control & Status  | Decoupling, status flags, fault clears, debug I/O
- *    0x1014 - 0x1023  | PMP Regions 0..1       | 2 Base/Limit pairs (8 bytes per region, 16B total)
- *                       - Region 0 Base        : mgr_base + 0x1014 (PFN [31:12], bits [11:2] trunc)
- *                       - Region 0 Limit       : mgr_base + 0x1018 (PFN [31:12], bits [11:2] trunc)
- *                       - Region 1 Base        : mgr_base + 0x101C (PFN [31:12], bits [11:2] trunc)
- *                       - Region 1 Limit       : mgr_base + 0x1020 (PFN [31:12], bits [11:2] trunc)
- *    0x1024+          | Unmapped PMP           | Reads return 0xBAD00002
+ *    0x1000 - 0x1014  | Slot Control & Status  | Soft resets, decoupling, status flags, fault clears, debug I/O
+ *    0x1018 - 0x1027  | PMP Regions 0..1       | 2 Base/Limit pairs (8 bytes per region, 16B total)
+ *                       - Region 0 Base        : mgr_base + 0x1018 (PFN [31:12], bits [11:2] trunc)
+ *                       - Region 0 Limit       : mgr_base + 0x101C (PFN [31:12], bits [11:2] trunc)
+ *                       - Region 1 Base        : mgr_base + 0x1020 (PFN [31:12], bits [11:2] trunc)
+ *                       - Region 1 Limit       : mgr_base + 0x1024 (PFN [31:12], bits [11:2] trunc)
+ *    0x1028+          | Unmapped PMP           | Reads return 0xBAD00002
  *
  *    [!] PMP Security Lock:
  *        PMP registers are hardware write-protected. Writes are ignored unless the slot is
@@ -59,20 +59,21 @@ extern "C" {
 
 /* Global Management Registers (0x0000 - 0x000C) */
 #define EFPGA_REG_HW_VERSION                  0x0000U  /**< Hardware version ID & magic (RO) */
-#define EFPGA_REG_GLOBAL_CTRL                 0x0004U  /**< Global control & soft reset (RW) */
-#define EFPGA_REG_CONFIG_DATA                 0x0008U  /**< Bitstream stream FIFO data port (WO) */
+#define EFPGA_REG_GLOBAL_CTRL                 0x0004U  /**< Global control & status flags (RW) */
+#define EFPGA_REG_CONFIG_DATA                 0x0008U  /**< Bitstream stream port (WO, translates LE CPU words to BE frames) */
 #define EFPGA_REG_CONFIG_COUNT                0x000CU  /**< Bitstream word count monitor (RO) */
 
-/* Slot Control & Status Registers (0x1000 - 0x1010) */
-#define EFPGA_REG_SLOT_CTRL                   0x1000U  /**< Slot isolation & module enables (RW) */
-#define EFPGA_REG_SLOT_STATUS                 0x1004U  /**< Slot activity & fault flags (RO) */
-#define EFPGA_REG_FAULT_CLEAR                 0x1008U  /**< Latched fault clear strobe (WO) */
-#define EFPGA_REG_DEBUG_OUT                   0x100CU  /**< Static debug output to fabric (RW) */
-#define EFPGA_REG_DEBUG_IN                    0x1010U  /**< Static debug input from fabric (RO) */
+/* Slot Control & Status Registers (0x1000 - 0x1014) */
+#define EFPGA_REG_SLOT_RESET                  0x1000U  /**< Slot soft reset register (RW) */
+#define EFPGA_REG_SLOT_CTRL                   0x1004U  /**< Slot isolation & module enables (RW) */
+#define EFPGA_REG_SLOT_STATUS                 0x1008U  /**< Slot activity & fault flags (RO) */
+#define EFPGA_REG_FAULT_CLEAR                 0x100CU  /**< Latched fault clear strobe (WO) */
+#define EFPGA_REG_DEBUG_OUT                   0x1010U  /**< Static debug output to fabric (RW) */
+#define EFPGA_REG_DEBUG_IN                    0x1014U  /**< Static debug input from fabric (RO) */
 
-/* Physical Memory Protection (PMP) Region Offsets (0x1014 - 0x1020) */
-#define EFPGA_REG_PMP_BASE(region)            (0x1014U + ((uint32_t)(region) * 0x08U))
-#define EFPGA_REG_PMP_LIMIT(region)           (0x1018U + ((uint32_t)(region) * 0x08U))
+/* Physical Memory Protection (PMP) Region Offsets (0x1018 - 0x1024) */
+#define EFPGA_REG_PMP_BASE(region)            (0x1018U + ((uint32_t)(region) * 0x08U))
+#define EFPGA_REG_PMP_LIMIT(region)           (0x101CU + ((uint32_t)(region) * 0x08U))
 
 /* ===============================================================================================
  * Memory-Mapped Register Layout (Unified MMIO Struct)
@@ -85,24 +86,25 @@ extern "C" {
 typedef volatile struct __attribute__((packed, aligned(4))) {
     /* Global Management Registers (0x0000 - 0x000C) */
     uint32_t HW_VERSION;            /* mgr_base + 0x0000: Hardware Version ID & Magic (RO) */
-    uint32_t GLOBAL_CTRL;           /* mgr_base + 0x0004: Global Control & Soft Reset (RW) */
-    uint32_t CONFIG_DATA;           /* mgr_base + 0x0008: Bitstream Stream FIFO Data (WO) */
+    uint32_t GLOBAL_CTRL;           /* mgr_base + 0x0004: Global Control & Status Flags (RW) */
+    uint32_t CONFIG_DATA;           /* mgr_base + 0x0008: Bitstream Stream FIFO Data (WO, LE to BE auto-translation) */
     uint32_t CONFIG_COUNT;          /* mgr_base + 0x000C: Bitstream Word Counter (RO) */
 
     /* Reserved Gap to Slot 0 (0x0010 - 0x0FFF) */
     const uint32_t __res0[1020];    /* mgr_base + 0x0010: 4,080 bytes padding to 0x1000 */
 
-    /* Slot Control & Status (0x1000 - 0x1010) */
-    uint32_t SLOT_CTRL;             /* mgr_base + 0x1000: Slot Control & Feature Enables (RW) */
-    uint32_t SLOT_STATUS;           /* mgr_base + 0x1004: Slot Status & Activity Flags (RO) */
-    uint32_t FAULT_CLEAR;           /* mgr_base + 0x1008: Fault Clear Strobe (WO) */
-    uint32_t DEBUG_OUT;             /* mgr_base + 0x100C: Static Debug Output to Fabric (RW) */
-    uint32_t DEBUG_IN;              /* mgr_base + 0x1010: Static Debug Input from Fabric (RO) */
+    /* Slot Control & Status (0x1000 - 0x1014) */
+    uint32_t SLOT_RESET;            /* mgr_base + 0x1000: Slot Soft Reset Register (RW) */
+    uint32_t SLOT_CTRL;             /* mgr_base + 0x1004: Slot Control & Feature Enables (RW) */
+    uint32_t SLOT_STATUS;           /* mgr_base + 0x1008: Slot Status & Activity Flags (RO) */
+    uint32_t FAULT_CLEAR;           /* mgr_base + 0x100C: Fault Clear Strobe (WO) */
+    uint32_t DEBUG_OUT;             /* mgr_base + 0x1010: Static Debug Output to Fabric (RW) */
+    uint32_t DEBUG_IN;              /* mgr_base + 0x1014: Static Debug Input from Fabric (RO) */
 
-    /* Physical Memory Protection (PMP) Regions 0..1 (0x1014 - 0x1023) */
+    /* Physical Memory Protection (PMP) Regions 0..1 (0x1018 - 0x1027) */
     struct {
-        uint32_t BASE;              /* mgr_base + 0x1014 + (r * 8): Base 4KB PFN [31:12] & Flags [1:0] */
-        uint32_t LIMIT;             /* mgr_base + 0x1018 + (r * 8): Limit 4KB PFN [31:12] & Security [1:0] */
+        uint32_t BASE;              /* mgr_base + 0x1018 + (r * 8): Base 4KB PFN [31:12] & Flags [1:0] */
+        uint32_t LIMIT;             /* mgr_base + 0x101C + (r * 8): Limit 4KB PFN [31:12] & Security [1:0] */
     } PMP[EFPGA_PMP_NUM_REGIONS];
 } mmio_efpga_manager_t;
 
@@ -129,18 +131,39 @@ typedef volatile struct __attribute__((packed, aligned(4))) {
  * @brief GLOBAL_CTRL register bit positions (mgr_base + 0x0004).
  */
 enum efpga_global_ctrl_bits {
-    EFPGA_GLOBAL_CTRL_SOFT_RESET       = (1U << 0),
     EFPGA_GLOBAL_CTRL_COM_ACTIVE       = (1U << 1),
     EFPGA_GLOBAL_CTRL_DESIGN_LOADED    = (1U << 2)
 };
 
 /**
- * @brief SLOT_CTRL register bit positions (mgr_base + 0x1000).
+ * @brief SLOT_RESET register bit positions and masks (mgr_base + 0x1000).
+ */
+enum efpga_slot_reset_bits {
+    EFPGA_SLOT_RESET_FABRIC_0          = (1U << 0),  /**< Fabric soft reset line 0 */
+    EFPGA_SLOT_RESET_FABRIC_1          = (1U << 1),  /**< Fabric soft reset line 1 */
+    EFPGA_SLOT_RESET_FABRIC_2          = (1U << 2),  /**< Fabric soft reset line 2 */
+    EFPGA_SLOT_RESET_FABRIC_3          = (1U << 3),  /**< Fabric soft reset line 3 */
+    EFPGA_SLOT_RESET_FABRIC_MASK       = (0xFU << 0),/**< All 4 fabric soft reset lines */
+    EFPGA_SLOT_RESET_NPU               = (1U << 4),  /**< Hardened NPU complex soft reset */
+    EFPGA_SLOT_RESET_WDOG              = (1U << 16), /**< Bus watchdogs soft reset & fault clear */
+    EFPGA_SLOT_RESET_BRIDGE_CTRL       = (1U << 24), /**< Control bridge (AXI-to-Wishbone / dec) soft reset */
+    EFPGA_SLOT_RESET_BRIDGE_DMA        = (1U << 25), /**< DMA bridge (Wishbone-to-AXI / dec) soft reset */
+    EFPGA_SLOT_RESET_ALL_MASK          = (EFPGA_SLOT_RESET_FABRIC_MASK | EFPGA_SLOT_RESET_NPU | \
+                                          EFPGA_SLOT_RESET_WDOG | EFPGA_SLOT_RESET_BRIDGE_CTRL | \
+                                          EFPGA_SLOT_RESET_BRIDGE_DMA)
+};
+
+/**
+ * @brief SLOT_CTRL register bit positions (mgr_base + 0x1004).
  */
 enum efpga_slot_ctrl_bits {
     EFPGA_SLOT_CTRL_DECOUPLE_REQ       = (1U << 0),
     EFPGA_SLOT_CTRL_DECOUPLE_FORCE     = (1U << 1),
     EFPGA_SLOT_CTRL_PMP_EN             = (1U << 8),
+    EFPGA_SLOT_CTRL_AWPROT_SHIFT       = 10U,
+    EFPGA_SLOT_CTRL_AWPROT_MASK        = (0x7U << 10),
+    EFPGA_SLOT_CTRL_ARPROT_SHIFT       = 13U,
+    EFPGA_SLOT_CTRL_ARPROT_MASK        = (0x7U << 13),
     EFPGA_SLOT_CTRL_WDOG_DM_EN         = (1U << 16),
     EFPGA_SLOT_CTRL_WDOG_CS_EN         = (1U << 17),
     EFPGA_SLOT_CTRL_WDOG_DS_EN         = (1U << 18),
@@ -150,7 +173,7 @@ enum efpga_slot_ctrl_bits {
 };
 
 /**
- * @brief SLOT_STATUS register bit positions (mgr_base + 0x1004).
+ * @brief SLOT_STATUS register bit positions (mgr_base + 0x1008).
  */
 enum efpga_slot_status_bits {
     EFPGA_SLOT_STATUS_IS_DECOUPLED     = (1U << 0),
@@ -278,6 +301,20 @@ int efpga_subsystem_load_fragments(uintptr_t mgr_base,
 void efpga_subsystem_set_soft_reset(uintptr_t mgr_base, bool assert_reset);
 
 /**
+ * @brief Assert or release the slot soft reset mask.
+ * @param mgr_base Interconnect base address of the eFPGA Subsystem Manager.
+ * @param reset_mask Bitmask of subsystems to hold in reset (see efpga_slot_reset_bits).
+ */
+void efpga_subsystem_set_slot_reset(uintptr_t mgr_base, uint32_t reset_mask);
+
+/**
+ * @brief Read back the current slot soft reset register value.
+ * @param mgr_base Interconnect base address of the eFPGA Subsystem Manager.
+ * @return 32-bit active reset mask.
+ */
+uint32_t efpga_subsystem_get_slot_reset(uintptr_t mgr_base);
+
+/**
  * @brief Read runtime slot status snapshot (decoupling state, bus activity, fault flags).
  * @param mgr_base Interconnect base address of the eFPGA Subsystem Manager.
  * @param state Output slot state structure.
@@ -330,6 +367,24 @@ void efpga_subsystem_write_debug_io(uintptr_t mgr_base, uint32_t val);
  * @return 32-bit value captured from the fabric debug output wires.
  */
 uint32_t efpga_subsystem_read_debug_io(uintptr_t mgr_base);
+
+/**
+ * @brief Configure slot AXI DMA protection bits (AxPROT).
+ * @param mgr_base Interconnect base address of the eFPGA Subsystem Manager.
+ * @param awprot 3-bit AWPROT attribute value driven onto fabric DMA write requests.
+ * @param arprot 3-bit ARPROT attribute value driven onto fabric DMA read requests.
+ * @return 0 on success, negative error code on invalid parameters.
+ */
+int efpga_subsystem_set_dma_prot(uintptr_t mgr_base, uint8_t awprot, uint8_t arprot);
+
+/**
+ * @brief Read configured slot AXI DMA protection bits (AxPROT).
+ * @param mgr_base Interconnect base address of the eFPGA Subsystem Manager.
+ * @param awprot Output pointer for AWPROT.
+ * @param arprot Output pointer for ARPROT.
+ * @return 0 on success, negative error code on invalid parameters.
+ */
+int efpga_subsystem_get_dma_prot(uintptr_t mgr_base, uint8_t *awprot, uint8_t *arprot);
 
 #ifdef __cplusplus
 }

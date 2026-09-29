@@ -222,10 +222,13 @@ module efpga_subsystem_top (
 	wire [NUM_SLOTS - 1:0] axi4_dma_s_arlock;
 	wire [31:0] efpga_config_data;
 	wire efpga_config_we;
-	wire efpga_soft_reset;
+	wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n;
+	wire [NUM_SLOTS - 1:0] slot_npu_rst_n;
 	wire efpga_com_active;
 	wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_arr;
 	wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_arr;
+	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot;
+	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot;
 	efpga_connector #(
 		.NUM_SLOTS(NUM_SLOTS),
 		.AXI_ID_WIDTH(AXI_ID_WIDTH),
@@ -363,10 +366,13 @@ module efpga_subsystem_top (
 		.dma_m_rready(m_axi_dma_rready),
 		.efpga_config_data_o(efpga_config_data),
 		.efpga_config_we_o(efpga_config_we),
-		.efpga_soft_reset_o(efpga_soft_reset),
+		.slot_fabric_rst_n_o(slot_fabric_rst_n),
+		.slot_npu_rst_n_o(slot_npu_rst_n),
 		.efpga_com_active_i(efpga_com_active),
 		.slot_i_top_i(slot_i_top_arr),
 		.slot_o_top_o(slot_o_top_arr),
+		.slot_dma_awprot_o(slot_dma_awprot),
+		.slot_dma_arprot_o(slot_dma_arprot),
 		.fault_irq_o(efpga_fault_irq_o)
 	);
 	efpga_axi_subsystem_wrapper #(
@@ -432,10 +438,13 @@ module efpga_subsystem_top (
 		.dma_s_rready(axi4_dma_s_rready),
 		.efpga_config_we_i(efpga_config_we),
 		.efpga_config_data_i(efpga_config_data),
-		.efpga_soft_reset_i(efpga_soft_reset),
+		.slot_fabric_rst_n_i(slot_fabric_rst_n),
+		.slot_npu_rst_n_i(slot_npu_rst_n),
 		.efpga_com_active_o(efpga_com_active),
 		.slot_i_top_o(slot_i_top_arr),
 		.slot_o_top_i(slot_o_top_arr),
+		.slot_dma_awprot_i(slot_dma_awprot),
+		.slot_dma_arprot_i(slot_dma_arprot),
 		.pmod_io_i(pmod_io_i),
 		.pmod_io_o(pmod_io_o),
 		.pmod_io_oe_o(pmod_io_oe_o),

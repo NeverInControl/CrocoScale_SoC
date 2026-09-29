@@ -57,14 +57,17 @@ module efpga_axi_subsystem_wrapper (
 	dma_s_rready,
 	efpga_config_we_i,
 	efpga_config_data_i,
-	efpga_soft_reset_i,
+	slot_fabric_rst_n_i,
+	slot_npu_rst_n_i,
 	efpga_com_active_o,
 	slot_i_top_o,
 	slot_o_top_i,
 	pmod_io_i,
 	pmod_io_o,
 	pmod_io_oe_o,
-	efpga_usr_irq_o
+	efpga_usr_irq_o,
+	slot_dma_awprot_i,
+	slot_dma_arprot_i
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
@@ -128,7 +131,8 @@ module efpga_axi_subsystem_wrapper (
 	output wire [NUM_SLOTS - 1:0] dma_s_rready;
 	input wire efpga_config_we_i;
 	input wire [31:0] efpga_config_data_i;
-	input wire efpga_soft_reset_i;
+	input wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n_i;
+	input wire [NUM_SLOTS - 1:0] slot_npu_rst_n_i;
 	output wire efpga_com_active_o;
 	output wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_o;
 	input wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_i;
@@ -136,6 +140,8 @@ module efpga_axi_subsystem_wrapper (
 	output wire [7:0] pmod_io_o;
 	output wire [7:0] pmod_io_oe_o;
 	output wire [3:0] efpga_usr_irq_o;
+	input wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot_i;
+	input wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot_i;
 	function automatic signed [AXI_ID_WIDTH - 1:0] sv2v_cast_14482_signed;
 		input reg signed [AXI_ID_WIDTH - 1:0] inp;
 		sv2v_cast_14482_signed = inp;
@@ -146,8 +152,8 @@ module efpga_axi_subsystem_wrapper (
 	assign dma_s_arlock = {NUM_SLOTS {1'b0}};
 	assign dma_s_awcache = {NUM_SLOTS {4'd0}};
 	assign dma_s_arcache = {NUM_SLOTS {4'd0}};
-	assign dma_s_awprot = {NUM_SLOTS {3'b000}};
-	assign dma_s_arprot = {NUM_SLOTS {3'b000}};
+	assign dma_s_awprot = slot_dma_awprot_i;
+	assign dma_s_arprot = slot_dma_arprot_i;
 	wire [71:0] npu_act_addr;
 	wire [63:0] npu_act_rdata;
 	wire [63:0] npu_act_wdata;
@@ -169,7 +175,8 @@ module efpga_axi_subsystem_wrapper (
 	wire [119:0] uio_top_uout;
 	wire [199:0] uio_bot_uin;
 	wire [199:0] uio_bot_uout;
-	assign uio_bot_uin[31:0] = slot_o_top_i[0+:32];
+	assign uio_bot_uin[0] = slot_fabric_rst_n_i[0];
+	assign uio_bot_uin[31:1] = slot_o_top_i[31-:31];
 	assign slot_i_top_o[0+:32] = uio_bot_uout[31:0];
 	assign uio_bot_uin[39:32] = pmod_io_i;
 	assign pmod_io_o = uio_bot_uout[39:32];
@@ -180,7 +187,7 @@ module efpga_axi_subsystem_wrapper (
 	assign uio_top_uin[119:56] = npu_out_act;
 	eFPGA_top fabric_inst(
 		.CLK(clk_i),
-		.resetn(rstn_i & ~efpga_soft_reset_i),
+		.resetn(rstn_i),
 		.SelfWriteData(efpga_config_data_i),
 		.SelfWriteStrobe(efpga_config_we_i),
 		.ComActive(efpga_com_active_o),
@@ -262,7 +269,7 @@ module efpga_axi_subsystem_wrapper (
 			assign npu_weight_shift_en = {WEIGHT_SPLIT {ram_c_o[3]}};
 		end
 	endgenerate
-	wire [3:0] slot_soft_rst_n = {4 {rstn_i}};
+	wire [3:0] slot_soft_rst_n = slot_fabric_rst_n_i[0+:4];
 	npu_wrapper #(
 		.ARRAY_HEIGHT(8),
 		.ARRAY_WIDTH(8),
@@ -276,7 +283,7 @@ module efpga_axi_subsystem_wrapper (
 		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) npu_inst(
 		.clk_i(clk_i),
-		.rst_n(rstn_i & ~efpga_soft_reset_i),
+		.rst_n(slot_npu_rst_n_i[0]),
 		.crossbar_sel(ram_d_o),
 		.array_en(ram_c_o[0]),
 		.psum_systolic_en(ram_c_o[1]),

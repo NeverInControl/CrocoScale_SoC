@@ -4,7 +4,6 @@
 
 # AXI Connectors, Monitors, and Decouplers
 RTL/eFPGA_Subsystem/AXI_Connector/pmp_math.v
-RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_timer.v
 RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_slave_monitor.v
 RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_master_monitor.v
 RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_slave_monitor.v

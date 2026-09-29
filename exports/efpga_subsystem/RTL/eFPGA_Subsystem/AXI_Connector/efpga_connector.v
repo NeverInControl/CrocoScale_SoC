@@ -131,14 +131,17 @@ module efpga_connector (
 	dma_m_rready,
 	efpga_config_we_o,
 	efpga_config_data_o,
-	efpga_soft_reset_o,
+	slot_fabric_rst_n_o,
+	slot_npu_rst_n_o,
 	efpga_com_active_i,
 	slot_i_top_i,
 	slot_o_top_o,
-	fault_irq_o
+	fault_irq_o,
+	slot_dma_awprot_o,
+	slot_dma_arprot_o
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
-	parameter signed [31:0] NUM_REGIONS = 2;
+	parameter signed [31:0] NUM_PMP_REGIONS = 2;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter [0:0] PAGE_GRANULARITY = 1'b1;
@@ -285,23 +288,33 @@ module efpga_connector (
 	output wire [NUM_SLOTS - 1:0] dma_m_rready;
 	output wire efpga_config_we_o;
 	output wire [31:0] efpga_config_data_o;
-	output wire efpga_soft_reset_o;
+	output wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n_o;
+	output wire [NUM_SLOTS - 1:0] slot_npu_rst_n_o;
 	input wire efpga_com_active_i;
-	(* keep = "true", mark_debug = "true" *) input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
-	(* keep = "true", mark_debug = "true" *) output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
+	input wire [(NUM_SLOTS * 32) - 1:0] slot_i_top_i;
+	output wire [(NUM_SLOTS * 32) - 1:0] slot_o_top_o;
 	output wire [NUM_SLOTS - 1:0] fault_irq_o;
-	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_req;
-	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_force;
-	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_is_dec;
-	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_host_act;
-	(* keep = "true", mark_debug = "true" *) wire [NUM_SLOTS - 1:0] dec_dma_act;
+	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot_o;
+	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot_o;
+	wire [NUM_SLOTS - 1:0] dec_req;
+	wire [NUM_SLOTS - 1:0] dec_force;
+	wire [NUM_SLOTS - 1:0] dec_is_dec;
+	wire [NUM_SLOTS - 1:0] dec_host_act;
+	wire [NUM_SLOTS - 1:0] dec_dma_act;
 	wire [NUM_SLOTS - 1:0] pmp_r_violation;
 	wire [NUM_SLOTS - 1:0] pmp_w_violation;
 	wire [NUM_SLOTS - 1:0] slot_wb_s_en;
 	wire [NUM_SLOTS - 1:0] slot_wb_m_en;
 	wire [NUM_SLOTS - 1:0] p_g_en;
-	wire [((NUM_SLOTS * NUM_REGIONS) * 32) - 1:0] p_base;
-	wire [((NUM_SLOTS * NUM_REGIONS) * 32) - 1:0] p_limit;
+	wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] p_base;
+	wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] p_limit;
+	wire [(NUM_SLOTS * 32) - 1:0] slot_reset_reg;
+	reg [(NUM_SLOTS * 32) - 1:0] slot_soft_rst_q;
+	always @(posedge clk_i or negedge rstn_i)
+		if (!rstn_i)
+			slot_soft_rst_q <= 1'sb0;
+		else
+			slot_soft_rst_q <= slot_reset_reg;
 	wire [NUM_SLOTS - 1:0] wdog_cs_to_w;
 	wire [NUM_SLOTS - 1:0] wdog_cs_to_r;
 	wire [NUM_SLOTS - 1:0] wdog_cs_pr_w;
@@ -320,7 +333,7 @@ module efpga_connector (
 	wire [NUM_SLOTS - 1:0] wdog_ds_pr_r;
 	efpga_manager #(
 		.NUM_SLOTS(NUM_SLOTS),
-		.NUM_REGIONS(NUM_REGIONS),
+		.NUM_PMP_REGIONS(NUM_PMP_REGIONS),
 		.HW_VERSION(HW_VERSION),
 		.PAGE_GRANULARITY(PAGE_GRANULARITY),
 		.MAX_ADDRESS_WIDTH(MAX_ADDRESS_WIDTH),
@@ -355,10 +368,10 @@ module efpga_connector (
 		.s_axil_rready(mgr_s_rready),
 		.efpga_config_data_o(efpga_config_data_o),
 		.efpga_config_we_o(efpga_config_we_o),
-		.efpga_soft_reset_o(efpga_soft_reset_o),
 		.efpga_com_active_i(efpga_com_active_i),
 		.slot_i_top_i(slot_i_top_i),
 		.slot_o_top_o(slot_o_top_o),
+		.slot_reset_o(slot_reset_reg),
 		.decoupler_req_o(dec_req),
 		.decoupler_force_o(dec_force),
 		.decoupler_is_decoupled_i(dec_is_dec),
@@ -387,31 +400,40 @@ module efpga_connector (
 		.pmp_limit_o(p_limit),
 		.wb_s_enable_o(slot_wb_s_en),
 		.wb_m_enable_o(slot_wb_m_en),
-		.slot_fault_irq_o(fault_irq_o)
+		.slot_fault_irq_o(fault_irq_o),
+		.slot_dma_awprot_o(slot_dma_awprot_o),
+		.slot_dma_arprot_o(slot_dma_arprot_o)
 	);
 	genvar _gv_i_1;
 	generate
 		for (_gv_i_1 = 0; _gv_i_1 < NUM_SLOTS; _gv_i_1 = _gv_i_1 + 1) begin : slot_gen
 			localparam i = _gv_i_1;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] slice_ctrl_awaddr;
-			(* keep = "true", mark_debug = "true" *) wire [2:0] slice_ctrl_awprot;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_awvalid;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_awready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] slice_ctrl_wdata;
-			(* keep = "true", mark_debug = "true" *) wire [3:0] slice_ctrl_wstrb;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_wvalid;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_wready;
-			(* keep = "true", mark_debug = "true" *) wire [1:0] slice_ctrl_bresp;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_bvalid;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_bready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] slice_ctrl_araddr;
-			(* keep = "true", mark_debug = "true" *) wire [2:0] slice_ctrl_arprot;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_arvalid;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_arready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] slice_ctrl_rdata;
-			(* keep = "true", mark_debug = "true" *) wire [1:0] slice_ctrl_rresp;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_rvalid;
-			(* keep = "true", mark_debug = "true" *) wire slice_ctrl_rready;
+			wire [3:0] slot_fabric_rst_n = {4 {rstn_i}} & ~slot_soft_rst_q[(i * 32) + 3-:4];
+			wire slot_npu_rst_n = rstn_i & ~slot_soft_rst_q[(i * 32) + 4];
+			wire slot_wdog_rst_n = rstn_i & ~slot_soft_rst_q[(i * 32) + 16];
+			wire slot_bridge_ctrl_rst_n = rstn_i & ~slot_soft_rst_q[(i * 32) + 24];
+			wire slot_bridge_dma_rst_n = rstn_i & ~slot_soft_rst_q[(i * 32) + 25];
+			assign slot_fabric_rst_n_o[i * 4+:4] = slot_fabric_rst_n;
+			assign slot_npu_rst_n_o[i] = slot_npu_rst_n;
+			wire [31:0] slice_ctrl_awaddr;
+			wire [2:0] slice_ctrl_awprot;
+			wire slice_ctrl_awvalid;
+			wire slice_ctrl_awready;
+			wire [31:0] slice_ctrl_wdata;
+			wire [3:0] slice_ctrl_wstrb;
+			wire slice_ctrl_wvalid;
+			wire slice_ctrl_wready;
+			wire [1:0] slice_ctrl_bresp;
+			wire slice_ctrl_bvalid;
+			wire slice_ctrl_bready;
+			wire [31:0] slice_ctrl_araddr;
+			wire [2:0] slice_ctrl_arprot;
+			wire slice_ctrl_arvalid;
+			wire slice_ctrl_arready;
+			wire [31:0] slice_ctrl_rdata;
+			wire [1:0] slice_ctrl_rresp;
+			wire slice_ctrl_rvalid;
+			wire slice_ctrl_rready;
 			wire [AXI_ID_WIDTH - 1:0] slice_dma_awid;
 			wire [31:0] slice_dma_awaddr;
 			wire [7:0] slice_dma_awlen;
@@ -662,25 +684,25 @@ module efpga_connector (
 				assign slice_dma_rvalid = dma_m_rvalid[i];
 				assign dma_m_rready[i] = slice_dma_rready;
 			end
-			(* keep = "true", mark_debug = "true" *) wire [31:0] dec_ctrl_awaddr;
-			(* keep = "true", mark_debug = "true" *) wire [2:0] dec_ctrl_awprot;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_awvalid;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_awready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] dec_ctrl_wdata;
-			(* keep = "true", mark_debug = "true" *) wire [3:0] dec_ctrl_wstrb;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_wvalid;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_wready;
-			(* keep = "true", mark_debug = "true" *) wire [1:0] dec_ctrl_bresp;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_bvalid;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_bready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] dec_ctrl_araddr;
-			(* keep = "true", mark_debug = "true" *) wire [2:0] dec_ctrl_arprot;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_arvalid;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_arready;
-			(* keep = "true", mark_debug = "true" *) wire [31:0] dec_ctrl_rdata;
-			(* keep = "true", mark_debug = "true" *) wire [1:0] dec_ctrl_rresp;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_rvalid;
-			(* keep = "true", mark_debug = "true" *) wire dec_ctrl_rready;
+			wire [31:0] dec_ctrl_awaddr;
+			wire [2:0] dec_ctrl_awprot;
+			wire dec_ctrl_awvalid;
+			wire dec_ctrl_awready;
+			wire [31:0] dec_ctrl_wdata;
+			wire [3:0] dec_ctrl_wstrb;
+			wire dec_ctrl_wvalid;
+			wire dec_ctrl_wready;
+			wire [1:0] dec_ctrl_bresp;
+			wire dec_ctrl_bvalid;
+			wire dec_ctrl_bready;
+			wire [31:0] dec_ctrl_araddr;
+			wire [2:0] dec_ctrl_arprot;
+			wire dec_ctrl_arvalid;
+			wire dec_ctrl_arready;
+			wire [31:0] dec_ctrl_rdata;
+			wire [1:0] dec_ctrl_rresp;
+			wire dec_ctrl_rvalid;
+			wire dec_ctrl_rready;
 			wire [AXI_ID_WIDTH - 1:0] dec_dma_awid;
 			wire [31:0] dec_dma_awaddr;
 			wire [7:0] dec_dma_awlen;
@@ -724,7 +746,7 @@ module efpga_connector (
 					.WATCHDOG_LIMIT(WATCHDOG_LIMIT)
 				) inst_wdog_cm(
 					.clk_i(clk_i),
-					.rstn_i(rstn_i),
+					.rstn_i(slot_wdog_rst_n),
 					.awvalid(slice_ctrl_awvalid),
 					.awready(slice_ctrl_awready),
 					.awaddr(slice_ctrl_awaddr),
@@ -878,7 +900,7 @@ module efpga_connector (
 					.WATCHDOG_LIMIT(WATCHDOG_LIMIT)
 				) inst_wdog_cs(
 					.clk_i(clk_i),
-					.rstn_i(rstn_i),
+					.rstn_i(slot_wdog_rst_n),
 					.awvalid(dec_ctrl_awvalid),
 					.awready(dec_ctrl_awready),
 					.wvalid(dec_ctrl_wvalid),
@@ -906,13 +928,13 @@ module efpga_connector (
 			end
 			if (ENABLE_PMP) begin : gen_pmp
 				pmp_math #(
-					.NUM_REGIONS(NUM_REGIONS),
+					.NUM_PMP_REGIONS(NUM_PMP_REGIONS),
 					.PAGE_GRANULARITY(PAGE_GRANULARITY),
 					.MAX_ADDRESS_WIDTH(MAX_ADDRESS_WIDTH)
 				) pmp_inst(
 					.g_en_i(p_g_en[i]),
-					.base_i(p_base[32 * (i * NUM_REGIONS)+:32 * NUM_REGIONS]),
-					.limit_i(p_limit[32 * (i * NUM_REGIONS)+:32 * NUM_REGIONS]),
+					.base_i(p_base[32 * (i * NUM_PMP_REGIONS)+:32 * NUM_PMP_REGIONS]),
+					.limit_i(p_limit[32 * (i * NUM_PMP_REGIONS)+:32 * NUM_PMP_REGIONS]),
 					.awaddr_i(dec_dma_awaddr),
 					.awlen_i(dec_dma_awlen),
 					.awsize_i(dec_dma_awsize),
@@ -940,7 +962,7 @@ module efpga_connector (
 					.AXI_ID_WIDTH(AXI_ID_WIDTH)
 				) inst_wdog_dm(
 					.clk_i(clk_i),
-					.rstn_i(rstn_i),
+					.rstn_i(slot_wdog_rst_n),
 					.awvalid(dec_dma_awvalid),
 					.awready(dec_dma_awready),
 					.awid(dec_dma_awid),
@@ -986,7 +1008,7 @@ module efpga_connector (
 			if (ENABLE_BRIDGE_CTRL) begin : gen_bridge_ctrl
 				bridge_soc_to_fabric_slave bridge_ctrl_inst(
 					.clk(clk_i),
-					.resetn(rstn_i),
+					.resetn(slot_bridge_ctrl_rst_n),
 					.cfg_wb_enable(slot_wb_s_en[i]),
 					.soc_awaddr(dec_ctrl_awaddr),
 					.soc_awprot(dec_ctrl_awprot),
@@ -1052,7 +1074,7 @@ module efpga_connector (
 			if (ENABLE_BRIDGE_DMA) begin : gen_bridge_dma
 				bridge_fabric_master_to_soc #(.AXI_ID_WIDTH(AXI_ID_WIDTH)) bridge_dma_inst(
 					.clk(clk_i),
-					.resetn(rstn_i),
+					.resetn(slot_bridge_dma_rst_n),
 					.cfg_wb_enable(slot_wb_m_en[i]),
 					.fab_awid(dma_s_awid[i * AXI_ID_WIDTH+:AXI_ID_WIDTH]),
 					.fab_awaddr(dma_s_awaddr[i * 32+:32]),
@@ -1061,7 +1083,7 @@ module efpga_connector (
 					.fab_awburst(dma_s_awburst[i * 2+:2]),
 					.fab_awlock(dma_s_awlock[i]),
 					.fab_awcache(dma_s_awcache[i * 4+:4]),
-					.fab_awprot(dma_s_awprot[i * 3+:3]),
+					.fab_awprot(slot_dma_awprot_o[i * 3+:3]),
 					.fab_awvalid(dma_s_awvalid[i]),
 					.fab_awready(dma_s_awready[i]),
 					.fab_wdata(dma_s_wdata[i * 32+:32]),
@@ -1080,7 +1102,7 @@ module efpga_connector (
 					.fab_arburst(dma_s_arburst[i * 2+:2]),
 					.fab_arlock(dma_s_arlock[i]),
 					.fab_arcache(dma_s_arcache[i * 4+:4]),
-					.fab_arprot(dma_s_arprot[i * 3+:3]),
+					.fab_arprot(slot_dma_arprot_o[i * 3+:3]),
 					.fab_arvalid(dma_s_arvalid[i]),
 					.fab_arready(dma_s_arready[i]),
 					.fab_rid(dma_s_rid[i * AXI_ID_WIDTH+:AXI_ID_WIDTH]),
@@ -1134,7 +1156,7 @@ module efpga_connector (
 				assign dec_dma_awburst = dma_s_awburst[i * 2+:2];
 				assign dec_dma_awlock = dma_s_awlock[i];
 				assign dec_dma_awcache = dma_s_awcache[i * 4+:4];
-				assign dec_dma_awprot = dma_s_awprot[i * 3+:3];
+				assign dec_dma_awprot = slot_dma_awprot_o[i * 3+:3];
 				assign dec_dma_awvalid = dma_s_awvalid[i];
 				assign dma_s_awready[i] = dec_dma_awready;
 				assign dec_dma_wdata = dma_s_wdata[i * 32+:32];
@@ -1153,7 +1175,7 @@ module efpga_connector (
 				assign dec_dma_arburst = dma_s_arburst[i * 2+:2];
 				assign dec_dma_arlock = dma_s_arlock[i];
 				assign dec_dma_arcache = dma_s_arcache[i * 4+:4];
-				assign dec_dma_arprot = dma_s_arprot[i * 3+:3];
+				assign dec_dma_arprot = slot_dma_arprot_o[i * 3+:3];
 				assign dec_dma_arvalid = dma_s_arvalid[i];
 				assign dma_s_arready[i] = dec_dma_arready;
 				assign dma_s_rid[i * AXI_ID_WIDTH+:AXI_ID_WIDTH] = dec_dma_rid;
@@ -1172,7 +1194,7 @@ module efpga_connector (
 					.AXI_ID_WIDTH(AXI_ID_WIDTH)
 				) inst_wdog_ds(
 					.clk_i(clk_i),
-					.rstn_i(rstn_i),
+					.rstn_i(slot_wdog_rst_n),
 					.awvalid(slice_dma_awvalid),
 					.awready(slice_dma_awready),
 					.wvalid(slice_dma_wvalid),

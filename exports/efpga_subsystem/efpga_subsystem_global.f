@@ -101,7 +101,6 @@ RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/systolic_array.v
 RTL/eFPGA_Subsystem/NPU_complex/NPU_core/NPU_TOP/npu_top.v
 RTL/eFPGA_Subsystem/NPU_complex/NPU_complex_TOP/npu_wrapper.v
 RTL/eFPGA_Subsystem/AXI_Connector/pmp_math.v
-RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_timer.v
 RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_slave_monitor.v
 RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_master_monitor.v
 RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_slave_monitor.v
