@@ -1,5 +1,8 @@
 `timescale 1ns / 1ps
 
+(* FABulous, BelMap,
+    TIE_OFF_SKEW_EN = 0
+*)
 module NPU_CTRL_CFG_BEL #(
     parameter integer NoConfigBits = 1
 )(
