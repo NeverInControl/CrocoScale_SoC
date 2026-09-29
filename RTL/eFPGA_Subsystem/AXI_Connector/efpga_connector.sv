@@ -70,8 +70,8 @@ module efpga_connector #(
     output logic [31:0] efpga_config_data_o,
     output logic        efpga_soft_reset_o,
     input  logic        efpga_com_active_i,
-    (* keep = "true", mark_debug = "true" *) input  logic [NUM_SLOTS-1:0][31:0] slot_i_top_i,
-    (* keep = "true", mark_debug = "true" *) output logic [NUM_SLOTS-1:0][31:0] slot_o_top_o,
+    input  logic [NUM_SLOTS-1:0][31:0] slot_i_top_i,
+    output logic [NUM_SLOTS-1:0][31:0] slot_o_top_o,
 
     // Fault Interrupt Output
     output logic [NUM_SLOTS-1:0] fault_irq_o
@@ -80,8 +80,8 @@ module efpga_connector #(
     // ===================================================================
     // Internal Global Wires & Fault Aggregation
     // ===================================================================
-    (* keep = "true", mark_debug = "true" *) logic [NUM_SLOTS-1:0] dec_req, dec_force;
-    (* keep = "true", mark_debug = "true" *) logic [NUM_SLOTS-1:0] dec_is_dec, dec_host_act, dec_dma_act;
+    logic [NUM_SLOTS-1:0] dec_req, dec_force;
+    logic [NUM_SLOTS-1:0] dec_is_dec, dec_host_act, dec_dma_act;
     logic [NUM_SLOTS-1:0] pmp_r_violation, pmp_w_violation;
     logic [NUM_SLOTS-1:0] slot_wb_s_en, slot_wb_m_en; 
     logic [NUM_SLOTS-1:0] p_g_en;
@@ -145,24 +145,24 @@ module efpga_connector #(
             // -----------------------------------------------------------
             // REG SLICE INTERMEDIATE WIRES (Fabric Side of Reg Slice)
             // -----------------------------------------------------------
-            (* keep = "true", mark_debug = "true" *) logic [31:0] slice_ctrl_awaddr; 
-            (* keep = "true", mark_debug = "true" *) logic [2:0]  slice_ctrl_awprot; 
-            (* keep = "true", mark_debug = "true" *) logic        slice_ctrl_awvalid, slice_ctrl_awready;
+            logic [31:0] slice_ctrl_awaddr; 
+            logic [2:0]  slice_ctrl_awprot; 
+            logic        slice_ctrl_awvalid, slice_ctrl_awready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] slice_ctrl_wdata;  
-            (* keep = "true", mark_debug = "true" *) logic [3:0]  slice_ctrl_wstrb;  
-            (* keep = "true", mark_debug = "true" *) logic        slice_ctrl_wvalid,  slice_ctrl_wready;
+            logic [31:0] slice_ctrl_wdata;  
+            logic [3:0]  slice_ctrl_wstrb;  
+            logic        slice_ctrl_wvalid,  slice_ctrl_wready;
             
-            (* keep = "true", mark_debug = "true" *) logic [1:0]  slice_ctrl_bresp;  
-            (* keep = "true", mark_debug = "true" *) logic        slice_ctrl_bvalid, slice_ctrl_bready;
+            logic [1:0]  slice_ctrl_bresp;  
+            logic        slice_ctrl_bvalid, slice_ctrl_bready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] slice_ctrl_araddr; 
-            (* keep = "true", mark_debug = "true" *) logic [2:0]  slice_ctrl_arprot; 
-            (* keep = "true", mark_debug = "true" *) logic        slice_ctrl_arvalid, slice_ctrl_arready;
+            logic [31:0] slice_ctrl_araddr; 
+            logic [2:0]  slice_ctrl_arprot; 
+            logic        slice_ctrl_arvalid, slice_ctrl_arready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] slice_ctrl_rdata;  
-            (* keep = "true", mark_debug = "true" *) logic [1:0]  slice_ctrl_rresp;  
-            (* keep = "true", mark_debug = "true" *) logic        slice_ctrl_rvalid,  slice_ctrl_rready;
+            logic [31:0] slice_ctrl_rdata;  
+            logic [1:0]  slice_ctrl_rresp;  
+            logic        slice_ctrl_rvalid,  slice_ctrl_rready;
 
             logic [AXI_ID_WIDTH-1:0] slice_dma_awid; logic [31:0] slice_dma_awaddr; logic [7:0] slice_dma_awlen; logic [2:0] slice_dma_awsize; logic [1:0] slice_dma_awburst; 
             logic slice_dma_awlock; logic [3:0] slice_dma_awcache; logic [2:0] slice_dma_awprot; logic slice_dma_awvalid, slice_dma_awready;
@@ -264,27 +264,24 @@ module efpga_connector #(
             // -----------------------------------------------------------
             // INTERNAL WIRES: Decoupler <---> Bridges 
             // -----------------------------------------------------------
-            // -----------------------------------------------------------
-            // INTERNAL WIRES: Decoupler <---> Bridges 
-            // -----------------------------------------------------------
-            (* keep = "true", mark_debug = "true" *) logic [31:0] dec_ctrl_awaddr; 
-            (* keep = "true", mark_debug = "true" *) logic [2:0]  dec_ctrl_awprot; 
-            (* keep = "true", mark_debug = "true" *) logic        dec_ctrl_awvalid, dec_ctrl_awready;
+            logic [31:0] dec_ctrl_awaddr; 
+            logic [2:0]  dec_ctrl_awprot; 
+            logic        dec_ctrl_awvalid, dec_ctrl_awready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] dec_ctrl_wdata;  
-            (* keep = "true", mark_debug = "true" *) logic [3:0]  dec_ctrl_wstrb;  
-            (* keep = "true", mark_debug = "true" *) logic        dec_ctrl_wvalid,  dec_ctrl_wready;
+            logic [31:0] dec_ctrl_wdata;  
+            logic [3:0]  dec_ctrl_wstrb;  
+            logic        dec_ctrl_wvalid,  dec_ctrl_wready;
             
-            (* keep = "true", mark_debug = "true" *) logic [1:0]  dec_ctrl_bresp;  
-            (* keep = "true", mark_debug = "true" *) logic        dec_ctrl_bvalid, dec_ctrl_bready;
+            logic [1:0]  dec_ctrl_bresp;  
+            logic        dec_ctrl_bvalid, dec_ctrl_bready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] dec_ctrl_araddr; 
-            (* keep = "true", mark_debug = "true" *) logic [2:0]  dec_ctrl_arprot; 
-            (* keep = "true", mark_debug = "true" *) logic        dec_ctrl_arvalid, dec_ctrl_arready;
+            logic [31:0] dec_ctrl_araddr; 
+            logic [2:0]  dec_ctrl_arprot; 
+            logic        dec_ctrl_arvalid, dec_ctrl_arready;
             
-            (* keep = "true", mark_debug = "true" *) logic [31:0] dec_ctrl_rdata;  
-            (* keep = "true", mark_debug = "true" *) logic [1:0]  dec_ctrl_rresp;  
-            (* keep = "true", mark_debug = "true" *) logic        dec_ctrl_rvalid,  dec_ctrl_rready;
+            logic [31:0] dec_ctrl_rdata;  
+            logic [1:0]  dec_ctrl_rresp;  
+            logic        dec_ctrl_rvalid,  dec_ctrl_rready;
 
             logic [AXI_ID_WIDTH-1:0] dec_dma_awid; logic [31:0] dec_dma_awaddr; logic [7:0] dec_dma_awlen; logic [2:0] dec_dma_awsize; logic [1:0] dec_dma_awburst; 
             logic dec_dma_awlock; logic [3:0] dec_dma_awcache; logic [2:0] dec_dma_awprot; logic dec_dma_awvalid, dec_dma_awready;
