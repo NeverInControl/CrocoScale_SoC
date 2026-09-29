@@ -10,14 +10,18 @@ module crocoscale_soc #(
     input  logic       rstn_i,      // Raw async button
     output logic [7:0] gpio_o,      
     output logic       uart0_txd_o,
-    input  logic       uart0_rxd_i  
+    input  logic       uart0_rxd_i
+`ifdef VIVADO
+    ,
+    inout  wire  [7:0] ja           // Digilent Nexys Video PMOD Header JA
+`endif
 );
 
     // ===========================================================================
     // Global Control & Clock Generation
     // ===========================================================================
-    logic [31:0] con_gpio_out;
-    assign gpio_o = con_gpio_out[7:0];
+    logic [7:0] con_gpio_out;
+    assign gpio_o = con_gpio_out;
     
 `ifdef VIVADO
     // Emulation clock divider (100 MHz to 10 MHz) and global clock buffer for Digilent Nexys Video
@@ -181,10 +185,18 @@ module crocoscale_soc #(
     // ===========================================================================
     // Master 0: NeoRV32 CPU Complex (VHDL Blackbox via GHDL)
     // ===========================================================================
+    logic [3:0]           efpga_usr_irq;
+    logic [NUM_SLOTS-1:0] efpga_fault_irq;
+    logic [7:0]           cpu_gpio_in;
+
+    // Manager fault interrupt assigned to bit 0 (highest priority), followed by fabric user interrupts
+    assign cpu_gpio_in = {3'b000, efpga_usr_irq, |efpga_fault_irq};
+
     neorv32_axi_wrapper cpu_complex_inst (
         .clk_i         (clk_10mhz),
         .rstn_i        (sys_rstn),
         .gpio_o        (con_gpio_out),
+        .gpio_i        (cpu_gpio_in),
         .uart0_txd_o   (uart0_txd_o),
         .uart0_rxd_i   (uart0_rxd_i),
 
@@ -366,6 +378,22 @@ module crocoscale_soc #(
     endgenerate
 
     // ===========================================================================
+    // External Padring PMOD Interface (Header JA on Digilent Nexys Video)
+    // ===========================================================================
+    logic [7:0] pmod_io_i;
+    logic [7:0] pmod_io_o;
+    logic [7:0] pmod_io_oe_o;
+
+`ifdef VIVADO
+    for (genvar i = 0; i < 8; i++) begin : gen_pmod_ja
+        assign ja[i]        = pmod_io_oe_o[i] ? pmod_io_o[i] : 1'bz;
+        assign pmod_io_i[i] = ja[i];
+    end
+`else
+    assign pmod_io_i = 8'd0;
+`endif
+
+    // ===========================================================================
     // eFPGA Subsystem (Encapsulated Connector & eFPGA Fabric)
     // ===========================================================================
     efpga_subsystem_top #(
@@ -457,13 +485,13 @@ module crocoscale_soc #(
         .m_axi_dma_rready   (s_axi_rready[1 +: NUM_SLOTS]),
 
         // External Padring PMOD Interface (24 Wires)
-        .pmod_io_i          (8'd0),
-        .pmod_io_o          (),
-        .pmod_io_oe_o       (),
+        .pmod_io_i          (pmod_io_i),
+        .pmod_io_o          (pmod_io_o),
+        .pmod_io_oe_o       (pmod_io_oe_o),
 
         // Interrupt Lines to CPU / SoC (5 Lines)
-        .efpga_usr_irq_o    (),
-        .efpga_fault_irq_o  ()
+        .efpga_usr_irq_o    (efpga_usr_irq),
+        .efpga_fault_irq_o  (efpga_fault_irq)
     );
 
 endmodule

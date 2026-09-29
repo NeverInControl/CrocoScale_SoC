@@ -17,7 +17,8 @@ entity neorv32_axi_wrapper is
     rstn_i        : in  std_ulogic; -- Active-Low
     
     -- IO
-    gpio_o        : out std_ulogic_vector(31 downto 0);
+    gpio_o        : out std_ulogic_vector(7 downto 0);
+    gpio_i        : in  std_ulogic_vector(7 downto 0) := (others => '0');
     uart0_txd_o   : out std_ulogic;
     uart0_rxd_i   : in  std_ulogic;
 
@@ -60,7 +61,9 @@ end entity;
 
 architecture rtl of neorv32_axi_wrapper is
 
-  -- Internal XBUS signals
+  -- Internal GPIO and XBUS signals
+  signal con_gpio_in  : std_ulogic_vector(31 downto 0);
+  signal con_gpio_out : std_ulogic_vector(31 downto 0);
   signal xbus_adr     : std_ulogic_vector(31 downto 0);
   signal xbus_dat_c2b : std_ulogic_vector(31 downto 0);
   signal xbus_dat_b2c : std_ulogic_vector(31 downto 0);
@@ -74,6 +77,9 @@ architecture rtl of neorv32_axi_wrapper is
   signal xbus_err     : std_ulogic;
 
 begin
+
+  con_gpio_in <= (31 downto 8 => '0', 7 downto 0 => gpio_i);
+  gpio_o      <= con_gpio_out(7 downto 0);
 
   -- -------------------------------------------------------------------------------------------
   -- NeoRV32 CPU Instantiation
@@ -98,7 +104,8 @@ begin
     clk_i       => clk_i,
     rstn_i      => rstn_i,
     
-    gpio_o      => gpio_o,
+    gpio_o      => con_gpio_out,
+    gpio_i      => con_gpio_in,
     uart0_txd_o => uart0_txd_o,
     uart0_rxd_i => uart0_rxd_i,
     
