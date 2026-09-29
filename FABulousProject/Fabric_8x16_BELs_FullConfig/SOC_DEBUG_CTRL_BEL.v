@@ -1,5 +1,11 @@
 `timescale 1ns / 1ps
 
+(* FABulous, BelMap,
+    INV_RESET  = 0,
+    INV_IRQ    = 1,
+    BYPASS_RST = 2,
+    BYPASS_IRQ = 3
+*)
 module SOC_DEBUG_CTRL_BEL #(
     parameter integer NoConfigBits = 4
 )(

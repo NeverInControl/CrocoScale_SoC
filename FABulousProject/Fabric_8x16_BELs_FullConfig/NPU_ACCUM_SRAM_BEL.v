@@ -1,5 +1,15 @@
 `timescale 1ns / 1ps
 
+(* FABulous, BelMap,
+    WRITE_LOCK   = 0,
+    WRITE_LOCK_1 = 1,
+    WRITE_LOCK_2 = 2,
+    WRITE_LOCK_3 = 3,
+    WRITE_LOCK_4 = 4,
+    WRITE_LOCK_5 = 5,
+    WRITE_LOCK_6 = 6,
+    WRITE_LOCK_7 = 7
+*)
 module NPU_ACCUM_SRAM_BEL #(
     parameter integer NoConfigBits = 8
 )(

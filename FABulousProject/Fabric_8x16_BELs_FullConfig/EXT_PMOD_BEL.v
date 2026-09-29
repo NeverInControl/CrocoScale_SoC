@@ -1,5 +1,20 @@
 `timescale 1ns / 1ps
 
+(* FABulous, BelMap,
+    BYPASS_IN_REG  = 0,
+    BYPASS_OUT_REG = 1,
+    TIE_OFF_OE     = 2,
+    STATIC_OE      = 3,
+    STATIC_OE_1    = 4,
+    STATIC_OE_2    = 5,
+    STATIC_OE_3    = 6,
+    STATIC_OE_4    = 7,
+    STATIC_OE_5    = 8,
+    STATIC_OE_6    = 9,
+    STATIC_OE_7    = 10,
+    OPEN_DRAIN_EN  = 11,
+    LOOPBACK_EN    = 12
+*)
 module EXT_PMOD_BEL #(
     parameter integer NoConfigBits = 13
 )(

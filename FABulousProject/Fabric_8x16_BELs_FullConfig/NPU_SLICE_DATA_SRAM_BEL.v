@@ -1,5 +1,13 @@
 `timescale 1ns / 1ps
 
+(* FABulous, BelMap,
+    FORCE_ZERO_XBAR   = 0,
+    STATIC_XBAR_EN    = 1,
+    STATIC_XBAR_VAL   = 2,
+    STATIC_XBAR_VAL_1 = 3,
+    STATIC_XBAR_VAL_2 = 4,
+    WRITE_LOCK        = 5
+*)
 module NPU_SLICE_DATA_SRAM_BEL #(
     parameter integer NoConfigBits = 6
 )(
