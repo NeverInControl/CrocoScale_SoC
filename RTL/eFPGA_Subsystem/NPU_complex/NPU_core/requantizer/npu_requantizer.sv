@@ -7,9 +7,9 @@ module npu_requantizer #(
     parameter int ACTIVATION_WIDTH = 8,
     parameter bit ENABLE_LFSR      = 0,
 
-    localparam int PROD_WIDTH      = PSUM_WIDTH + SCALE_WIDTH,                    // 64 bits
+    localparam int PROD_WIDTH      = PSUM_WIDTH + SCALE_WIDTH,                    // 48 bits
     localparam int SHIFT_WIDTH     = $clog2(PROD_WIDTH),                          // 6 bits (0..63)
-    localparam int CFG_WIDTH       = SCALE_WIDTH + SHIFT_WIDTH + ACTIVATION_WIDTH // 32 + 6 + 8 = 46 bits
+    localparam int CFG_WIDTH       = SCALE_WIDTH + SHIFT_WIDTH + ACTIVATION_WIDTH // 16 + 6 + 8 = 30 bits
 )(
     input  wire                                                      clk_i,
     input  wire                                                      rst_n,
@@ -17,7 +17,7 @@ module npu_requantizer #(
     // Vectorized Accumulator Inputs
     input  wire signed [CHANNELS-1:0][PSUM_WIDTH-1:0]               psum_in,
 
-    // Exact-Width Configuration Shift Interface (46 bits per channel)
+    // Exact-Width Configuration Shift Interface (30 bits per channel)
     input  wire        [CFG_WIDTH-1:0]                               quant_shift_in,
     input  wire                                                      quant_shift_en,
 
@@ -30,7 +30,7 @@ module npu_requantizer #(
 );
 
     // -------------------------------------------------------------------------
-    // 1. Exact 46-bit Configuration Shift Chain
+    // 1. Exact Configuration Shift Chain (30 bits per channel)
     // -------------------------------------------------------------------------
     reg [CFG_WIDTH-1:0] quant_cfg_chain [0:CHANNELS-1];
 
@@ -70,7 +70,7 @@ module npu_requantizer #(
     endgenerate
 
     // -------------------------------------------------------------------------
-    // 3. Requantizer Lanes (Unpack Exact 46-bit Bitfields: [31:0], [37:32], [45:38])
+    // 3. Requantizer Lanes (Unpack Exact Bitfields: [15:0], [21:16], [29:22])
     // -------------------------------------------------------------------------
     genvar c;
     generate
@@ -88,9 +88,9 @@ module npu_requantizer #(
                 assign rotated_noise = '0;
             end
 
-            wire signed [SCALE_WIDTH-1:0]      lane_m0    = quant_cfg_chain[c][SCALE_WIDTH-1 : 0];                          // [31:0]
-            wire        [SHIFT_WIDTH-1:0]      lane_shift = quant_cfg_chain[c][SCALE_WIDTH+SHIFT_WIDTH-1 : SCALE_WIDTH];  // [37:32]
-            wire signed [ACTIVATION_WIDTH-1:0] lane_zp    = quant_cfg_chain[c][CFG_WIDTH-1 : SCALE_WIDTH+SHIFT_WIDTH];    // [45:38]
+            wire signed [SCALE_WIDTH-1:0]      lane_m0    = quant_cfg_chain[c][SCALE_WIDTH-1 : 0];                          // [15:0]
+            wire        [SHIFT_WIDTH-1:0]      lane_shift = quant_cfg_chain[c][SCALE_WIDTH+SHIFT_WIDTH-1 : SCALE_WIDTH];  // [21:16]
+            wire signed [ACTIVATION_WIDTH-1:0] lane_zp    = quant_cfg_chain[c][CFG_WIDTH-1 : SCALE_WIDTH+SHIFT_WIDTH];    // [29:22]
 
             npu_requantizer_lane #(
                 .PSUM_WIDTH      (PSUM_WIDTH),

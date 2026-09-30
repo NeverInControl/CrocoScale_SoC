@@ -1,5 +1,5 @@
 RTL/eFPGA_Subsystem/NPU_complex/sram/sram_bank.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_prng_16bit.sv
+RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_prng.sv
 RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer_lane.sv
 RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer.sv
 RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/pe.sv
