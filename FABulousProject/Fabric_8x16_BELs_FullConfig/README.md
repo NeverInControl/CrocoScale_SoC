@@ -11,7 +11,7 @@ The core fabric consists of a matrix of **9 CLBs wide** and **16 CLBs high** (9 
               +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
    NORTH EDGE |          EXT_PMOD_BEL         |       NPU_CTRL_CFG_BEL        |                             NPU_ACCUM_SRAM_BEL (Bank A)                       |
               |            (2 Cols)           |           (2 Cols)            |                 (5 Cols - Stretched, Graded: Dense Center, Light Corner)      |
-              |  [Light NW]   |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
+              |               |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
               +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
 Row 0 [Light] |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [0]
 Row 1         |                                                                                                                                               | (2 rows high)
@@ -32,7 +32,7 @@ Row 15[Light] |                                                                 
               +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
    SOUTH EDGE | SOC_DEBUG_    | SOC_DEBUG_    | SOC_DEBUG_    | SOC_DEBUG_    |                             NPU_ACCUM_SRAM_BEL (Bank B)                       |
               | CTRL_BEL [0]  | CTRL_BEL [1]  | CTRL_BEL [2]  | CTRL_BEL [3]  |                 (5 Cols - Stretched, Graded: Dense Center, Light Corner)      |
-              |  [Light SW]   |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
+              |               |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
               +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
 ```
 
