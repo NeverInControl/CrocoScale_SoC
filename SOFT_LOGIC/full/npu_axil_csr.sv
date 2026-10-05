@@ -13,7 +13,7 @@
  * =============================================================================================== */
 
 module npu_axil_csr #(
-    parameter int AXI_ADDR_WIDTH = 32,
+    parameter int AXI_ADDR_WIDTH = 10,
     parameter int AXI_DATA_WIDTH = 32
 )(
     input  wire                      clk_i,
@@ -63,17 +63,17 @@ module npu_axil_csr #(
     input  wire                      irq_pulse_i
 );
 
-    // Register Offsets
-    localparam [7:0] REG_OFFSET_CTRL        = 8'h00;
-    localparam [7:0] REG_OFFSET_STATUS      = 8'h04;
-    localparam [7:0] REG_OFFSET_CONFIG      = 8'h08;
-    localparam [7:0] REG_OFFSET_IRQ_STATUS  = 8'h0C;
-    localparam [7:0] REG_OFFSET_ACT_BASE    = 8'h10;
-    localparam [7:0] REG_OFFSET_WEIGHT_BASE = 8'h14;
-    localparam [7:0] REG_OFFSET_OUT_BASE    = 8'h18;
-    localparam [7:0] REG_OFFSET_BIAS_BASE   = 8'h1C;
-    localparam [7:0] REG_OFFSET_QUANT_BASE  = 8'h20;
-    localparam [7:0] REG_OFFSET_LUT_BASE    = 8'h24;
+    // Register Word Indices (addr[5:2])
+    localparam [3:0] REG_IDX_CTRL        = 4'd0;
+    localparam [3:0] REG_IDX_STATUS      = 4'd1;
+    localparam [3:0] REG_IDX_CONFIG      = 4'd2;
+    localparam [3:0] REG_IDX_IRQ_STATUS  = 4'd3;
+    localparam [3:0] REG_IDX_ACT_BASE    = 4'd4;
+    localparam [3:0] REG_IDX_WEIGHT_BASE = 4'd5;
+    localparam [3:0] REG_IDX_OUT_BASE    = 4'd6;
+    localparam [3:0] REG_IDX_BIAS_BASE   = 4'd7;
+    localparam [3:0] REG_IDX_QUANT_BASE  = 4'd8;
+    localparam [3:0] REG_IDX_LUT_BASE    = 4'd9;
 
     // Lean Storage Registers
     logic        reg_soft_reset;
@@ -84,21 +84,22 @@ module npu_axil_csr #(
     logic [7:0]  reg_total_passes;
     logic        reg_irq_status;
     logic        reg_done;
-    logic [31:0] reg_act_base;
-    logic [31:0] reg_weight_base;
-    logic [31:0] reg_out_base;
-    logic [31:0] reg_bias_base;
-    logic [31:0] reg_quant_base;
-    logic [31:0] reg_lut_base;
+    logic [11:0] reg_ram_base_high;
+    logic [19:0] reg_act_base;
+    logic [19:0] reg_weight_base;
+    logic [19:0] reg_out_base;
+    logic [19:0] reg_bias_base;
+    logic [19:0] reg_quant_base;
+    logic [19:0] reg_lut_base;
 
     // Continuous Assignments for Decoded Configuration
     assign config_o      = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
-    assign act_base_o    = reg_act_base;
-    assign weight_base_o = reg_weight_base;
-    assign out_base_o    = reg_out_base;
-    assign bias_base_o   = reg_bias_base;
-    assign quant_base_o  = reg_quant_base;
-    assign lut_base_o    = reg_lut_base;
+    assign act_base_o    = {reg_ram_base_high, reg_act_base};
+    assign weight_base_o = {reg_ram_base_high, reg_weight_base};
+    assign out_base_o    = {reg_ram_base_high, reg_out_base};
+    assign bias_base_o   = {reg_ram_base_high, reg_bias_base};
+    assign quant_base_o  = {reg_ram_base_high, reg_quant_base};
+    assign lut_base_o    = {reg_ram_base_high, reg_lut_base};
     assign soft_reset_o  = reg_soft_reset;
     assign usr_irq_o     = {3'b000, irq_pulse_i};
 
@@ -121,12 +122,13 @@ module npu_axil_csr #(
             reg_total_passes    <= 8'd0;
             reg_irq_status      <= 1'b0;
             reg_done            <= 1'b0;
-            reg_act_base        <= 32'h0000_1000;
-            reg_weight_base     <= 32'h0000_2000;
-            reg_out_base        <= 32'h0000_3000;
-            reg_bias_base       <= 32'h0000_4000;
-            reg_quant_base      <= 32'h0000_5000;
-            reg_lut_base        <= 32'h0000_6000;
+            reg_ram_base_high   <= 12'h000;
+            reg_act_base        <= 20'h0_1000;
+            reg_weight_base     <= 20'h0_2000;
+            reg_out_base        <= 20'h0_3000;
+            reg_bias_base       <= 20'h0_4000;
+            reg_quant_base      <= 20'h0_5000;
+            reg_lut_base        <= 20'h0_6000;
         end else begin
             start_pulse_o       <= 1'b0;
             start_drain_pulse_o <= 1'b0;
@@ -137,8 +139,8 @@ module npu_axil_csr #(
 
             if (write_req && !s_axil_bvalid) begin
                 s_axil_bvalid <= 1'b1;
-                case (s_axil_awaddr[7:0])
-                    REG_OFFSET_CTRL: begin
+                case (s_axil_awaddr[5:2])
+                    REG_IDX_CTRL: begin
                         if (s_axil_wdata[0]) begin
                             start_pulse_o <= 1'b1;
                             reg_done      <= 1'b0;
@@ -154,22 +156,40 @@ module npu_axil_csr #(
                             reg_done            <= 1'b0;
                         end
                     end
-                    REG_OFFSET_CONFIG: begin
+                    REG_IDX_CONFIG: begin
                         reg_auto_drain   <= s_axil_wdata[0];
                         reg_mode_1x1     <= s_axil_wdata[4];
                         reg_lut_en       <= s_axil_wdata[5];
                         reg_pool_en      <= s_axil_wdata[6];
                         reg_total_passes <= s_axil_wdata[15:8];
                     end
-                    REG_OFFSET_IRQ_STATUS: begin
+                    REG_IDX_IRQ_STATUS: begin
                         if (s_axil_wdata[0]) reg_irq_status <= 1'b0;
                     end
-                    REG_OFFSET_ACT_BASE:    reg_act_base    <= s_axil_wdata;
-                    REG_OFFSET_WEIGHT_BASE: reg_weight_base <= s_axil_wdata;
-                    REG_OFFSET_OUT_BASE:    reg_out_base    <= s_axil_wdata;
-                    REG_OFFSET_BIAS_BASE:   reg_bias_base   <= s_axil_wdata;
-                    REG_OFFSET_QUANT_BASE:  reg_quant_base  <= s_axil_wdata;
-                    REG_OFFSET_LUT_BASE:    reg_lut_base    <= s_axil_wdata;
+                    REG_IDX_ACT_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_act_base      <= s_axil_wdata[19:0];
+                    end
+                    REG_IDX_WEIGHT_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_weight_base   <= s_axil_wdata[19:0];
+                    end
+                    REG_IDX_OUT_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_out_base      <= s_axil_wdata[19:0];
+                    end
+                    REG_IDX_BIAS_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_bias_base     <= s_axil_wdata[19:0];
+                    end
+                    REG_IDX_QUANT_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_quant_base    <= s_axil_wdata[19:0];
+                    end
+                    REG_IDX_LUT_BASE: begin
+                        reg_ram_base_high <= s_axil_wdata[31:20];
+                        reg_lut_base      <= s_axil_wdata[19:0];
+                    end
                     default: ;
                 endcase
             end else if (s_axil_bvalid && s_axil_bready) begin
@@ -181,12 +201,12 @@ module npu_axil_csr #(
     // Combinational Read Channel Multiplexing (Pruned readback of write-only base pointers)
     logic [31:0] rdata_comb;
     always_comb begin
-        case (s_axil_araddr[7:0])
-            REG_OFFSET_CTRL:       rdata_comb = {30'b0, reg_soft_reset, 1'b0};
-            REG_OFFSET_STATUS:     rdata_comb = {30'b0, reg_done, fsm_busy_i};
-            REG_OFFSET_CONFIG:     rdata_comb = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
-            REG_OFFSET_IRQ_STATUS: rdata_comb = {31'b0, reg_irq_status};
-            default:               rdata_comb = 32'd0;
+        case (s_axil_araddr[5:2])
+            REG_IDX_CTRL:       rdata_comb = {30'b0, reg_soft_reset, 1'b0};
+            REG_IDX_STATUS:     rdata_comb = {30'b0, reg_done, fsm_busy_i};
+            REG_IDX_CONFIG:     rdata_comb = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
+            REG_IDX_IRQ_STATUS: rdata_comb = {31'b0, reg_irq_status};
+            default:            rdata_comb = 32'd0;
         endcase
     end
 

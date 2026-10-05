@@ -28,6 +28,7 @@ module npu_full_controller #(
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
     parameter int WEIGHT_SPLIT     = 2,
+    parameter int AXIL_ADDR_WIDTH  = 10,
     parameter int AXI_ADDR_WIDTH   = 32,
     parameter int AXI_DATA_WIDTH   = 32,
     parameter int TOTAL_PASSES     = 144,
@@ -38,7 +39,7 @@ module npu_full_controller #(
     input  wire                                                          rst_n,
 
     // CPU Control: AXI4-Lite Slave Interface
-    input  wire        [AXI_ADDR_WIDTH-1:0]                              s_axil_awaddr,
+    input  wire        [AXIL_ADDR_WIDTH-1:0]                             s_axil_awaddr,
     input  wire        [2:0]                                             s_axil_awprot,
     input  wire                                                          s_axil_awvalid,
     output wire                                                          s_axil_awready,
@@ -52,7 +53,7 @@ module npu_full_controller #(
     output wire                                                          s_axil_bvalid,
     input  wire                                                          s_axil_bready,
 
-    input  wire        [AXI_ADDR_WIDTH-1:0]                              s_axil_araddr,
+    input  wire        [AXIL_ADDR_WIDTH-1:0]                             s_axil_araddr,
     input  wire        [2:0]                                             s_axil_arprot,
     input  wire                                                          s_axil_arvalid,
     output wire                                                          s_axil_arready,
@@ -63,15 +64,12 @@ module npu_full_controller #(
     input  wire                                                          s_axil_rready,
 
     // Memory Dataflow: AXI4 Full Master Interface
-    output wire        [AXI_ADDR_WIDTH-1:0]                              m_axi_awaddr,
+    output wire        [31:0]                                            m_axi_awaddr,
     output wire        [7:0]                                             m_axi_awlen,
-    output wire        [2:0]                                             m_axi_awsize,
-    output wire        [1:0]                                             m_axi_awburst,
     output wire                                                          m_axi_awvalid,
     input  wire                                                          m_axi_awready,
 
     output wire        [AXI_DATA_WIDTH-1:0]                              m_axi_wdata,
-    output wire        [(AXI_DATA_WIDTH/8)-1:0]                          m_axi_wstrb,
     output wire                                                          m_axi_wlast,
     output wire                                                          m_axi_wvalid,
     input  wire                                                          m_axi_wready,
@@ -80,10 +78,8 @@ module npu_full_controller #(
     input  wire                                                          m_axi_bvalid,
     output wire                                                          m_axi_bready,
 
-    output wire        [AXI_ADDR_WIDTH-1:0]                              m_axi_araddr,
+    output wire        [31:0]                                            m_axi_araddr,
     output wire        [7:0]                                             m_axi_arlen,
-    output wire        [2:0]                                             m_axi_arsize,
-    output wire        [1:0]                                             m_axi_arburst,
     output wire                                                          m_axi_arvalid,
     input  wire                                                          m_axi_arready,
 
@@ -97,17 +93,15 @@ module npu_full_controller #(
     output wire                                                          npu_array_en,
     output wire                                                          npu_psum_systolic_en,
     output wire                                                          npu_psum_lut_en,
-    output wire                                                          npu_psum_skew_en,
     output wire                                                          npu_compute_bank_swap,
     output wire        [ARRAY_HEIGHT-1:0][3:0]                           npu_crossbar_sel,
 
     output wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0]              npu_weight_shift_in,
-    output wire        [WEIGHT_SPLIT-1:0]                                npu_weight_shift_en,
+    output wire        [ARRAY_HEIGHT-1:0]                                npu_weight_shift_en,
     output wire                                                          npu_swap_weights,
 
     output wire        [29:0]                                            npu_quant_shift_in,
     output wire                                                          npu_quant_shift_en,
-    output wire                                                          npu_stochastic_round_en,
 
     output wire        [7:0]                                             npu_psum_A_addr,
     output wire        [ARRAY_WIDTH-1:0]                                 npu_psum_A_we,
@@ -153,7 +147,7 @@ module npu_full_controller #(
     wire [8:0]  cycle_in_pass;
     wire [ARRAY_HEIGHT-1:0][8:0] seq_act_sram_addr;
     wire [ARRAY_HEIGHT-1:0]      seq_act_sram_we;
-    wire [1:0]  seq_weight_shift_en;
+    wire [ARRAY_HEIGHT-1:0] seq_weight_shift_en;
     wire        seq_swap_weights;
     wire [2:0]  seq_weight_shift_step;
     wire [7:0]  seq_psum_A_addr;
@@ -176,7 +170,7 @@ module npu_full_controller #(
     wire        dma_drain_done;
     wire [7:0]  dma_drain_psum_addr;
     wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0] dma_weight_shift_in;
-    wire [1:0]  dma_weight_shift_en;
+    wire [ARRAY_HEIGHT-1:0] dma_weight_shift_en;
     wire signed [PSUM_WIDTH-1:0] dma_bias_wdata;
     wire [2:0]  dma_bias_channel;
     wire        dma_bias_we;
@@ -186,7 +180,6 @@ module npu_full_controller #(
 
     assign npu_psum_A_read_bank_sel = 3'd0;
     assign npu_psum_B_read_bank_sel = 3'd0;
-    assign npu_stochastic_round_en  = 1'b0;
 
     assign npu_ext_act_sram_we   = seq_act_sram_we;
     assign npu_ext_act_sram_addr = seq_act_sram_addr;
@@ -226,7 +219,7 @@ module npu_full_controller #(
 
     // 1. AXI-Lite Register File with Contiguous Base Pointers
     npu_axil_csr #(
-        .AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
+        .AXI_ADDR_WIDTH(AXIL_ADDR_WIDTH),
         .AXI_DATA_WIDTH(AXI_DATA_WIDTH)
     ) regs_inst (
         .clk_i         (clk_i),
@@ -292,7 +285,6 @@ module npu_full_controller #(
         .array_en_o           (npu_array_en),
         .psum_systolic_en_o   (npu_psum_systolic_en),
         .psum_lut_en_o        (npu_psum_lut_en),
-        .psum_skew_en_o       (npu_psum_skew_en),
         .compute_bank_swap_o  (npu_compute_bank_swap),
         .crossbar_sel_o       (npu_crossbar_sel),
         .act_sram_addr_o      (seq_act_sram_addr),
@@ -328,12 +320,9 @@ module npu_full_controller #(
         .rst_n               (rst_n && !soft_reset),
         .m_axi_awaddr        (m_axi_awaddr),
         .m_axi_awlen         (m_axi_awlen),
-        .m_axi_awsize        (m_axi_awsize),
-        .m_axi_awburst       (m_axi_awburst),
         .m_axi_awvalid       (m_axi_awvalid),
         .m_axi_awready       (m_axi_awready),
         .m_axi_wdata         (m_axi_wdata),
-        .m_axi_wstrb         (m_axi_wstrb),
         .m_axi_wlast         (m_axi_wlast),
         .m_axi_wvalid        (m_axi_wvalid),
         .m_axi_wready        (m_axi_wready),
@@ -342,8 +331,6 @@ module npu_full_controller #(
         .m_axi_bready        (m_axi_bready),
         .m_axi_araddr        (m_axi_araddr),
         .m_axi_arlen         (m_axi_arlen),
-        .m_axi_arsize        (m_axi_arsize),
-        .m_axi_arburst       (m_axi_arburst),
         .m_axi_arvalid       (m_axi_arvalid),
         .m_axi_arready       (m_axi_arready),
         .m_axi_rdata         (m_axi_rdata),

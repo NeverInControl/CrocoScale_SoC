@@ -118,19 +118,17 @@ SystemVerilog testbenches loading reference vectors via `$readmemh` face executi
 ### Multi-Tier Dynamic Path Resolution:
 Rather than copying `.mem` files into the Vivado project or hardcoding machine-specific paths into Git, testbenches probe paths dynamically:
 1. Command-line plusarg: `+MEM_DIR=<path>`
-2. Local working directory: `./` (standard when running directly inside `GoldenReference/`)
-3. Relative path: `../GoldenReference/` (standard when running from `TestBenches/`)
-4. Root path: `TEST/NPU/GoldenReference/` (standard when running from repo root)
+2. Root path: `TEST/GoldenReference/` (standard fallback when running from repo root)
 
 ### Dynamic Vivado Integration (Zero Git Leaks):
 In Vivado, pass the path dynamically to XSim by querying the repository layout at runtime:
 ```tcl
-# Automatically resolve GoldenReference for whichever testbench is currently set as sim top:
-set top_name [get_property top [get_filesets sim_1]]
-set tb_file [get_property NAME [get_files -quiet "*${top_name}.sv"]]
-if {$tb_file eq ""} { set tb_file [lindex [get_files -quiet *tb_npu_*.sv] 0] }
-if {$tb_file ne ""} {
-    set golden_dir [file normalize "[file dirname $tb_file]/../GoldenReference"]
+# Automatically resolve unified GoldenReference for simulation:
+set sim_files [get_files -quiet *tb_npu_*.sv]
+if {[llength $sim_files] > 0} {
+    set tb_file [lindex $sim_files 0]
+    set repo_root [file normalize "[file dirname $tb_file]/../../.."]
+    set golden_dir [file normalize "$repo_root/TEST/GoldenReference"]
     set_property -dict [list xsim.simulate.xsim.more_options "-testplusarg MEM_DIR=$golden_dir"] [get_filesets sim_1]
 }
 ```

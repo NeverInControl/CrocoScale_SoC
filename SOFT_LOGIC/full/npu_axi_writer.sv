@@ -29,14 +29,11 @@ module npu_axi_writer #(
     // AXI Write Address Channel (AW)
     output logic [31:0] awaddr_o,
     output logic [7:0]  awlen_o,
-    output logic [2:0]  awsize_o,
-    output logic [1:0]  awburst_o,
     output logic        awvalid_o,
     input  wire         awready_i,
 
     // AXI Write Data Channel (W)
     output logic [31:0] wdata_o,
-    output logic [3:0]  wstrb_o,
     output logic        wlast_o,
     output logic        wvalid_o,
     input  wire         wready_i,
@@ -57,12 +54,14 @@ module npu_axi_writer #(
         PIPE_2         = 4'd4,
         PIPE_3         = 4'd5,
         PIPE_4         = 4'd6,
-        WRITE_W        = 4'd7,
-        WAIT_B         = 4'd8,
-        DONE           = 4'd9,
-        WAIT_START_LOW = 4'd10,
-        POOL_STREAM    = 4'd11,
-        POOL_FLUSH     = 4'd12
+        PIPE_5         = 4'd7,
+        PIPE_6         = 4'd8,
+        WRITE_W        = 4'd9,
+        WAIT_B         = 4'd10,
+        DONE           = 4'd11,
+        WAIT_START_LOW = 4'd12,
+        POOL_STREAM    = 4'd13,
+        POOL_FLUSH     = 4'd14
     } state_t;
 
     state_t state;
@@ -73,16 +72,15 @@ module npu_axi_writer #(
     // MaxPool / Unpooled Shared Holding Registers
     logic [4:0] stream_cnt;
     logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] max_accum;
-    logic [31:0] lat_upper;
 
     wire axi_w_stall   = wvalid_o && !wready_i;
-    wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd5 : 6'd4);
+    wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd7 : 6'd6);
 
     function automatic logic signed [ACTIVATION_WIDTH-1:0] signed_max(
         input logic signed [ACTIVATION_WIDTH-1:0] a,
         input logic signed [ACTIVATION_WIDTH-1:0] b
     );
-        return ($signed(a) > $signed(b)) ? a : b;
+        signed_max = ($signed(a) > $signed(b)) ? a : b;
     endfunction
 
     logic signed [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0] next_max;
@@ -94,11 +92,8 @@ module npu_axi_writer #(
 
     wire [7:0] burst_base_p = {drain_burst_idx[4:0], 3'b000}; // burst_idx * 8
 
-    assign awaddr_o  = out_base_i + {19'd0, drain_burst_idx, 6'b000000}; // burst_idx * 64
+    assign awaddr_o  = {out_base_i[31:20], (out_base_i[19:6] + {8'd0, drain_burst_idx}), 6'b000000};
     assign awlen_o   = 8'd15;  // 16 beats = 64 bytes = 8 pixels
-    assign awsize_o  = 3'b010; // 4 bytes
-    assign awburst_o = 2'b01;  // INCR
-    assign wstrb_o   = 4'hF;
 
     always_ff @(posedge clk_i) begin
         if (!rst_n) begin
@@ -108,7 +103,6 @@ module npu_axi_writer #(
             drain_psum_addr_o <= '0;
             stream_cnt        <= '0;
             max_accum         <= '0;
-            lat_upper         <= '0;
             done_o            <= 1'b0;
 
             awvalid_o         <= 1'b0;
@@ -169,28 +163,44 @@ module npu_axi_writer #(
                 PIPE_2: begin
                     if (pool_en_i) begin
                         drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, 3'd0, 1'b1};
-                        if (!lut_en_i) begin
-                            state <= POOL_STREAM;
-                        end else begin
-                            state <= PIPE_3;
-                        end
-                    end else begin
-                        state <= PIPE_3;
                     end
+                    state <= PIPE_3;
                 end
 
                 PIPE_3: begin
                     if (pool_en_i) begin
                         drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd1, 1'b0};
-                        state             <= POOL_STREAM;
                     end else begin
                         drain_psum_addr_o <= {burst_base_p[7:3], 3'b010};
-                        state             <= PIPE_4;
                     end
+                    state <= PIPE_4;
                 end
 
                 PIPE_4: begin
-                    lat_upper    <= {npu_out_act_i[7], npu_out_act_i[6], npu_out_act_i[5], npu_out_act_i[4]};
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b0, 3'd1, 1'b1};
+                        if (!lut_en_i) begin
+                            state <= POOL_STREAM;
+                        end else begin
+                            state <= PIPE_5;
+                        end
+                    end else begin
+                        state <= PIPE_5;
+                    end
+                end
+
+                PIPE_5: begin
+                    if (pool_en_i) begin
+                        drain_psum_addr_o <= {drain_burst_idx[2:0], 1'b1, 3'd1, 1'b0};
+                        state             <= POOL_STREAM;
+                    end else begin
+                        drain_psum_addr_o <= {burst_base_p[7:3], 3'b011};
+                        state             <= PIPE_6;
+                    end
+                end
+
+                PIPE_6: begin
+                    max_accum    <= npu_out_act_i;
                     wdata_o      <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
                     wvalid_o     <= 1'b1;
                     wlast_o      <= 1'b0;
@@ -209,15 +219,15 @@ module npu_axi_writer #(
                             drain_w_beat <= drain_w_beat + 1'b1;
 
                             if (drain_w_beat[0] == 1'b0) begin
-                                wdata_o <= lat_upper;
+                                wdata_o <= {max_accum[7], max_accum[6], max_accum[5], max_accum[4]};
                                 if (drain_w_beat == 5'd14) begin
                                     wlast_o <= 1'b1;
                                 end
-                                if (drain_w_beat <= 5'd8) begin
-                                    drain_psum_addr_o <= burst_base_p + 8'(drain_w_beat[4:1]) + 8'd3;
+                                if (drain_w_beat <= 5'd6) begin
+                                    drain_psum_addr_o <= burst_base_p + 8'(drain_w_beat[4:1]) + 8'd4;
                                 end
                             end else begin
-                                lat_upper <= {npu_out_act_i[7], npu_out_act_i[6], npu_out_act_i[5], npu_out_act_i[4]};
+                                max_accum <= npu_out_act_i;
                                 wdata_o   <= {npu_out_act_i[3], npu_out_act_i[2], npu_out_act_i[1], npu_out_act_i[0]};
                             end
                         end
@@ -236,7 +246,7 @@ module npu_axi_writer #(
                             2'd0: begin
                                 max_accum <= npu_out_act_i;
                                 if (stream_cnt > 5'd0) begin
-                                    wdata_o      <= lat_upper;
+                                    wdata_o      <= {max_accum[7], max_accum[6], max_accum[5], max_accum[4]};
                                     wvalid_o     <= 1'b1;
                                     drain_w_beat <= drain_w_beat + 1'b1;
                                 end
@@ -253,7 +263,7 @@ module npu_axi_writer #(
 
                             2'd3: begin
                                 wdata_o      <= {next_max[3], next_max[2], next_max[1], next_max[0]};
-                                lat_upper    <= {next_max[7], next_max[6], next_max[5], next_max[4]};
+                                max_accum    <= next_max;
                                 wvalid_o     <= 1'b1;
                                 drain_w_beat <= drain_w_beat + 1'b1;
                                 if (stream_cnt == 5'd31) begin
@@ -272,7 +282,7 @@ module npu_axi_writer #(
                             bready_o <= 1'b1;
                             state    <= WAIT_B;
                         end else begin
-                            wdata_o      <= lat_upper;
+                            wdata_o      <= {max_accum[7], max_accum[6], max_accum[5], max_accum[4]};
                             wvalid_o     <= 1'b1;
                             wlast_o      <= 1'b1;
                             drain_w_beat <= drain_w_beat + 1'b1;

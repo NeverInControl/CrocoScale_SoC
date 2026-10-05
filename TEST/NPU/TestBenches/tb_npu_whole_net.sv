@@ -129,7 +129,7 @@ module tb_npu_whole_net;
 
         // 2. Fallback to single standard default path
         if (!found) begin
-            mem_dir = "TEST/NPU/GoldenReference/";
+            mem_dir = "TEST/GoldenReference/";
             fd = $fopen({mem_dir, sample_file}, "r");
             if (fd != 0) begin $fclose(fd); found = 1; end
         end
@@ -138,7 +138,7 @@ module tb_npu_whole_net;
         if (!found) begin
             $display("\n=====================================================================================");
             $display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
-            $display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+            $display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
             $display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
             $display("=====================================================================================");
             $fatal(1, "Aborting simulation due to missing test vector files.");

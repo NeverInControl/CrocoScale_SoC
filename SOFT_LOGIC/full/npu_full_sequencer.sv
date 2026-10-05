@@ -45,7 +45,6 @@ module npu_full_sequencer #(
     output logic                                 array_en_o,
     output logic                                 psum_systolic_en_o,
     output logic                                 psum_lut_en_o,
-    output logic                                 psum_skew_en_o,
     output logic                                 compute_bank_swap_o,
 
     // Crossbar selection per systolic row
@@ -56,7 +55,7 @@ module npu_full_sequencer #(
     output logic [ARRAY_HEIGHT-1:0]              act_sram_we_o,
 
     // Systolic weight pre-shift & swap timing
-    output logic [1:0]                           weight_shift_en_o,
+    output logic [ARRAY_HEIGHT-1:0]              weight_shift_en_o,
     output logic                                 swap_weights_o,
     output logic [2:0]                           weight_shift_step_o,
 
@@ -116,7 +115,6 @@ module npu_full_sequencer #(
 
     assign array_en_o            = (state == SEQ_COMPUTE);
     assign psum_systolic_en_o    = (state == SEQ_COMPUTE);
-    assign psum_skew_en_o        = (state == SEQ_COMPUTE);
     assign compute_bank_swap_o   = (state == SEQ_COMPUTE) ? swap_val : 1'b0;
 
     // 1. Central FSM & Progression Counters
@@ -149,7 +147,9 @@ module npu_full_sequencer #(
     );
 
     // 2. Weight Pre-Shift & Swap Controller
-    npu_seq_weights weights_inst (
+    npu_seq_weights #(
+        .ARRAY_HEIGHT(ARRAY_HEIGHT)
+    ) weights_inst (
         .preload_phase_i    (preload_phase),
         .preload_cnt_i      (preload_cnt),
         .state_i            (state),

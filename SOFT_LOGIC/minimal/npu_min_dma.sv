@@ -86,14 +86,15 @@ module npu_min_dma #(
 
     // Activation Fetch Channel
     input  wire                                                          start_act_i,
+    input  wire        [3:0]                                             act_chunk_idx_i,
     output logic                                                         act_done_o,
 
     // Weight Fetch Channel
     input  wire                                                          start_weight_i,
-    input  wire        [3:0]                                             weight_pass_idx_i,
+    input  wire        [7:0]                                             weight_pass_idx_i,
     output logic                                                         weight_done_o,
     output wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0]              weight_shift_in_o,
-    output wire        [WEIGHT_SPLIT-1:0]                                weight_shift_en_o,
+    output wire        [ARRAY_HEIGHT-1:0]                                weight_shift_en_o,
 
     // Output Drain Channel
     input  wire                                                          start_drain_i,
@@ -164,8 +165,8 @@ module npu_min_dma #(
     logic w_phase;
     wire weight_beat_valid = (state == DMA_WEIGHT_R) && m_axi_rvalid && m_axi_rready;
 
-    assign weight_shift_en_o[0] = weight_beat_valid && (~w_phase);
-    assign weight_shift_en_o[1] = weight_beat_valid && (w_phase);
+    assign weight_shift_en_o[3:0] = {4{weight_beat_valid && (~w_phase)}};
+    assign weight_shift_en_o[7:4] = {4{weight_beat_valid && (w_phase)}};
 
     assign weight_shift_in_o[0] = $signed(m_axi_rdata[7:0]);
     assign weight_shift_in_o[1] = $signed(m_axi_rdata[15:8]);
@@ -241,11 +242,11 @@ module npu_min_dma #(
                     end else if (start_act_i) begin
                         act_pixel_cnt  <= '0;
                         act_word_phase <= 1'b0;
-                        axi_addr_reg   <= act_base_i;
+                        axi_addr_reg   <= act_base_i + (32'(act_chunk_idx_i) * (KERNEL_SIZE == 1 ? 32'd2048 : 32'd2592));
                         state          <= DMA_ACT_AR;
                     end else if (start_weight_i) begin
                         w_phase      <= 1'b0;
-                        axi_addr_reg <= weight_base_i + {22'b0, weight_pass_idx_i, 6'b000000};
+                        axi_addr_reg <= weight_base_i + {18'b0, weight_pass_idx_i, 6'b000000};
                         state        <= DMA_WEIGHT_AR;
                     end else if (start_drain_i) begin
                         drain_burst_idx <= '0;

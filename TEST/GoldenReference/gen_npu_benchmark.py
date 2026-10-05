@@ -30,7 +30,7 @@ print("=======================================================================")
 inputs = tf.keras.Input(shape=(CONV_H, CONV_W, Cin), batch_size=1, name="net_input")
 conv_out = tf.keras.layers.Conv2D(Cout, (3, 3), padding='same', activation=None, use_bias=True, name="conv3x3_aligned")(inputs)
 pool_out = tf.keras.layers.MaxPool2D(pool_size=(2, 2), strides=(2, 2), padding='same', name="maxpool2d")(conv_out)
-model = tf.keras.Model(inputs=inputs, outputs=pool_out)
+model = tf.keras.Model(inputs=inputs, outputs=[conv_out, pool_out])
 
 # Standard TFLite INT8 Quantization
 def representative_dataset_gen():
@@ -58,8 +58,17 @@ test_input = np.random.randint(-16, 16, size=(1, CONV_H, CONV_W, Cin), dtype=np.
 interpreter.set_tensor(input_details[0]['index'], test_input)
 interpreter.invoke()
 
-out_meta = output_details[0]
-out_quant = interpreter.get_tensor(out_meta['index'])
+conv_meta, pool_meta = None, None
+conv_quant, pool_quant = None, None
+
+for out_d in output_details:
+    t = interpreter.get_tensor(out_d['index'])
+    if list(t.shape) == [1, CONV_H, CONV_W, Cout]:
+        conv_meta = out_d
+        conv_quant = t
+    elif list(t.shape) == [1, CONV_H // 2, CONV_W // 2, Cout]:
+        pool_meta = out_d
+        pool_quant = t
 
 def find_tensor_by_shape_and_dtype(shape, dtype):
     for t in tensor_details:
@@ -74,8 +83,8 @@ b_raw = interpreter.get_tensor(find_tensor_by_shape_and_dtype([Cout], np.int32)[
 zp_in = int(np.ravel(input_details[0]['quantization_parameters']['zero_points'])[0])
 s_in  = float(np.ravel(input_details[0]['quantization_parameters']['scales'])[0])
 
-zp_out = int(np.ravel(out_meta['quantization_parameters']['zero_points'])[0])
-s_out  = float(np.ravel(out_meta['quantization_parameters']['scales'])[0])
+zp_out = int(np.ravel(conv_meta['quantization_parameters']['zero_points'])[0])
+s_out  = float(np.ravel(conv_meta['quantization_parameters']['scales'])[0])
 s_w    = np.ravel(w_meta['quantization_parameters']['scales'])
 
 b_folded = b_raw - (zp_in * np.sum(w_hw.astype(np.int32), axis=(0, 1, 2)))
@@ -124,7 +133,8 @@ export_mem("bench_im2col_act.mem", test_input.squeeze(0), 2)
 export_mem("bench_im2col_w.mem", w_hw, 2)
 export_mem("bench_im2col_b.mem", b_folded, 8)
 export_channel_params_q15("bench_im2col_cfg.mem", m0_arr, shift_arr, zp_out, Cout)
-export_mem("bench_im2col_out_pooled.mem", out_quant.squeeze(0), 2)
+export_mem("bench_im2col_out_quant.mem", conv_quant.squeeze(0), 2)
+export_mem("bench_im2col_out_pooled.mem", pool_quant.squeeze(0), 2)
 
 print("\n>>> SUCCESS: Scaled Q15 Conv2D + MaxPool2D benchmark dataset exported! <<<\n")
 

@@ -45,9 +45,7 @@ module npu_axi_reader #(
 
     // AXI4 Master AR Channel
     output logic [AXI_ADDR_WIDTH-1:0]                        m_axi_araddr,
-    output logic [7:0]                                       m_axi_arlen,
-    output wire  [2:0]                                       m_axi_arsize,
-    output wire  [1:0]                                       m_axi_arburst,
+    output wire [7:0]                                        m_axi_arlen,
     output logic                                             m_axi_arvalid,
     input  wire                                              m_axi_arready,
 
@@ -60,7 +58,7 @@ module npu_axi_reader #(
 
     // Hardware Outputs to Systolic Array (Weights)
     output logic signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0] weight_shift_in_o,
-    output logic [1:0]                                       weight_shift_en_o,
+    output logic [ARRAY_HEIGHT-1:0]                          weight_shift_en_o,
 
     // Hardware Outputs to PSUM Accumulation SRAMs (Biases)
     output logic signed [PSUM_WIDTH-1:0]                     bias_wdata_o,
@@ -76,9 +74,6 @@ module npu_axi_reader #(
     output logic [31:0]                                      psum_B_wdata_o,
     output logic [7:0]                                       psum_B_we_o
 );
-
-    assign m_axi_arsize  = 3'b010; // 4 bytes (32-bit transfers)
-    assign m_axi_arburst = 2'b01;  // INCR
 
     typedef enum logic [3:0] {
         IDLE             = 4'd0,
@@ -111,8 +106,7 @@ module npu_axi_reader #(
 
     always_comb begin
         if (mode_1x1_i) begin
-            weight_shift_en_o[0] = weight_beat_valid;
-            weight_shift_en_o[1] = weight_beat_valid;
+            weight_shift_en_o = {ARRAY_HEIGHT{weight_beat_valid}};
             weight_shift_in_o[0] = $signed(m_axi_rdata[7:0]);
             weight_shift_in_o[1] = $signed(m_axi_rdata[15:8]);
             weight_shift_in_o[2] = $signed(m_axi_rdata[23:16]);
@@ -122,8 +116,7 @@ module npu_axi_reader #(
             weight_shift_in_o[6] = 8'sd0;
             weight_shift_in_o[7] = 8'sd0;
         end else begin
-            weight_shift_en_o[0] = weight_beat_valid && beat_cnt[0];
-            weight_shift_en_o[1] = weight_beat_valid && beat_cnt[0];
+            weight_shift_en_o = {ARRAY_HEIGHT{weight_beat_valid && beat_cnt[0]}};
             weight_shift_in_o[0] = $signed(lat_word[7:0]);
             weight_shift_in_o[1] = $signed(lat_word[15:8]);
             weight_shift_in_o[2] = $signed(lat_word[23:16]);
@@ -142,6 +135,8 @@ module npu_axi_reader #(
 
     assign quant_shift_in_o = m_axi_rdata[29:0];
     assign quant_shift_en_o = (state == PRELOAD_QUANT_R) && (m_axi_rvalid && m_axi_rready);
+
+    assign m_axi_arlen      = (state == PRELOAD_BIAS_AR || state == PRELOAD_QUANT_AR || (state == WEIGHT_AR && mode_1x1_i)) ? 8'd7 : 8'd15;
 
     always_comb begin
         case (state)
@@ -177,7 +172,6 @@ module npu_axi_reader #(
         if (!rst_n) begin
             state               <= IDLE;
             m_axi_araddr        <= '0;
-            m_axi_arlen         <= '0;
             m_axi_arvalid       <= 1'b0;
             m_axi_rready        <= 1'b0;
             lut_load_done_o     <= 1'b0;
@@ -203,21 +197,17 @@ module npu_axi_reader #(
                         burst_idx     <= 2'd0;
                         word_idx      <= 6'd0;
                         m_axi_araddr  <= lut_base_i;
-                        m_axi_arlen   <= 8'd15; // 16 beats = 64 bytes
                         m_axi_arvalid <= 1'b1;
                         state         <= LUT_AR;
                     end else if (start_preload_i) begin
                         m_axi_araddr  <= bias_base_i;
-                        m_axi_arlen   <= 8'd7;  // 8 beats = 8 channel biases
                         m_axi_arvalid <= 1'b1;
                         state         <= PRELOAD_BIAS_AR;
                     end else if (start_weight_fetch_i) begin
                         if (mode_1x1_i) begin
-                            m_axi_araddr <= weight_base_i + {19'd0, fetch_pass_idx_i, 5'b00000}; // pass * 32
-                            m_axi_arlen  <= 8'd7;                                                 // 8 beats
+                            m_axi_araddr <= {weight_base_i[31:20], (weight_base_i[19:5] + {7'd0, fetch_pass_idx_i}), 5'b00000};
                         end else begin
-                            m_axi_araddr <= weight_base_i + {18'd0, fetch_pass_idx_i, 6'b000000}; // pass * 64
-                            m_axi_arlen  <= 8'd15;                                                // 16 beats
+                            m_axi_araddr <= {weight_base_i[31:20], (weight_base_i[19:6] + {6'd0, fetch_pass_idx_i}), 6'b000000};
                         end
                         m_axi_arvalid <= 1'b1;
                         state         <= WEIGHT_AR;
@@ -264,8 +254,7 @@ module npu_axi_reader #(
                             state           <= IDLE;
                         end else begin
                             burst_idx     <= burst_idx + 1'b1;
-                            m_axi_araddr  <= lut_base_i + {24'd0, (burst_idx + 2'd1), 6'b000000};
-                            m_axi_arlen   <= 8'd15;
+                            m_axi_araddr  <= {lut_base_i[31:20], (lut_base_i[19:6] + {12'd0, (burst_idx + 2'd1)}), 6'b000000};
                             m_axi_arvalid <= 1'b1;
                             beat_cnt      <= '0;
                             state         <= LUT_AR;
@@ -294,7 +283,6 @@ module npu_axi_reader #(
                         if (m_axi_rlast || beat_cnt == 5'd7) begin
                             m_axi_rready  <= 1'b0;
                             m_axi_araddr  <= quant_base_i;
-                            m_axi_arlen   <= 8'd7; // 8 beats = 8 requant words
                             m_axi_arvalid <= 1'b1;
                             beat_cnt      <= '0;
                             state         <= PRELOAD_QUANT_AR;
