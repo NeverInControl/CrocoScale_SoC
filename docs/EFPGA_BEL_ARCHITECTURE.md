@@ -1,64 +1,78 @@
-# CrocoScale 8x16 eFPGA Fabric — Custom BEL Library Specification
+﻿# CrocoScale 9x16 eFPGA Fabric — BEL Specification
 
-This document specifies the decoupled, orientation-agnostic Boundary Element (BEL) library for the $8 \times 16$ CLB eFPGA soft-fabric.
-
----
-
-## 1. Complete Redone BEL Library (7 Generic BELs)
-
-Organized under the 4 standard domain prefixes (`AXI`/`AXIL`, `EXT`, `SOC`, `NPU`):
-
-| Domain | BEL File Name | Module Name | Internal Latency | Function | Primary Instantiating Tiles |
-| :--- | :--- | :--- | :---: | :--- | :--- |
-| **`AXI_`** | `AXI_M_BEL.v` | `AXI_M_BEL` | **0 cycles** (Async) | 32-bit AXI4 DMA Master to SoC Crossbar | `AXI_M_IO_W` (West, Rows 0..9) |
-| **`AXIL_`** | `AXIL_S_BEL.v` | `AXIL_S_BEL` | **0 cycles** (Async) | 32-bit AXI4-Lite Control Slave from CPU / Manager | `AXIL_S_IO_W` (West, Rows 10..15) |
-| **`EXT_`** | `EXT_PMOD_BEL.v` | `EXT_PMOD_BEL` | **Registered** (`UserCLK`) | Bidirectional 8-bit PMOD external padring | `PMOD_IO_N` (North, Cols 1..2) |
-| **`SOC_`** | `SOC_DEBUG_CTRL_BEL.v` | `SOC_DEBUG_CTRL_BEL` | **Registered** (`UserCLK`) | Slot debug I/O, SoC user interrupts, and soft resets | `DEBUG_IO_S_0` .. `_3` (South, Cols 1..4) |
-| **`NPU_`** | `NPU_SLICE_DATA_SRAM_BEL.v` | `NPU_SLICE_DATA_SRAM_BEL` | **Registered** (`UserCLK`) | Row $i$ Slice: Data/Act SRAM R/W, row weights, per-row shift enable, crossbar select, and output activations | `ACT_RAM_IO_E` (East, 8 $\times$ 2-row supertiles) |
-| **`NPU_`** | `NPU_ACCUM_SRAM_BEL.v` | `NPU_ACCUM_SRAM_BEL` | **Registered** (`UserCLK`) | 32-bit Accumulator / Non-Linear LUT SRAM Port ($256 \times 32$) | `PSUM_PORT_N` (North Bank A, Cols 5..8)<br>`PSUM_PORT_S` (South Bank B, Cols 5..8) |
-| **`NPU_`** | `NPU_CTRL_CFG_BEL.v` | `NPU_CTRL_CFG_BEL` | **Registered** (`UserCLK`) | Global array execution controls & Requantizer serial configuration chain | `REQUANT_AUX_N` (North, Cols 3..4) |
+The core fabric consists of a matrix of **9 CLBs wide** and **16 CLBs high** (9 columns $\times$ 16 rows, 144 CLBs total).
 
 ---
 
-## 2. Fabric Tile Perimeter Allocation & Density Table
+## Fabric BEL Perimeter Diagram (Graded Corner Relief)
 
 ```
-                  Col 1    Col 2    Col 3    Col 4    Col 5    Col 6    Col 7    Col 8
-                 +--------+--------+--------+--------+--------+--------+--------+--------+
-      NORTH EDGE |  PMOD_IO (2 Cols) | REQUANT_AUX(2) |     PSUM_PORT Bank A (4 Cols)  |
-                 +--------+--------+--------+--------+--------+--------+--------+--------+
-Row 0   (AXI-M)  |                                                                       | ACT_RAM_IO_0 (2 Rows)
-Row 1   (AXI-M)  |                                                                       |
-Row 2   (AXI-M)  |                                                                       | ACT_RAM_IO_1 (2 Rows)
-Row 3   (AXI-M)  |                                                                       |
-Row 4   (AXI-M)  |                                                                       | ACT_RAM_IO_2 (2 Rows)
-Row 5   (AXI-M)  |                                                                       |
-Row 6   (AXI-M)  |                        CORE CLB FABRIC                                | ACT_RAM_IO_3 (2 Rows)
-Row 7   (AXI-M)  |                      8 COLS x 16 ROWS                                 |
-Row 8   (AXI-M)  |                         (128 CLBs)                                    | ACT_RAM_IO_4 (2 Rows)
-Row 9   (AXI-M)  |                                                                       |
-Row 10  (AXIL-S) |                                                                       | ACT_RAM_IO_5 (2 Rows)
-Row 11  (AXIL-S) |                                                                       |
-Row 12  (AXIL-S) |                                                                       | ACT_RAM_IO_6 (2 Rows)
-Row 13  (AXIL-S) |                                                                       |
-Row 14  (AXIL-S) |                                                                       | ACT_RAM_IO_7 (2 Rows)
-Row 15  (AXIL-S) |                                                                       |
-                 +--------+--------+--------+--------+--------+--------+--------+--------+
-      SOUTH EDGE | DEBUG0 | DEBUG1 | DEBUG2 | DEBUG3 |     PSUM_PORT Bank B (4 Cols)  |
-                 | (1Col) | (1Col) | (1Col) | (1Col) |                                 |
-                 +--------+--------+--------+--------+--------+--------+--------+--------+
+                   Col 1           Col 2           Col 3           Col 4           Col 5           Col 6           Col 7           Col 8           Col 9
+              +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
+   NORTH EDGE |          EXT_PMOD_BEL         |       NPU_CTRL_CFG_BEL        |                             NPU_ACCUM_SRAM_BEL (Bank A)                       |
+              |            (2 Cols)           |           (2 Cols)            |                 (5 Cols - Stretched, Graded: Dense Center, Light Corner)      |
+              |               |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
+              +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
+Row 0 [Light] |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [0]
+Row 1         |                                                                                                                                               | (2 rows high)
+Row 2  (AXI_  |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [1]
+Row 3   M_    |                                                                                                                                               | (2 rows high)
+Row 4   BEL,  |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [2]
+Row 5  10     |                                       CORE CLB FABRIC                                                                                         | (2 rows high)
+Row 6  rows   |                                     9 Columns x 16 Rows                                                                                       | NPU_SLICE_DATA_SRAM_BEL [3]
+Row 7  high)  |                                          (144 CLBs)                                                                                           | (2 rows high)
+Row 8         |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [4]
+Row 9 [Dense] |                                                                                                                                               | (2 rows high)
+Row 10[Dense] |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [5]
+Row 11 (AXIL_ |                                                                                                                                               | (2 rows high)
+Row 12  S_    |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [6]
+Row 13  BEL,  |                                                                                                                                               | (2 rows high)
+Row 14  6     |                                                                                                                                               | NPU_SLICE_DATA_SRAM_BEL [7]
+Row 15[Light] |                                                                                                                                               | (2 rows high)
+              +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
+   SOUTH EDGE | SOC_DEBUG_    | SOC_DEBUG_    | SOC_DEBUG_    | SOC_DEBUG_    |                             NPU_ACCUM_SRAM_BEL (Bank B)                       |
+              | CTRL_BEL [0]  | CTRL_BEL [1]  | CTRL_BEL [2]  | CTRL_BEL [3]  |                 (5 Cols - Stretched, Graded: Dense Center, Light Corner)      |
+              |               |               |               |               |  [Dense Mid]  |  [Dense Mid]  |  [Dense Mid]  |   [Medium]    | [Light Corner]|
+              +---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+---------------+
 ```
 
-| Tile Name | Perimeter Edge | Tile Span | Associated BEL | Total Pins | Density (Pins/Tile) | Latency Contract |
-| :--- | :--- | :---: | :--- | :---: | :---: | :--- |
-| `AXI_M_IO_W` | **West** | Rows 0..9 (10 Rows) | `AXI_M_BEL` | 184 | **18.4** | 0 cycles (Asynchronous at fabric boundary) |
-| `AXIL_S_IO_W` | **West** | Rows 10..15 (6 Rows) | `AXIL_S_BEL` | 108 | **18.0** | 0 cycles (Asynchronous at fabric boundary) |
-| `ACT_RAM_IO_E` $\times 8$ | **East** | Rows 0..15 (8 $\times$ 2-row supertiles) | `NPU_SLICE_DATA_SRAM_BEL` | 47 / supertile (376 total) | **23.5** | **Registered** (+1 launch, 3-cycle round-trip SRAM read) |
-| `PMOD_IO_N` | **North** | Cols 1..2 (2 Cols) | `EXT_PMOD_BEL` | 24 | **12.0** | **Registered** (+1 clk in/out) |
-| `REQUANT_AUX_N` | **North** | Cols 3..4 (2 Cols) | `NPU_CTRL_CFG_BEL` | 38 | **19.0** | **Registered** (+1 clk out; +2 clk on `compute_bank_swap`) |
-| `PSUM_PORT_N` | **North** | Cols 5..8 (4 Cols) | `NPU_ACCUM_SRAM_BEL` (Bank A) | 83 | **20.75** | **Registered** (+1 launch, 3-cycle round-trip SRAM read) |
-| **`DEBUG_IO_S_0`** (Slot 0) | **South** | Col 1 (1 Col, single-tile) | `SOC_DEBUG_CTRL_BEL` | 18 | **18.0** | **Registered** (+1 clk in/out) |
-| **`DEBUG_IO_S_1`** (Slot 1) | **South** | Col 2 (1 Col, single-tile) | `SOC_DEBUG_CTRL_BEL` | 18 | **18.0** | **Registered** (+1 clk in/out) |
-| **`DEBUG_IO_S_2`** (Slot 2) | **South** | Col 3 (1 Col, single-tile) | `SOC_DEBUG_CTRL_BEL` | 18 | **18.0** | **Registered** (+1 clk in/out) |
-| **`DEBUG_IO_S_3`** (Slot 3) | **South** | Col 4 (1 Col, single-tile) | `SOC_DEBUG_CTRL_BEL` | 18 | **18.0** | **Registered** (+1 clk in/out) |
-| `PSUM_PORT_S` | **South** | Cols 5..8 (4 Cols) | `NPU_ACCUM_SRAM_BEL` (Bank B) | 83 | **20.75** | **Registered** (+1 launch, 3-cycle round-trip SRAM read) |
+---
+
+## Graded Density & Corner Routing Relief Strategy
+
+Corner switch matrices have only 2 escape directions instead of 4, making them severe routing bottlenecks. The 9x16 floorplan implements intentional **graded pin densities** to eliminate track competition at all four die corners:
+
+1. **North-West (NW) Relief (Row 0, Col 1)**:
+   - **`EXT_PMOD_BEL`** occupies **Cols 1..2** (2 cols). Col 1 is assigned a light pin allocation to avoid congesting the corner.
+   - **`AXI_M_BEL`** applies a slight vertical density gradient, keeping Row 0 light (~12 pins) and placing heavier channel multiplexing in Rows 4..9.
+   - **Result**: NW corner switch matrix avoids track starvation between PMOD and AXI Master.
+
+2. **South-West (SW) Relief (Row 15, Col 1)**:
+   - **`SOC_DEBUG_CTRL_BEL[0]`** in **Col 1** is lightly loaded.
+   - **`AXIL_S_BEL`** keeps Row 15 light (~12 pins), placing the bulk of register control in Rows 10..13.
+   - **Result**: SW corner switch matrix maintains clean routing escape for CPU control and debug IRQ lines.
+
+3. **North-East (NE) Relief (Row 0, Col 9)**:
+   - **`NPU_ACCUM_SRAM_BEL` (Bank A)** is stretched across **5 columns (Cols 5..9)** with a center-dense distribution:
+     - **Cols 5, 6 & 7 (Center)**: Carry the wide 32-bit `WDATA` and 32-bit `RDATA` buses (~20–22 pins/col), where 4-way routing tracks into the CLB core are fully available.
+     - **Col 8 (Mid-Edge)**: Carries `WE[7:0]` and control (~14–16 pins).
+     - **Col 9 (Corner)**: Kept light (~10–11 pins: `ADDR[7:0]` + `READ_BANK_SEL[2:0]`).
+   - **Result**: Pin density drops from 20.75 down to **16.6 pins/col** on average, and frees $\approx 75\%$ of Col 9's horizontal routing tracks. This allows the 47 pins of East Slice 0 (`NPU_SLICE_DATA_SRAM_BEL[0]`) to route directly westward into the fabric without colliding with PSUM wires.
+
+4. **South-East (SE) Relief (Row 15, Col 9)**:
+   - **`NPU_ACCUM_SRAM_BEL` (Bank B)** mirrors Bank A identically across **Cols 5..9** (stretched across 5 cols, center-dense, Col 9 light).
+   - **Result**: Frees $\approx 75\%$ of Col 9's horizontal tracks for East Slice 7 (`NPU_SLICE_DATA_SRAM_BEL[7]`).
+
+---
+
+## BEL List & Dimensions
+
+| BEL Name | Perimeter Edge | Width | Height | Perimeter Span | Config Bits | Average Pin Density |
+| :--- | :--- | :---: | :---: | :--- | :---: | :---: |
+| [`AXI_M_BEL`](./AXI_M_BEL.v) | **West** | 1 Col | 10 Rows | Rows 0..9 | **12 bits** | **18.4 pins/row** (Slight gradient: lighter at Row 0) |
+| [`AXIL_S_BEL`](./AXIL_S_BEL.v) | **West** | 1 Col | 6 Rows | Rows 10..15 | None | **18.0 pins/row** (Slight gradient: lighter at Row 15) |
+| [`EXT_PMOD_BEL`](./EXT_PMOD_BEL.v) | **North** | 2 Cols | 1 Row | Cols 1..2 | **13 bits** | **12.0 pins/col** (Lighter at Col 1) |
+| [`NPU_CTRL_CFG_BEL`](./NPU_CTRL_CFG_BEL.v) | **North** | 2 Cols | 1 Row | Cols 3..4 | **1 bit** | **18.5 pins/col** |
+| [`NPU_ACCUM_SRAM_BEL`](./NPU_ACCUM_SRAM_BEL.v) *(2 instances)* | **North** *(Bank A)* AND **South** *(Bank B)* | **5 Cols** | 1 Row | **Cols 5..9** | **8 bits** | **16.6 pins/col** (Graded: ~20-22 in Cols 5-7, ~10-11 in Col 9) |
+| [`SOC_DEBUG_CTRL_BEL`](./SOC_DEBUG_CTRL_BEL.v) *(4 instances)* | **South** | 1 Col (each) | 1 Row | Cols 1, 2, 3, 4 | **4 bits** | **18.0 pins/col** (Lighter at Col 1) |
+| [`NPU_SLICE_DATA_SRAM_BEL`](./NPU_SLICE_DATA_SRAM_BEL.v) *(8 instances)* | **East** | 1 Col | 2 Rows (each) | Rows 0..15 | **6 bits** | **23.5 pins/row** (47 pins per 2-row supertile) |
