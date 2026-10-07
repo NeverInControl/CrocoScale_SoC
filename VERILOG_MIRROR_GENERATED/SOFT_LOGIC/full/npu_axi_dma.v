@@ -3,12 +3,9 @@ module npu_axi_dma (
 	rst_n,
 	m_axi_awaddr,
 	m_axi_awlen,
-	m_axi_awsize,
-	m_axi_awburst,
 	m_axi_awvalid,
 	m_axi_awready,
 	m_axi_wdata,
-	m_axi_wstrb,
 	m_axi_wlast,
 	m_axi_wvalid,
 	m_axi_wready,
@@ -17,8 +14,6 @@ module npu_axi_dma (
 	m_axi_bready,
 	m_axi_araddr,
 	m_axi_arlen,
-	m_axi_arsize,
-	m_axi_arburst,
 	m_axi_arvalid,
 	m_axi_arready,
 	m_axi_rdata,
@@ -68,12 +63,9 @@ module npu_axi_dma (
 	input wire rst_n;
 	output wire [AXI_ADDR_WIDTH - 1:0] m_axi_awaddr;
 	output wire [7:0] m_axi_awlen;
-	output wire [2:0] m_axi_awsize;
-	output wire [1:0] m_axi_awburst;
 	output wire m_axi_awvalid;
 	input wire m_axi_awready;
 	output wire [AXI_DATA_WIDTH - 1:0] m_axi_wdata;
-	output wire [(AXI_DATA_WIDTH / 8) - 1:0] m_axi_wstrb;
 	output wire m_axi_wlast;
 	output wire m_axi_wvalid;
 	input wire m_axi_wready;
@@ -82,8 +74,6 @@ module npu_axi_dma (
 	output wire m_axi_bready;
 	output wire [AXI_ADDR_WIDTH - 1:0] m_axi_araddr;
 	output wire [7:0] m_axi_arlen;
-	output wire [2:0] m_axi_arsize;
-	output wire [1:0] m_axi_arburst;
 	output wire m_axi_arvalid;
 	input wire m_axi_arready;
 	input wire [AXI_DATA_WIDTH - 1:0] m_axi_rdata;
@@ -112,7 +102,7 @@ module npu_axi_dma (
 	output wire [7:0] drain_psum_addr_o;
 	input wire signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] npu_out_act_i;
 	output wire signed [(ARRAY_HEIGHT * WEIGHT_WIDTH) - 1:0] weight_shift_in_o;
-	output wire [1:0] weight_shift_en_o;
+	output wire [ARRAY_HEIGHT - 1:0] weight_shift_en_o;
 	output wire signed [PSUM_WIDTH - 1:0] bias_wdata_o;
 	output wire [2:0] bias_channel_o;
 	output wire bias_we_o;
@@ -144,8 +134,6 @@ module npu_axi_dma (
 		.weight_fetch_done_o(weight_fetch_done_o),
 		.m_axi_araddr(m_axi_araddr),
 		.m_axi_arlen(m_axi_arlen),
-		.m_axi_arsize(m_axi_arsize),
-		.m_axi_arburst(m_axi_arburst),
 		.m_axi_arvalid(m_axi_arvalid),
 		.m_axi_arready(m_axi_arready),
 		.m_axi_rdata(m_axi_rdata),
@@ -177,12 +165,9 @@ module npu_axi_dma (
 		.done_o(drain_done_o),
 		.awaddr_o(m_axi_awaddr),
 		.awlen_o(m_axi_awlen),
-		.awsize_o(m_axi_awsize),
-		.awburst_o(m_axi_awburst),
 		.awvalid_o(m_axi_awvalid),
 		.awready_i(m_axi_awready),
 		.wdata_o(m_axi_wdata),
-		.wstrb_o(m_axi_wstrb),
 		.wlast_o(m_axi_wlast),
 		.wvalid_o(m_axi_wvalid),
 		.wready_i(m_axi_wready),

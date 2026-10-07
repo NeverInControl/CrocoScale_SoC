@@ -8,7 +8,7 @@ module tb_npu_full_sys_3x3_benchmark;
 	parameter signed [31:0] WEIGHT_WIDTH = 8;
 	parameter signed [31:0] PSUM_WIDTH = 32;
 	parameter signed [31:0] SCALE_WIDTH = 16;
-	parameter signed [31:0] WEIGHT_SPLIT = 2;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
 	parameter signed [31:0] AXI_ADDR_WIDTH = 32;
 	parameter signed [31:0] AXI_DATA_WIDTH = 32;
 	parameter signed [31:0] TOTAL_PASSES = 144;
@@ -71,11 +71,10 @@ module tb_npu_full_sys_3x3_benchmark;
 	wire npu_compute_bank_swap;
 	wire [(ARRAY_HEIGHT * 4) - 1:0] npu_crossbar_sel;
 	wire [(ARRAY_WIDTH * WEIGHT_WIDTH) - 1:0] npu_weight_shift_in;
-	wire [1:0] npu_weight_shift_en;
+	wire [ARRAY_HEIGHT - 1:0] npu_weight_shift_en;
 	wire npu_swap_weights;
 	wire [29:0] npu_quant_shift_in;
 	wire npu_quant_shift_en;
-	wire npu_stochastic_round_en;
 	wire [7:0] npu_psum_A_addr;
 	wire [ARRAY_WIDTH - 1:0] npu_psum_A_we;
 	wire signed [PSUM_WIDTH - 1:0] npu_psum_A_wdata;
@@ -88,10 +87,76 @@ module tb_npu_full_sys_3x3_benchmark;
 	wire signed [PSUM_WIDTH - 1:0] npu_psum_B_rdata;
 	wire [ARRAY_HEIGHT - 1:0] npu_ext_act_sram_we;
 	wire [(ARRAY_HEIGHT * 9) - 1:0] npu_ext_act_sram_addr;
-	reg [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] npu_ext_act_sram_wdata;
+	wire [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] npu_ext_act_sram_wdata;
 	wire [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] npu_act_sram_rdata;
 	wire [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] npu_out_act;
 	wire [3:0] efpga_usr_irq_o;
+	wire [9:0] fab_axil_awaddr;
+	wire [2:0] fab_axil_awprot;
+	wire fab_axil_awvalid;
+	wire fab_axil_awready;
+	wire [AXI_DATA_WIDTH - 1:0] fab_axil_wdata;
+	wire [(AXI_DATA_WIDTH / 8) - 1:0] fab_axil_wstrb;
+	wire fab_axil_wvalid;
+	wire fab_axil_wready;
+	wire [1:0] fab_axil_bresp;
+	wire fab_axil_bvalid;
+	wire fab_axil_bready;
+	wire [9:0] fab_axil_araddr;
+	wire [2:0] fab_axil_arprot;
+	wire fab_axil_arvalid;
+	wire fab_axil_arready;
+	wire [AXI_DATA_WIDTH - 1:0] fab_axil_rdata;
+	wire [1:0] fab_axil_rresp;
+	wire fab_axil_rvalid;
+	wire fab_axil_rready;
+	wire [AXI_ADDR_WIDTH - 1:0] fab_axi_awaddr;
+	wire [7:0] fab_axi_awlen;
+	wire fab_axi_awvalid;
+	wire fab_axi_awready;
+	wire [AXI_DATA_WIDTH - 1:0] fab_axi_wdata;
+	wire fab_axi_wlast;
+	wire fab_axi_wvalid;
+	wire fab_axi_wready;
+	wire [1:0] fab_axi_bresp;
+	wire fab_axi_bvalid;
+	wire fab_axi_bready;
+	wire [AXI_ADDR_WIDTH - 1:0] fab_axi_araddr;
+	wire [7:0] fab_axi_arlen;
+	wire fab_axi_arvalid;
+	wire fab_axi_arready;
+	wire [AXI_DATA_WIDTH - 1:0] fab_axi_rdata;
+	wire [1:0] fab_axi_rresp;
+	wire fab_axi_rlast;
+	wire fab_axi_rvalid;
+	wire fab_axi_rready;
+	wire fab_npu_array_en;
+	wire fab_npu_psum_systolic_en;
+	wire fab_npu_psum_lut_en;
+	wire fab_npu_compute_bank_swap;
+	wire [(ARRAY_HEIGHT * 4) - 1:0] fab_crossbar_sel;
+	wire signed [(ARRAY_HEIGHT * WEIGHT_WIDTH) - 1:0] fab_weight_shift_in;
+	wire [ARRAY_HEIGHT - 1:0] fab_weight_shift_en;
+	wire fab_npu_swap_weights;
+	wire [29:0] fab_npu_quant_shift_in;
+	wire fab_npu_quant_shift_en;
+	wire [7:0] fab_psum_A_addr;
+	wire [ARRAY_WIDTH - 1:0] fab_psum_A_we;
+	wire signed [PSUM_WIDTH - 1:0] fab_psum_A_wdata;
+	wire [2:0] fab_psum_A_read_bank_sel;
+	wire signed [PSUM_WIDTH - 1:0] fab_psum_A_rdata;
+	wire [7:0] fab_psum_B_addr;
+	wire [ARRAY_WIDTH - 1:0] fab_psum_B_we;
+	wire signed [PSUM_WIDTH - 1:0] fab_psum_B_wdata;
+	wire [2:0] fab_psum_B_read_bank_sel;
+	wire signed [PSUM_WIDTH - 1:0] fab_psum_B_rdata;
+	wire [ARRAY_HEIGHT - 1:0] fab_ext_act_sram_we;
+	wire [(ARRAY_HEIGHT * 9) - 1:0] fab_ext_act_sram_addr;
+	reg [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] fab_ext_act_sram_wdata;
+	wire [(ARRAY_HEIGHT * ACTIVATION_WIDTH) - 1:0] fab_act_sram_rdata;
+	wire [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] fab_out_act;
+	wire [3:0] fab_slot_soft_rst_n;
+	wire [3:0] fab_usr_irq;
 	initial clk = 0;
 	always #(5) clk = ~clk;
 	localparam signed [31:0] MEM_ADDR_WIDTH = 19;
@@ -138,6 +203,252 @@ module tb_npu_full_sys_3x3_benchmark;
 		.s_axi_rvalid(m_axi_rvalid),
 		.s_axi_rready(m_axi_rready)
 	);
+	wire m_axi_awlock;
+	wire m_axi_awcache;
+	wire m_axi_arlock;
+	wire m_axi_arcache;
+	efpga_boundary_harness #(
+		.ARRAY_HEIGHT(ARRAY_HEIGHT),
+		.ARRAY_WIDTH(ARRAY_WIDTH),
+		.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
+		.WEIGHT_WIDTH(WEIGHT_WIDTH),
+		.PSUM_WIDTH(PSUM_WIDTH),
+		.CFG_AXI_M(12'hf3e),
+		.CFG_NPU_CTRL(1'b0),
+		.CFG_DEBUG(16'h0004)
+	) harness_inst(
+		.clk_i(clk),
+		.s_axil_awaddr(s_axil_awaddr[9:0]),
+		.s_axil_awprot(s_axil_awprot),
+		.s_axil_awvalid(s_axil_awvalid),
+		.s_axil_awready(s_axil_awready),
+		.s_axil_wdata(s_axil_wdata),
+		.s_axil_wstrb(s_axil_wstrb),
+		.s_axil_wvalid(s_axil_wvalid),
+		.s_axil_wready(s_axil_wready),
+		.s_axil_bresp(s_axil_bresp),
+		.s_axil_bvalid(s_axil_bvalid),
+		.s_axil_bready(s_axil_bready),
+		.s_axil_araddr(s_axil_araddr[9:0]),
+		.s_axil_arprot(s_axil_arprot),
+		.s_axil_arvalid(s_axil_arvalid),
+		.s_axil_arready(s_axil_arready),
+		.s_axil_rdata(s_axil_rdata),
+		.s_axil_rresp(s_axil_rresp),
+		.s_axil_rvalid(s_axil_rvalid),
+		.s_axil_rready(s_axil_rready),
+		.m_axi_awaddr(m_axi_awaddr),
+		.m_axi_awlen(m_axi_awlen),
+		.m_axi_awsize(m_axi_awsize),
+		.m_axi_awburst(m_axi_awburst),
+		.m_axi_awlock(m_axi_awlock),
+		.m_axi_awcache(m_axi_awcache),
+		.m_axi_awvalid(m_axi_awvalid),
+		.m_axi_awready(m_axi_awready),
+		.m_axi_wdata(m_axi_wdata),
+		.m_axi_wstrb(m_axi_wstrb),
+		.m_axi_wlast(m_axi_wlast),
+		.m_axi_wvalid(m_axi_wvalid),
+		.m_axi_wready(m_axi_wready),
+		.m_axi_bresp(m_axi_bresp),
+		.m_axi_bvalid(m_axi_bvalid),
+		.m_axi_bready(m_axi_bready),
+		.m_axi_araddr(m_axi_araddr),
+		.m_axi_arlen(m_axi_arlen),
+		.m_axi_arsize(m_axi_arsize),
+		.m_axi_arburst(m_axi_arburst),
+		.m_axi_arlock(m_axi_arlock),
+		.m_axi_arcache(m_axi_arcache),
+		.m_axi_arvalid(m_axi_arvalid),
+		.m_axi_arready(m_axi_arready),
+		.m_axi_rdata(m_axi_rdata),
+		.m_axi_rresp(m_axi_rresp),
+		.m_axi_rlast(m_axi_rlast),
+		.m_axi_rvalid(m_axi_rvalid),
+		.m_axi_rready(m_axi_rready),
+		.soc_debug_out_i(1'sb0),
+		.soc_debug_in_o(),
+		.soc_usr_irq_o(efpga_usr_irq_o),
+		.soc_slot_soft_rst_n_i({3'b000, rst_n}),
+		.npu_array_en(npu_array_en),
+		.npu_psum_systolic_en(npu_psum_systolic_en),
+		.npu_psum_lut_en(npu_psum_lut_en),
+		.npu_psum_skew_en(npu_psum_skew_en),
+		.npu_compute_bank_swap(npu_compute_bank_swap),
+		.npu_swap_weights(npu_swap_weights),
+		.npu_quant_shift_in(npu_quant_shift_in),
+		.npu_quant_shift_en(npu_quant_shift_en),
+		.npu_crossbar_sel(npu_crossbar_sel),
+		.npu_weight_shift_in(npu_weight_shift_in),
+		.npu_weight_shift_en(npu_weight_shift_en),
+		.npu_ext_act_sram_we(npu_ext_act_sram_we),
+		.npu_ext_act_sram_addr(npu_ext_act_sram_addr),
+		.npu_ext_act_sram_wdata(npu_ext_act_sram_wdata),
+		.npu_act_sram_rdata(npu_act_sram_rdata),
+		.npu_out_act(npu_out_act),
+		.npu_psum_A_addr(npu_psum_A_addr),
+		.npu_psum_A_we(npu_psum_A_we),
+		.npu_psum_A_wdata(npu_psum_A_wdata),
+		.npu_psum_A_read_bank_sel(npu_psum_A_read_bank_sel),
+		.npu_psum_A_rdata(npu_psum_A_rdata),
+		.npu_psum_B_addr(npu_psum_B_addr),
+		.npu_psum_B_we(npu_psum_B_we),
+		.npu_psum_B_wdata(npu_psum_B_wdata),
+		.npu_psum_B_read_bank_sel(npu_psum_B_read_bank_sel),
+		.npu_psum_B_rdata(npu_psum_B_rdata),
+		.fab_axil_awaddr(fab_axil_awaddr),
+		.fab_axil_awprot(fab_axil_awprot),
+		.fab_axil_awvalid(fab_axil_awvalid),
+		.fab_axil_awready(fab_axil_awready),
+		.fab_axil_wdata(fab_axil_wdata),
+		.fab_axil_wstrb(fab_axil_wstrb),
+		.fab_axil_wvalid(fab_axil_wvalid),
+		.fab_axil_wready(fab_axil_wready),
+		.fab_axil_bresp(fab_axil_bresp),
+		.fab_axil_bvalid(fab_axil_bvalid),
+		.fab_axil_bready(fab_axil_bready),
+		.fab_axil_araddr(fab_axil_araddr),
+		.fab_axil_arprot(fab_axil_arprot),
+		.fab_axil_arvalid(fab_axil_arvalid),
+		.fab_axil_arready(fab_axil_arready),
+		.fab_axil_rdata(fab_axil_rdata),
+		.fab_axil_rresp(fab_axil_rresp),
+		.fab_axil_rvalid(fab_axil_rvalid),
+		.fab_axil_rready(fab_axil_rready),
+		.fab_axi_awaddr(fab_axi_awaddr),
+		.fab_axi_awlen(fab_axi_awlen),
+		.fab_axi_awvalid(fab_axi_awvalid),
+		.fab_axi_awready(fab_axi_awready),
+		.fab_axi_wdata(fab_axi_wdata),
+		.fab_axi_wlast(fab_axi_wlast),
+		.fab_axi_wvalid(fab_axi_wvalid),
+		.fab_axi_wready(fab_axi_wready),
+		.fab_axi_bresp(fab_axi_bresp),
+		.fab_axi_bvalid(fab_axi_bvalid),
+		.fab_axi_bready(fab_axi_bready),
+		.fab_axi_araddr(fab_axi_araddr),
+		.fab_axi_arlen(fab_axi_arlen),
+		.fab_axi_arvalid(fab_axi_arvalid),
+		.fab_axi_arready(fab_axi_arready),
+		.fab_axi_rdata(fab_axi_rdata),
+		.fab_axi_rresp(fab_axi_rresp),
+		.fab_axi_rlast(fab_axi_rlast),
+		.fab_axi_rvalid(fab_axi_rvalid),
+		.fab_axi_rready(fab_axi_rready),
+		.fab_npu_array_en(fab_npu_array_en),
+		.fab_npu_psum_systolic_en(fab_npu_psum_systolic_en),
+		.fab_npu_psum_lut_en(fab_npu_psum_lut_en),
+		.fab_npu_psum_skew_en(fab_npu_psum_systolic_en),
+		.fab_npu_compute_bank_swap(fab_npu_compute_bank_swap),
+		.fab_npu_swap_weights(fab_npu_swap_weights),
+		.fab_npu_quant_shift_in(fab_npu_quant_shift_in),
+		.fab_npu_quant_shift_en(fab_npu_quant_shift_en),
+		.fab_crossbar_sel(fab_crossbar_sel),
+		.fab_weight_shift_in(fab_weight_shift_in),
+		.fab_weight_shift_en(fab_weight_shift_en),
+		.fab_ext_act_sram_we(fab_ext_act_sram_we),
+		.fab_ext_act_sram_addr(fab_ext_act_sram_addr),
+		.fab_ext_act_sram_wdata(fab_ext_act_sram_wdata),
+		.fab_act_sram_rdata(fab_act_sram_rdata),
+		.fab_out_act(fab_out_act),
+		.fab_psum_A_addr(fab_psum_A_addr),
+		.fab_psum_A_we(fab_psum_A_we),
+		.fab_psum_A_wdata(fab_psum_A_wdata),
+		.fab_psum_A_read_bank_sel(fab_psum_A_read_bank_sel),
+		.fab_psum_A_rdata(fab_psum_A_rdata),
+		.fab_psum_B_addr(fab_psum_B_addr),
+		.fab_psum_B_we(fab_psum_B_we),
+		.fab_psum_B_wdata(fab_psum_B_wdata),
+		.fab_psum_B_read_bank_sel(fab_psum_B_read_bank_sel),
+		.fab_psum_B_rdata(fab_psum_B_rdata),
+		.fab_debug_out_o(),
+		.fab_debug_in_i(1'sb0),
+		.fab_usr_irq_i(fab_usr_irq),
+		.fab_slot_soft_rst_n_o(fab_slot_soft_rst_n)
+	);
+	npu_full_controller #(
+		.ARRAY_HEIGHT(ARRAY_HEIGHT),
+		.ARRAY_WIDTH(ARRAY_WIDTH),
+		.TILE_SIZE(TILE_SIZE),
+		.ACT_HALO_PAD(ACT_HALO_PAD),
+		.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
+		.WEIGHT_WIDTH(WEIGHT_WIDTH),
+		.PSUM_WIDTH(PSUM_WIDTH),
+		.SCALE_WIDTH(SCALE_WIDTH),
+		.WEIGHT_SPLIT(WEIGHT_SPLIT),
+		.AXIL_ADDR_WIDTH(10),
+		.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
+		.AXI_DATA_WIDTH(AXI_DATA_WIDTH),
+		.TOTAL_PASSES(TOTAL_PASSES),
+		.CIN(CIN),
+		.COUT(COUT)
+	) dut(
+		.clk_i(clk),
+		.rst_n(fab_slot_soft_rst_n[0]),
+		.s_axil_awaddr(fab_axil_awaddr),
+		.s_axil_awprot(fab_axil_awprot),
+		.s_axil_awvalid(fab_axil_awvalid),
+		.s_axil_awready(fab_axil_awready),
+		.s_axil_wdata(fab_axil_wdata),
+		.s_axil_wstrb(fab_axil_wstrb),
+		.s_axil_wvalid(fab_axil_wvalid),
+		.s_axil_wready(fab_axil_wready),
+		.s_axil_bresp(fab_axil_bresp),
+		.s_axil_bvalid(fab_axil_bvalid),
+		.s_axil_bready(fab_axil_bready),
+		.s_axil_araddr(fab_axil_araddr),
+		.s_axil_arprot(fab_axil_arprot),
+		.s_axil_arvalid(fab_axil_arvalid),
+		.s_axil_arready(fab_axil_arready),
+		.s_axil_rdata(fab_axil_rdata),
+		.s_axil_rresp(fab_axil_rresp),
+		.s_axil_rvalid(fab_axil_rvalid),
+		.s_axil_rready(fab_axil_rready),
+		.m_axi_awaddr(fab_axi_awaddr),
+		.m_axi_awlen(fab_axi_awlen),
+		.m_axi_awvalid(fab_axi_awvalid),
+		.m_axi_awready(fab_axi_awready),
+		.m_axi_wdata(fab_axi_wdata),
+		.m_axi_wlast(fab_axi_wlast),
+		.m_axi_wvalid(fab_axi_wvalid),
+		.m_axi_wready(fab_axi_wready),
+		.m_axi_bresp(fab_axi_bresp),
+		.m_axi_bvalid(fab_axi_bvalid),
+		.m_axi_bready(fab_axi_bready),
+		.m_axi_araddr(fab_axi_araddr),
+		.m_axi_arlen(fab_axi_arlen),
+		.m_axi_arvalid(fab_axi_arvalid),
+		.m_axi_arready(fab_axi_arready),
+		.m_axi_rdata(fab_axi_rdata),
+		.m_axi_rresp(fab_axi_rresp),
+		.m_axi_rlast(fab_axi_rlast),
+		.m_axi_rvalid(fab_axi_rvalid),
+		.m_axi_rready(fab_axi_rready),
+		.npu_array_en(fab_npu_array_en),
+		.npu_psum_systolic_en(fab_npu_psum_systolic_en),
+		.npu_psum_lut_en(fab_npu_psum_lut_en),
+		.npu_compute_bank_swap(fab_npu_compute_bank_swap),
+		.npu_crossbar_sel(fab_crossbar_sel),
+		.npu_weight_shift_in(fab_weight_shift_in),
+		.npu_weight_shift_en(fab_weight_shift_en),
+		.npu_swap_weights(fab_npu_swap_weights),
+		.npu_quant_shift_in(fab_npu_quant_shift_in),
+		.npu_quant_shift_en(fab_npu_quant_shift_en),
+		.npu_psum_A_addr(fab_psum_A_addr),
+		.npu_psum_A_we(fab_psum_A_we),
+		.npu_psum_A_wdata(fab_psum_A_wdata),
+		.npu_psum_A_read_bank_sel(fab_psum_A_read_bank_sel),
+		.npu_psum_A_rdata(fab_psum_A_rdata),
+		.npu_psum_B_addr(fab_psum_B_addr),
+		.npu_psum_B_we(fab_psum_B_we),
+		.npu_psum_B_wdata(fab_psum_B_wdata),
+		.npu_psum_B_read_bank_sel(fab_psum_B_read_bank_sel),
+		.npu_psum_B_rdata(fab_psum_B_rdata),
+		.npu_ext_act_sram_we(fab_ext_act_sram_we),
+		.npu_ext_act_sram_addr(fab_ext_act_sram_addr),
+		.npu_out_act(fab_out_act),
+		.efpga_usr_irq_o(fab_usr_irq)
+	);
 	npu_wrapper #(
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
 		.ARRAY_WIDTH(ARRAY_WIDTH),
@@ -162,7 +473,7 @@ module tb_npu_full_sys_3x3_benchmark;
 		.swap_weights(npu_swap_weights),
 		.quant_shift_in(npu_quant_shift_in),
 		.quant_shift_en(npu_quant_shift_en),
-		.stochastic_round_en(npu_stochastic_round_en),
+		.stochastic_round_en(1'b0),
 		.psum_A_addr(npu_psum_A_addr),
 		.psum_A_we(npu_psum_A_we),
 		.psum_A_wdata(npu_psum_A_wdata),
@@ -178,95 +489,6 @@ module tb_npu_full_sys_3x3_benchmark;
 		.ext_act_sram_wdata(npu_ext_act_sram_wdata),
 		.act_sram_rdata(npu_act_sram_rdata),
 		.out_act(npu_out_act)
-	);
-	npu_full_controller #(
-		.ARRAY_HEIGHT(ARRAY_HEIGHT),
-		.ARRAY_WIDTH(ARRAY_WIDTH),
-		.TILE_SIZE(TILE_SIZE),
-		.ACT_HALO_PAD(ACT_HALO_PAD),
-		.ACTIVATION_WIDTH(ACTIVATION_WIDTH),
-		.WEIGHT_WIDTH(WEIGHT_WIDTH),
-		.PSUM_WIDTH(PSUM_WIDTH),
-		.SCALE_WIDTH(SCALE_WIDTH),
-		.WEIGHT_SPLIT(WEIGHT_SPLIT),
-		.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
-		.AXI_DATA_WIDTH(AXI_DATA_WIDTH),
-		.TOTAL_PASSES(TOTAL_PASSES),
-		.CIN(CIN),
-		.COUT(COUT)
-	) dut(
-		.clk_i(clk),
-		.rst_n(rst_n),
-		.s_axil_awaddr(s_axil_awaddr),
-		.s_axil_awprot(s_axil_awprot),
-		.s_axil_awvalid(s_axil_awvalid),
-		.s_axil_awready(s_axil_awready),
-		.s_axil_wdata(s_axil_wdata),
-		.s_axil_wstrb(s_axil_wstrb),
-		.s_axil_wvalid(s_axil_wvalid),
-		.s_axil_wready(s_axil_wready),
-		.s_axil_bresp(s_axil_bresp),
-		.s_axil_bvalid(s_axil_bvalid),
-		.s_axil_bready(s_axil_bready),
-		.s_axil_araddr(s_axil_araddr),
-		.s_axil_arprot(s_axil_arprot),
-		.s_axil_arvalid(s_axil_arvalid),
-		.s_axil_arready(s_axil_arready),
-		.s_axil_rdata(s_axil_rdata),
-		.s_axil_rresp(s_axil_rresp),
-		.s_axil_rvalid(s_axil_rvalid),
-		.s_axil_rready(s_axil_rready),
-		.m_axi_awaddr(m_axi_awaddr),
-		.m_axi_awlen(m_axi_awlen),
-		.m_axi_awsize(m_axi_awsize),
-		.m_axi_awburst(m_axi_awburst),
-		.m_axi_awvalid(m_axi_awvalid),
-		.m_axi_awready(m_axi_awready),
-		.m_axi_wdata(m_axi_wdata),
-		.m_axi_wstrb(m_axi_wstrb),
-		.m_axi_wlast(m_axi_wlast),
-		.m_axi_wvalid(m_axi_wvalid),
-		.m_axi_wready(m_axi_wready),
-		.m_axi_bresp(m_axi_bresp),
-		.m_axi_bvalid(m_axi_bvalid),
-		.m_axi_bready(m_axi_bready),
-		.m_axi_araddr(m_axi_araddr),
-		.m_axi_arlen(m_axi_arlen),
-		.m_axi_arsize(m_axi_arsize),
-		.m_axi_arburst(m_axi_arburst),
-		.m_axi_arvalid(m_axi_arvalid),
-		.m_axi_arready(m_axi_arready),
-		.m_axi_rdata(m_axi_rdata),
-		.m_axi_rresp(m_axi_rresp),
-		.m_axi_rlast(m_axi_rlast),
-		.m_axi_rvalid(m_axi_rvalid),
-		.m_axi_rready(m_axi_rready),
-		.npu_array_en(npu_array_en),
-		.npu_psum_systolic_en(npu_psum_systolic_en),
-		.npu_psum_lut_en(npu_psum_lut_en),
-		.npu_psum_skew_en(npu_psum_skew_en),
-		.npu_compute_bank_swap(npu_compute_bank_swap),
-		.npu_crossbar_sel(npu_crossbar_sel),
-		.npu_weight_shift_in(npu_weight_shift_in),
-		.npu_weight_shift_en(npu_weight_shift_en),
-		.npu_swap_weights(npu_swap_weights),
-		.npu_quant_shift_in(npu_quant_shift_in),
-		.npu_quant_shift_en(npu_quant_shift_en),
-		.npu_stochastic_round_en(npu_stochastic_round_en),
-		.npu_psum_A_addr(npu_psum_A_addr),
-		.npu_psum_A_we(npu_psum_A_we),
-		.npu_psum_A_wdata(npu_psum_A_wdata),
-		.npu_psum_A_read_bank_sel(npu_psum_A_read_bank_sel),
-		.npu_psum_A_rdata(npu_psum_A_rdata),
-		.npu_psum_B_addr(npu_psum_B_addr),
-		.npu_psum_B_we(npu_psum_B_we),
-		.npu_psum_B_wdata(npu_psum_B_wdata),
-		.npu_psum_B_read_bank_sel(npu_psum_B_read_bank_sel),
-		.npu_psum_B_rdata(npu_psum_B_rdata),
-		.npu_ext_act_sram_we(npu_ext_act_sram_we),
-		.npu_ext_act_sram_addr(npu_ext_act_sram_addr),
-		.npu_out_act(npu_out_act),
-		.efpga_usr_irq_o(efpga_usr_irq_o)
 	);
 	reg signed [ACTIVATION_WIDTH - 1:0] fmap_in [0:((CONV_H * CONV_W) * CIN) - 1];
 	reg signed [WEIGHT_WIDTH - 1:0] w1_flat [0:((9 * CIN) * COUT) - 1];
@@ -378,7 +600,7 @@ module tb_npu_full_sys_3x3_benchmark;
 				end
 			end
 			if (!found) begin
-				mem_dir = "TEST/SoftLogic/GoldenReference/";
+				mem_dir = "TEST/GoldenReference/";
 				fd = $fopen({mem_dir, sample_file}, "r");
 				if (fd != 0) begin
 					$fclose(fd);
@@ -388,10 +610,10 @@ module tb_npu_full_sys_3x3_benchmark;
 			if (!found) begin
 				$display("\n=====================================================================================");
 				$display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
-				$display(" Checked plusarg path and standard default 'TEST/SoftLogic/GoldenReference/'.");
+				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:408:13 - tb_npu_full_sys_3x3_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:648:13 - tb_npu_full_sys_3x3_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -404,9 +626,9 @@ module tb_npu_full_sys_3x3_benchmark;
 			if (fd == 0) begin
 				$display("\n=========================================================================================");
 				$display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
-				$display(" Please ensure files exist in TEST/SoftLogic/GoldenReference/ or pass +MEM_DIR=<path>.");
+				$display(" Please ensure files exist in TEST/GoldenReference/ or pass +MEM_DIR=<path>.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:420:13 - tb_npu_full_sys_3x3_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:660:13 - tb_npu_full_sys_3x3_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -424,7 +646,7 @@ module tb_npu_full_sys_3x3_benchmark;
 				$display(" Memory was either empty, uninitialized, or filled with all zeroes!");
 				$display(" Simulation aborted to prevent FALSE POSITIVE pass.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:437:13 - tb_npu_full_sys_3x3_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:677:13 - tb_npu_full_sys_3x3_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
 				$finish(1);
 			end
 		end
@@ -509,18 +731,18 @@ module tb_npu_full_sys_3x3_benchmark;
 	endfunction
 	always @(negedge clk)
 		if (!rst_n)
-			npu_ext_act_sram_wdata <= 1'sb0;
+			fab_ext_act_sram_wdata <= 1'sb0;
 		else if (dut.preload_phase) begin
 			for (feeder_b = 0; feeder_b < 6; feeder_b = feeder_b + 1)
-				npu_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(0, feeder_b, sv2v_cast_32_signed(dut.preload_step), curr_ty, curr_tx);
-			npu_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
-			npu_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
+				fab_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(0, feeder_b, sv2v_cast_32_signed(dut.preload_step), curr_ty, curr_tx);
+			fab_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
+			fab_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 		end
 		else if (dut.dma_channel_to_load >= 0) begin
 			for (feeder_b = 0; feeder_b < 6; feeder_b = feeder_b + 1)
-				npu_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(sv2v_cast_32_signed(dut.dma_channel_to_load), feeder_b, sv2v_cast_32_signed((dut.dma_bank_ptr >> (feeder_b * 6)) & 6'h3f), curr_ty, curr_tx);
-			npu_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
-			npu_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
+				fab_ext_act_sram_wdata[feeder_b * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= get_fmap_val(sv2v_cast_32_signed(dut.dma_channel_to_load), feeder_b, sv2v_cast_32_signed((dut.dma_bank_ptr >> (feeder_b * 6)) & 6'h3f), curr_ty, curr_tx);
+			fab_ext_act_sram_wdata[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
+			fab_ext_act_sram_wdata[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] <= 1'sb0;
 		end
 	initial begin
 		#(30000000)
@@ -756,7 +978,7 @@ module tb_npu_full_sys_3x3_benchmark;
 			$display(">>> SUCCESS: Full 36-Block Benchmark with MaxPool2D PASSED 100%%! <<<");
 		else begin
 			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:745:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:985:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
 			$finish(1);
 		end
 		$finish;

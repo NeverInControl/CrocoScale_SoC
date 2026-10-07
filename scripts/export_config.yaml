@@ -1,0 +1,16 @@
+# =============================================================================
+# CrocoScale SoC — Standalone Subsystem IP Exporter Configuration
+# =============================================================================
+# Defines path remapping rules for external submodules, IP blocks, and vendor
+# directories when packaging standalone subsystems into exports/<target>_<format>/.
+
+path_mappings:
+  # Map external FABulous soft-fabric IP into the eFPGA Subsystem hierarchy
+  - source_prefix: "FABulousProject/CrocoScale_Fabric"
+    export_prefix: "eFPGA_Subsystem/FABulous"
+
+# Source path prefix stripping rules (top-level folders stripped before export)
+strip_prefixes:
+  - "RTL"
+  - "MACROS"
+  - "VERILOG_MIRROR_GENERATED"

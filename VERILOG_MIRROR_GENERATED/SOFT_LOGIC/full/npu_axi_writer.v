@@ -9,12 +9,9 @@ module npu_axi_writer (
 	npu_out_act_i,
 	awaddr_o,
 	awlen_o,
-	awsize_o,
-	awburst_o,
 	awvalid_o,
 	awready_i,
 	wdata_o,
-	wstrb_o,
 	wlast_o,
 	wvalid_o,
 	wready_i,
@@ -36,12 +33,9 @@ module npu_axi_writer (
 	input wire signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] npu_out_act_i;
 	output wire [31:0] awaddr_o;
 	output wire [7:0] awlen_o;
-	output wire [2:0] awsize_o;
-	output wire [1:0] awburst_o;
 	output reg awvalid_o;
 	input wire awready_i;
 	output reg [31:0] wdata_o;
-	output wire [3:0] wstrb_o;
 	output reg wlast_o;
 	output reg wvalid_o;
 	input wire wready_i;
@@ -54,9 +48,8 @@ module npu_axi_writer (
 	reg [4:0] drain_w_beat;
 	reg [4:0] stream_cnt;
 	reg signed [(ARRAY_WIDTH * ACTIVATION_WIDTH) - 1:0] max_accum;
-	reg [31:0] lat_upper;
 	wire axi_w_stall = wvalid_o && !wready_i;
-	wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd5 : 6'd4);
+	wire [5:0] next_req_idx = {1'b0, stream_cnt} + (lut_en_i ? 6'd7 : 6'd6);
 	function automatic signed [ACTIVATION_WIDTH - 1:0] signed_max;
 		input reg signed [ACTIVATION_WIDTH - 1:0] a;
 		input reg signed [ACTIVATION_WIDTH - 1:0] b;
@@ -73,11 +66,8 @@ module npu_axi_writer (
 		end
 	end
 	wire [7:0] burst_base_p = {drain_burst_idx[4:0], 3'b000};
-	assign awaddr_o = out_base_i + {19'd0, drain_burst_idx, 6'b000000};
+	assign awaddr_o = {out_base_i[31:20], out_base_i[19:6] + {8'd0, drain_burst_idx}, 6'b000000};
 	assign awlen_o = 8'd15;
-	assign awsize_o = 3'b010;
-	assign awburst_o = 2'b01;
-	assign wstrb_o = 4'hf;
 	function automatic [7:0] sv2v_cast_8;
 		input reg [7:0] inp;
 		sv2v_cast_8 = inp;
@@ -90,7 +80,6 @@ module npu_axi_writer (
 			drain_psum_addr_o <= 1'sb0;
 			stream_cnt <= 1'sb0;
 			max_accum <= 1'sb0;
-			lat_upper <= 1'sb0;
 			done_o <= 1'b0;
 			awvalid_o <= 1'b0;
 			wdata_o <= 1'sb0;
@@ -138,57 +127,69 @@ module npu_axi_writer (
 						drain_psum_addr_o <= {burst_base_p[7:3], 3'b001};
 					state <= 4'd4;
 				end
-				4'd4:
-					if (pool_en_i) begin
+				4'd4: begin
+					if (pool_en_i)
 						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h11};
+					state <= 4'd5;
+				end
+				4'd5: begin
+					if (pool_en_i)
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h02};
+					else
+						drain_psum_addr_o <= {burst_base_p[7:3], 3'b010};
+					state <= 4'd6;
+				end
+				4'd6:
+					if (pool_en_i) begin
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h03};
 						if (!lut_en_i)
-							state <= 4'd11;
+							state <= 4'd13;
 						else
-							state <= 4'd5;
+							state <= 4'd7;
 					end
 					else
-						state <= 4'd5;
-				4'd5:
+						state <= 4'd7;
+				4'd7:
 					if (pool_en_i) begin
-						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h02};
-						state <= 4'd11;
+						drain_psum_addr_o <= {drain_burst_idx[2:0], 5'h12};
+						state <= 4'd13;
 					end
 					else begin
-						drain_psum_addr_o <= {burst_base_p[7:3], 3'b010};
-						state <= 4'd6;
+						drain_psum_addr_o <= {burst_base_p[7:3], 3'b011};
+						state <= 4'd8;
 					end
-				4'd6: begin
-					lat_upper <= {npu_out_act_i[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
+				4'd8: begin
+					max_accum <= npu_out_act_i;
 					wdata_o <= {npu_out_act_i[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[0+:ACTIVATION_WIDTH]};
 					wvalid_o <= 1'b1;
 					wlast_o <= 1'b0;
 					drain_w_beat <= 1'sb0;
-					state <= 4'd7;
+					state <= 4'd9;
 				end
-				4'd7:
+				4'd9:
 					if (wready_i && wvalid_o) begin
 						if (drain_w_beat == 5'd15) begin
 							wvalid_o <= 1'b0;
 							wlast_o <= 1'b0;
 							bready_o <= 1'b1;
-							state <= 4'd8;
+							state <= 4'd10;
 						end
 						else begin
 							drain_w_beat <= drain_w_beat + 1'b1;
 							if (drain_w_beat[0] == 1'b0) begin
-								wdata_o <= lat_upper;
+								wdata_o <= {max_accum[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
 								if (drain_w_beat == 5'd14)
 									wlast_o <= 1'b1;
-								if (drain_w_beat <= 5'd8)
-									drain_psum_addr_o <= (burst_base_p + sv2v_cast_8(drain_w_beat[4:1])) + 8'd3;
+								if (drain_w_beat <= 5'd6)
+									drain_psum_addr_o <= (burst_base_p + sv2v_cast_8(drain_w_beat[4:1])) + 8'd4;
 							end
 							else begin
-								lat_upper <= {npu_out_act_i[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
+								max_accum <= npu_out_act_i;
 								wdata_o <= {npu_out_act_i[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], npu_out_act_i[0+:ACTIVATION_WIDTH]};
 							end
 						end
 					end
-				4'd11:
+				4'd13:
 					if (!axi_w_stall) begin
 						stream_cnt <= stream_cnt + 1'b1;
 						if (next_req_idx < 6'd32)
@@ -197,7 +198,7 @@ module npu_axi_writer (
 							2'd0: begin
 								max_accum <= npu_out_act_i;
 								if (stream_cnt > 5'd0) begin
-									wdata_o <= lat_upper;
+									wdata_o <= {max_accum[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
 									wvalid_o <= 1'b1;
 									drain_w_beat <= drain_w_beat + 1'b1;
 								end
@@ -209,44 +210,44 @@ module npu_axi_writer (
 							2'd2: max_accum <= next_max;
 							2'd3: begin
 								wdata_o <= {next_max[3 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[2 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[0+:ACTIVATION_WIDTH]};
-								lat_upper <= {next_max[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], next_max[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
+								max_accum <= next_max;
 								wvalid_o <= 1'b1;
 								drain_w_beat <= drain_w_beat + 1'b1;
 								if (stream_cnt == 5'd31)
-									state <= 4'd12;
+									state <= 4'd14;
 							end
 						endcase
 					end
-				4'd12:
+				4'd14:
 					if (wvalid_o && wready_i) begin
 						if (wlast_o) begin
 							wvalid_o <= 1'b0;
 							wlast_o <= 1'b0;
 							bready_o <= 1'b1;
-							state <= 4'd8;
+							state <= 4'd10;
 						end
 						else begin
-							wdata_o <= lat_upper;
+							wdata_o <= {max_accum[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[6 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[5 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH], max_accum[4 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH]};
 							wvalid_o <= 1'b1;
 							wlast_o <= 1'b1;
 							drain_w_beat <= drain_w_beat + 1'b1;
 						end
 					end
-				4'd8:
+				4'd10:
 					if (bvalid_i && bready_o) begin
 						bready_o <= 1'b0;
 						if (drain_burst_idx == (pool_en_i ? 6'd7 : 6'd31))
-							state <= 4'd9;
+							state <= 4'd11;
 						else begin
 							drain_burst_idx <= drain_burst_idx + 1'b1;
 							state <= 4'd1;
 						end
 					end
-				4'd9: begin
+				4'd11: begin
 					done_o <= 1'b1;
-					state <= 4'd10;
+					state <= 4'd12;
 				end
-				4'd10:
+				4'd12:
 					if (!start_i)
 						state <= 4'd0;
 				default: state <= 4'd0;

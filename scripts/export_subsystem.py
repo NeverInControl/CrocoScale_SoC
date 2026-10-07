@@ -14,12 +14,11 @@ Defaults:
   --output-dir : exports/<target>/
 
 Features:
-  1. Zero hardcoded module registries: dynamically discovers filelists, testbenches,
-     and HAL drivers.
-  2. Resolves RTL from VERILOG_MIRROR_GENERATED (for 'v') or RTL/ (for 'sv') or both.
-  3. Writes <target>_global.f directly at the root of the exported directory with
-     zero library dependencies.
-  4. Generates an EXPORT_MANIFEST.md with export metadata and simulation instructions.
+  - Dynamic discovery: resolves filelists, testbenches, and HAL drivers automatically.
+  - Dual format: resolves RTL from VERILOG_MIRROR_GENERATED (v) or RTL/ (sv) or both.
+  - Submodule remapping: configurable YAML rules map external IP into target trees.
+  - Clean global filelist: writes standalone filelist with zero library dependencies.
+  - Packaging manifest: generates EXPORT_MANIFEST.md with simulation quickstart.
 """
 
 import os
@@ -194,19 +193,90 @@ def resolve_source_file(rel_path: str, fmt: str, repo_root: Path) -> Path:
         mirror_root = repo_root / "VERILOG_MIRROR_GENERATED"
         rel_v = rel_path[:-3] + ".v" if rel_path.endswith(".sv") else rel_path
         cand = mirror_root / rel_v
-        if cand.exists():
-            return cand
+        try:
+            if cand.exists():
+                return cand
+        except OSError:
+            pass
         cand_direct = mirror_root / rel_path
-        if cand_direct.exists():
-            return cand_direct
-        # Fallback to repo root if mirror file does not exist
+        try:
+            if cand_direct.exists():
+                return cand_direct
+        except OSError:
+            pass
+        # Fallback to repo root if mirror file does not exist or cannot be accessed
         cand_src = repo_root / rel_v
-        if cand_src.exists():
-            return cand_src
+        try:
+            if cand_src.exists():
+                return cand_src
+        except OSError:
+            pass
         return repo_root / rel_path
     else:
         # SystemVerilog source
         return repo_root / rel_path
+
+
+# -----------------------------------------------------------------------------
+# Configuration & Submodule Path Remapping
+# -----------------------------------------------------------------------------
+
+DEFAULT_CONFIG = {
+    "path_mappings": [
+        {
+            "source_prefix": "FABulousProject/CrocoScale_Fabric",
+            "export_prefix": "eFPGA_Subsystem/FABulous",
+        }
+    ],
+    "strip_prefixes": ["RTL", "MACROS", "VERILOG_MIRROR_GENERATED"],
+}
+
+
+def load_export_config(config_path: Path = None, repo_root: Path = REPO_ROOT) -> dict:
+    """
+    Loads exporter configuration from a YAML file.
+    Falls back gracefully to built-in path mapping defaults if YAML parser or file is unavailable.
+    """
+    cfg_file = config_path if config_path else repo_root / "scripts" / "export_config.yaml"
+    if not cfg_file.exists():
+        return DEFAULT_CONFIG
+
+    try:
+        import yaml
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+            if isinstance(data, dict):
+                return {
+                    "path_mappings": data.get("path_mappings", DEFAULT_CONFIG["path_mappings"]),
+                    "strip_prefixes": data.get("strip_prefixes", DEFAULT_CONFIG["strip_prefixes"]),
+                }
+    except Exception as exc:
+        print(f"[WARNING] Could not parse {cfg_file}: {exc}. Using default mappings.")
+
+    return DEFAULT_CONFIG
+
+
+def remap_export_path(rel_path: str, path_mappings: list, strip_prefixes: list) -> Path:
+    """
+    Remaps repository-relative file paths into the exported package directory layout.
+    Matches external submodule path prefixes before applying standard top-level folder stripping.
+    """
+    norm = rel_path.replace("\\", "/").strip("/")
+
+    for mapping in path_mappings:
+        src_pfx = mapping.get("source_prefix", "").replace("\\", "/").strip("/")
+        exp_pfx = mapping.get("export_prefix", "").replace("\\", "/").strip("/")
+        if not src_pfx:
+            continue
+        if norm == src_pfx or norm.startswith(src_pfx + "/"):
+            remainder = norm[len(src_pfx):].lstrip("/")
+            return Path(exp_pfx) / Path(remainder)
+
+    p = Path(norm)
+    if p.parts and p.parts[0] in strip_prefixes:
+        return Path(*p.parts[1:])
+
+    return p
 
 
 # -----------------------------------------------------------------------------
@@ -217,6 +287,7 @@ def export_subsystem(
     target: str,
     output_dir: Path,
     custom_flist: Path = None,
+    config_path: Path = None,
     fmt: str = "v",
     include_tb: bool = False,
     include_hal: bool = False,
@@ -227,15 +298,15 @@ def export_subsystem(
     print(f"CrocoScale IP Exporter — Target: '{target}' | Format: '{fmt}'")
     print("=" * 80)
 
-    # 1. Resolve Target Filelist
+    # Resolve target filelist path
     flist_path = resolve_target_filelist(target, custom_flist, repo_root)
     print(f"[INFO] Root filelist: {flist_path}")
 
-    # 2. Parse & Flatten RTL Dependencies
+    # Parse and flatten RTL dependencies from filelists
     raw_files = parse_flist(flist_path, repo_root)
     print(f"[INFO] Discovered {len(raw_files)} RTL files in dependency tree.")
 
-    # 3. Dynamic Discovery of Testbenches & HAL
+    # Discover associated testbenches, verification vectors, and HAL drivers
     associated_tb_flists = discover_associated_testbenches(target, flist_path, repo_root, raw_files)
     associated_test_dirs = discover_test_directories(target, repo_root)
     associated_hal_files = discover_associated_hal(target, repo_root, raw_files)
@@ -243,16 +314,27 @@ def export_subsystem(
     print(f"[INFO] Auto-detected {len(associated_tb_flists)} testbench filelists.")
     print(f"[INFO] Auto-detected {len(associated_hal_files)} HAL driver files.")
 
-    # 4. Prepare Output Directory
-    if output_dir.exists() and clean:
-        print(f"[INFO] Cleaning existing output directory: {output_dir}")
-        shutil.rmtree(output_dir)
+    # Load path remapping rules and prefix stripping configuration
+    config = load_export_config(config_path, repo_root)
+    path_mappings = config.get("path_mappings", DEFAULT_CONFIG["path_mappings"])
+    strip_prefixes = config.get("strip_prefixes", DEFAULT_CONFIG["strip_prefixes"])
+
+    # Clean up previous export and HDL version directories for this module
+    if clean:
+        if output_dir.exists():
+            print(f"[INFO] Removing previous export/HDL version directory: {output_dir}")
+            shutil.rmtree(output_dir)
+
+        legacy_dir = repo_root / "exports" / target
+        if legacy_dir.exists() and legacy_dir.resolve() != output_dir.resolve():
+            print(f"[INFO] Removing legacy un-suffixed export directory: {legacy_dir}")
+            shutil.rmtree(legacy_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rtl_out_dir = output_dir / "RTL"
     rtl_out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 5. Copy RTL Files Preserving Full Directory Hierarchy
+    # Copy RTL source modules preserving directory hierarchy
     copied_rtl_entries = []
     formats_to_export = ["sv", "v"] if fmt == "both" else [fmt]
 
@@ -266,9 +348,8 @@ def export_subsystem(
                 print(f"[WARNING] Source file not found: {src_file}")
                 continue
 
-            p = Path(rel_path)
-            parts = p.parts[1:] if p.parts[0] in ("RTL", "MACROS", "VERILOG_MIRROR_GENERATED") else p.parts
-            dst_file = curr_rtl_dir.joinpath(*parts).with_suffix(src_file.suffix)
+            rel_target = remap_export_path(rel_path, path_mappings, strip_prefixes)
+            dst_file = curr_rtl_dir / rel_target.with_suffix(src_file.suffix)
             dst_file.parent.mkdir(parents=True, exist_ok=True)
 
             shutil.copy2(src_file, dst_file)
@@ -276,9 +357,45 @@ def export_subsystem(
             if rel_entry not in copied_rtl_entries:
                 copied_rtl_entries.append(rel_entry)
 
+        # For full SoC SystemVerilog export, copy the NeoRV32 VHDL CPU complex 1-to-1
+        copied_vhdl_entries = []
+        if target == "soc" and f_fmt == "sv":
+            cpu_src_dir = repo_root / "RTL" / "CPU"
+            if cpu_src_dir.exists():
+                cpu_dst_dir = curr_rtl_dir / "CPU"
+                cpu_dst_dir.mkdir(parents=True, exist_ok=True)
+                for vhd_file in cpu_src_dir.rglob("*.vhd"):
+                    rel_vhd = vhd_file.relative_to(cpu_src_dir)
+                    target_vhd = cpu_dst_dir / rel_vhd
+                    target_vhd.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(vhd_file, target_vhd)
+                    copied_vhdl_entries.append(target_vhd.relative_to(output_dir).as_posix())
+
+            wrapper_src = repo_root / "RTL" / "Integration" / "neorv32_axi_wrapper.vhd"
+            if wrapper_src.exists():
+                wrapper_dst = curr_rtl_dir / "Integration" / wrapper_src.name
+                wrapper_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(wrapper_src, wrapper_dst)
+                copied_vhdl_entries.append(wrapper_dst.relative_to(output_dir).as_posix())
+
+            if copied_vhdl_entries:
+                vhdl_flist_path = output_dir / f"{target}_vhdl.f"
+                with open(vhdl_flist_path, "w", encoding="utf-8", newline="\n") as vf:
+                    vf.write("# =============================================================================\n")
+                    vf.write(f"# CrocoScale SoC — VHDL CPU Complex Filelist: {target}\n")
+                    vf.write("# Auto-generated for mixed-language tools (Vivado read_vhdl)\n")
+                    vf.write("# =============================================================================\n\n")
+                    pkg_entry = next((e for e in copied_vhdl_entries if "package" in e.lower()), None)
+                    if pkg_entry:
+                        vf.write(f"{pkg_entry}\n")
+                    for ve in sorted(copied_vhdl_entries):
+                        if ve != pkg_entry:
+                            vf.write(f"{ve}\n")
+                print(f"[INFO] Bundled {len(copied_vhdl_entries)} VHDL CPU files and generated {vhdl_flist_path}")
+
     print(f"[INFO] Copied {len(raw_files)} RTL files into {rtl_out_dir}")
 
-    # 6. Generate Root-Level Flat Filelist (<target>_global.f)
+    # Generate root-level standalone flat filelist
     global_flist_name = f"{target}_global.f"
     global_flist_path = output_dir / global_flist_name
     print(f"[INFO] Writing standalone flat filelist: {global_flist_path}")
@@ -292,7 +409,7 @@ def export_subsystem(
         for f in copied_rtl_entries:
             gf.write(f"{f}\n")
 
-    # 7. Package TEST/ Directory (If requested)
+    # Bundle testbenches and simulation vectors
     copied_tb_count = 0
     copied_mem_count = 0
     if include_tb:
@@ -316,16 +433,19 @@ def export_subsystem(
             dst_tb_flist = test_out_dir / tb_flist_path.name
             with open(tb_flist_path, "r", encoding="utf-8") as sf, open(dst_tb_flist, "w", encoding="utf-8", newline="\n") as df:
                 df.write(f"# Standalone Testbench Filelist for {tb_flist_path.stem}\n")
+                df.write(f"# Paths relative to package root (nested flist relative to TEST/)\n")
                 df.write(f"-f ../{global_flist_name}\n\n")
                 for line in sf:
                     clean = line.strip().rstrip("\r\n")
                     if clean.startswith(("-f", "-c", "#")) or not clean:
                         continue
-                    df.write(f"{Path(clean).name}\n")
+                    name = Path(clean).name
+                    if name.startswith("tb_"):
+                        df.write(f"TEST/{name}\n")
 
         print(f"[INFO] Bundled TEST/: {copied_tb_count} testbenches and {copied_mem_count} .mem vectors.")
 
-    # 8. Package HAL/ Directory (If requested)
+    # Bundle C hardware abstraction layer drivers
     copied_hal_count = 0
     if include_hal:
         if associated_hal_files:
@@ -338,7 +458,7 @@ def export_subsystem(
         else:
             print(f"[INFO] No associated HAL driver files found for '{target}' (skipped).")
 
-    # 9. Generate EXPORT_MANIFEST.md
+    # Generate export manifest with metadata and run instructions
     git_sha = get_git_commit(repo_root)
     manifest_path = output_dir / "EXPORT_MANIFEST.md"
     with open(manifest_path, "w", encoding="utf-8", newline="\n") as mf:
@@ -386,7 +506,7 @@ def main():
         "--output-dir",
         type=Path,
         default=None,
-        help="Destination directory for the exported package (default: exports/<target>/).",
+        help="Destination directory for the exported package (default: exports/<target>_<format>/).",
     )
     parser.add_argument(
         "--format",
@@ -408,6 +528,12 @@ def main():
         help="Include HAL/ directory with C driver files (default: False).",
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Optional path to exporter YAML configuration file (default: scripts/export_config.yaml).",
+    )
+    parser.add_argument(
         "--no-clean",
         action="store_true",
         help="Do not delete existing output directory before exporting.",
@@ -416,12 +542,17 @@ def main():
     args = parser.parse_args()
 
     target_name = args.target if not args.filelist else args.filelist.stem
-    out_dir = args.output_dir if args.output_dir else REPO_ROOT / "exports" / target_name
+    if args.output_dir:
+        out_dir = args.output_dir
+    else:
+        suffix = f"_{args.format}" if args.format != "both" else ""
+        out_dir = REPO_ROOT / "exports" / f"{target_name}{suffix}"
 
     export_subsystem(
         target=target_name,
         output_dir=out_dir,
         custom_flist=args.filelist,
+        config_path=args.config,
         fmt=args.format,
         include_tb=args.include_tb,
         include_hal=args.include_hal,

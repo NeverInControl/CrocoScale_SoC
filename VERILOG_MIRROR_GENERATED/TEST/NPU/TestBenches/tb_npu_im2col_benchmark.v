@@ -161,7 +161,7 @@ module tb_npu_im2col_benchmark;
 				end
 			end
 			if (!found) begin
-				mem_dir = "TEST/NPU/GoldenReference/";
+				mem_dir = "TEST/GoldenReference/";
 				fd = $fopen({mem_dir, sample_file}, "r");
 				if (fd != 0) begin
 					$fclose(fd);
@@ -171,7 +171,7 @@ module tb_npu_im2col_benchmark;
 			if (!found) begin
 				$display("\n=====================================================================================");
 				$display(" [FATAL ERROR] Required test vector file '%s' was NOT found!", sample_file);
-				$display(" Checked plusarg path and standard default 'TEST/NPU/GoldenReference/'.");
+				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
 				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:204:13 - tb_npu_im2col_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");

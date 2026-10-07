@@ -11,6 +11,7 @@ module npu_seq_weights (
 	weight_shift_step_o
 );
 	reg _sv2v_0;
+	parameter signed [31:0] ARRAY_HEIGHT = 8;
 	input wire preload_phase_i;
 	input wire [7:0] preload_cnt_i;
 	input wire [2:0] state_i;
@@ -18,7 +19,7 @@ module npu_seq_weights (
 	input wire [8:0] k_cnt_i;
 	input wire [8:0] pass_len_i;
 	input wire [7:0] total_passes_i;
-	output reg [1:0] weight_shift_en_o;
+	output reg [ARRAY_HEIGHT - 1:0] weight_shift_en_o;
 	output reg swap_weights_o;
 	output reg [2:0] weight_shift_step_o;
 	localparam [2:0] SEQ_COMPUTE = 3'd2;
@@ -29,12 +30,12 @@ module npu_seq_weights (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		weight_shift_en_o = 2'b00;
+		weight_shift_en_o = 1'sb0;
 		swap_weights_o = 1'b0;
 		weight_shift_step_o = 3'd0;
 		if (preload_phase_i) begin
 			if (preload_cnt_i < 8'd8) begin
-				weight_shift_en_o = 2'b11;
+				weight_shift_en_o = {ARRAY_HEIGHT {1'b1}};
 				weight_shift_step_o = preload_cnt_i[2:0];
 			end
 			else if (preload_cnt_i == 8'd8)
@@ -42,7 +43,7 @@ module npu_seq_weights (
 		end
 		else if (state_i == SEQ_COMPUTE) begin
 			if ((((pass_cnt_i + 1'b1) < total_passes_i) && (k_cnt_i >= 9'd32)) && (k_cnt_i < 9'd40)) begin
-				weight_shift_en_o = 2'b11;
+				weight_shift_en_o = {ARRAY_HEIGHT {1'b1}};
 				weight_shift_step_o = sv2v_cast_3(k_cnt_i - 9'd32);
 			end
 			else if (((pass_cnt_i + 1'b1) < total_passes_i) && (k_cnt_i == (pass_len_i - 1'b1)))

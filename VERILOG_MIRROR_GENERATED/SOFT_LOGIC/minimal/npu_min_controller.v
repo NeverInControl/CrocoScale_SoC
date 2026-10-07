@@ -83,7 +83,9 @@ module npu_min_controller (
 	parameter signed [31:0] WEIGHT_WIDTH = 8;
 	parameter signed [31:0] PSUM_WIDTH = 32;
 	parameter signed [31:0] SCALE_WIDTH = 16;
-	parameter signed [31:0] WEIGHT_SPLIT = 2;
+	parameter signed [31:0] WEIGHT_SPLIT = 8;
+	parameter signed [31:0] TOTAL_PASSES = (KERNEL_SIZE == 1 ? 1 : 9);
+	parameter signed [31:0] AXIL_ADDR_WIDTH = 10;
 	parameter signed [31:0] AXI_ADDR_WIDTH = 32;
 	parameter signed [31:0] AXI_DATA_WIDTH = 32;
 	localparam signed [31:0] PSUM_WORDS = TILE_SIZE * TILE_SIZE;
@@ -96,7 +98,7 @@ module npu_min_controller (
 	localparam signed [31:0] BANK_SEL_WIDTH = $clog2(ARRAY_WIDTH);
 	input wire clk_i;
 	input wire rst_n;
-	input wire [AXI_ADDR_WIDTH - 1:0] s_axil_awaddr;
+	input wire [AXIL_ADDR_WIDTH - 1:0] s_axil_awaddr;
 	input wire [2:0] s_axil_awprot;
 	input wire s_axil_awvalid;
 	output wire s_axil_awready;
@@ -107,7 +109,7 @@ module npu_min_controller (
 	output wire [1:0] s_axil_bresp;
 	output wire s_axil_bvalid;
 	input wire s_axil_bready;
-	input wire [AXI_ADDR_WIDTH - 1:0] s_axil_araddr;
+	input wire [AXIL_ADDR_WIDTH - 1:0] s_axil_araddr;
 	input wire [2:0] s_axil_arprot;
 	input wire s_axil_arvalid;
 	output wire s_axil_arready;
@@ -147,7 +149,7 @@ module npu_min_controller (
 	output wire npu_compute_bank_swap;
 	output wire [(ARRAY_HEIGHT * XBAR_SEL_WIDTH) - 1:0] npu_crossbar_sel;
 	output wire signed [(ARRAY_HEIGHT * WEIGHT_WIDTH) - 1:0] npu_weight_shift_in;
-	output wire [WEIGHT_SPLIT - 1:0] npu_weight_shift_en;
+	output wire [ARRAY_HEIGHT - 1:0] npu_weight_shift_en;
 	output wire npu_swap_weights;
 	output wire [29:0] npu_quant_shift_in;
 	output wire npu_quant_shift_en;
@@ -174,7 +176,6 @@ module npu_min_controller (
 	wire [31:0] weight_base;
 	wire [31:0] out_base;
 	wire [31:0] bias_base;
-	wire [31:0] reg_quant_param;
 	wire [31:0] reg_config;
 	wire busy_sig;
 	wire done_pulse;
@@ -183,8 +184,10 @@ module npu_min_controller (
 	wire start_act;
 	wire act_done;
 	wire start_weight;
-	wire [3:0] weight_pass_idx;
+	wire [7:0] weight_pass_idx;
 	wire weight_done;
+	wire [3:0] act_chunk_idx;
+	wire bias_target_bank_b;
 	wire start_drain;
 	wire drain_done;
 	wire [PSUM_ADDR_WIDTH - 1:0] drain_psum_addr;
@@ -198,12 +201,12 @@ module npu_min_controller (
 	wire [ARRAY_WIDTH - 1:0] seq_psum_B_we;
 	wire [(NUM_ACT_BANKS * ACT_ADDR_WIDTH) - 1:0] seq_act_sram_addr;
 	wire [3:0] seq_state_code;
-	wire [3:0] seq_pass_idx;
+	wire [7:0] seq_pass_idx;
 	wire [1:0] seq_ky;
 	wire [1:0] seq_kx;
 	wire [8:0] seq_comp_k;
 	wire [3:0] state_reg = seq_state_code;
-	wire [3:0] pass_idx = seq_pass_idx;
+	wire [7:0] pass_idx = seq_pass_idx;
 	wire [1:0] ky = seq_ky;
 	wire [1:0] kx = seq_kx;
 	wire [8:0] comp_k = seq_comp_k;
@@ -213,13 +216,13 @@ module npu_min_controller (
 	assign npu_psum_lut_en = 1'b0;
 	assign npu_ext_act_sram_addr = (npu_ext_act_sram_we[0] ? {NUM_ACT_BANKS {dma_ext_act_sram_addr}} : seq_act_sram_addr);
 	assign npu_psum_A_addr = (seq_state_code == 4'd10 ? drain_psum_addr : seq_psum_A_addr);
-	assign npu_psum_A_we = dma_bias_psum_we | seq_psum_A_we;
+	assign npu_psum_A_we = (!bias_target_bank_b ? dma_bias_psum_we : {ARRAY_WIDTH {1'b0}}) | seq_psum_A_we;
 	assign npu_psum_A_wdata = dma_bias_psum_wdata;
 	assign npu_psum_B_addr = seq_psum_B_addr;
-	assign npu_psum_B_we = dma_bias_psum_we | seq_psum_B_we;
+	assign npu_psum_B_we = (bias_target_bank_b ? dma_bias_psum_we : {ARRAY_WIDTH {1'b0}}) | seq_psum_B_we;
 	assign npu_psum_B_wdata = dma_bias_psum_wdata;
 	npu_min_csr #(
-		.AXI_ADDR_WIDTH(AXI_ADDR_WIDTH),
+		.AXI_ADDR_WIDTH(AXIL_ADDR_WIDTH),
 		.AXI_DATA_WIDTH(AXI_DATA_WIDTH)
 	) csr_inst(
 		.clk_i(clk_i),
@@ -249,7 +252,8 @@ module npu_min_controller (
 		.weight_base_o(weight_base),
 		.out_base_o(out_base),
 		.bias_base_o(bias_base),
-		.quant_param_o(reg_quant_param),
+		.quant_shift_in_o(npu_quant_shift_in),
+		.quant_shift_en_o(npu_quant_shift_en),
 		.config_o(reg_config),
 		.usr_irq_o(efpga_usr_irq_o),
 		.fsm_busy_i(busy_sig),
@@ -302,6 +306,7 @@ module npu_min_controller (
 		.start_bias_i(start_bias),
 		.bias_done_o(bias_done),
 		.start_act_i(start_act),
+		.act_chunk_idx_i(act_chunk_idx),
 		.act_done_o(act_done),
 		.start_weight_i(start_weight),
 		.weight_pass_idx_i(weight_pass_idx),
@@ -329,19 +334,20 @@ module npu_min_controller (
 		.WEIGHT_WIDTH(WEIGHT_WIDTH),
 		.PSUM_WIDTH(PSUM_WIDTH),
 		.SCALE_WIDTH(SCALE_WIDTH),
-		.WEIGHT_SPLIT(WEIGHT_SPLIT)
+		.WEIGHT_SPLIT(WEIGHT_SPLIT),
+		.TOTAL_PASSES(TOTAL_PASSES)
 	) seq_inst(
 		.clk_i(clk_i),
 		.rst_n(rst_n),
 		.start_pulse_i(start_pulse),
 		.soft_reset_i(soft_reset),
-		.reg_quant_param_i(reg_quant_param),
 		.reg_config_i(reg_config),
 		.busy_o(busy_sig),
 		.done_pulse_o(done_pulse),
 		.start_bias_o(start_bias),
 		.bias_done_i(bias_done),
 		.start_act_o(start_act),
+		.act_chunk_idx_o(act_chunk_idx),
 		.act_done_i(act_done),
 		.start_weight_o(start_weight),
 		.weight_pass_idx_o(weight_pass_idx),
@@ -352,10 +358,9 @@ module npu_min_controller (
 		.npu_psum_systolic_en_o(npu_psum_systolic_en),
 		.npu_psum_skew_en_o(npu_psum_skew_en),
 		.npu_compute_bank_swap_o(npu_compute_bank_swap),
+		.bias_target_bank_b_o(bias_target_bank_b),
 		.npu_crossbar_sel_o(npu_crossbar_sel),
 		.npu_swap_weights_o(npu_swap_weights),
-		.npu_quant_shift_in_o(npu_quant_shift_in),
-		.npu_quant_shift_en_o(npu_quant_shift_en),
 		.npu_stochastic_round_en_o(npu_stochastic_round_en),
 		.seq_psum_A_addr_o(seq_psum_A_addr),
 		.seq_psum_A_we_o(seq_psum_A_we),

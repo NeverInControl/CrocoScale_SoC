@@ -15,7 +15,6 @@ RTL/eFPGA_Subsystem/AXI_Connector/bridge_soc_to_fabric_slave.v
 RTL/eFPGA_Subsystem/AXI_Connector/efpga_connector.v
 RTL/eFPGA_Subsystem/AXI_Connector/efpga_manager.v
 
-# Integration & Top Wrappers
-RTL/eFPGA_Subsystem/Integration/efpga_axi_subsystem_wrapper.v
+# Top Wrapper
 RTL/eFPGA_Subsystem/eFPGA_Subsystem_TOP/efpga_subsystem_top.v
 

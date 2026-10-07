@@ -1,7 +1,6 @@
-FABulousProject/Fabric_8x16_BELs_FullConfig/AXIL_S_BEL.v
-FABulousProject/Fabric_8x16_BELs_FullConfig/AXI_M_BEL.v
-FABulousProject/Fabric_8x16_BELs_FullConfig/NPU_CTRL_CFG_BEL.v
-FABulousProject/Fabric_8x16_BELs_FullConfig/NPU_ACCUM_SRAM_BEL.v
-FABulousProject/Fabric_8x16_BELs_FullConfig/NPU_SLICE_DATA_SRAM_BEL.v
-FABulousProject/Fabric_8x16_BELs_FullConfig/SOC_DEBUG_CTRL_BEL.v
+# =============================================================================
+# CrocoScale SoC -- eFPGA Perimeter BEL Boundary Harness File List
+# =============================================================================
+-f fabulous_bels.f
 TEST/SoftLogic/common/efpga_boundary_harness.sv
+

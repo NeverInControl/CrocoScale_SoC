@@ -16,7 +16,6 @@ module npu_full_sequencer (
 	array_en_o,
 	psum_systolic_en_o,
 	psum_lut_en_o,
-	psum_skew_en_o,
 	compute_bank_swap_o,
 	crossbar_sel_o,
 	act_sram_addr_o,
@@ -60,12 +59,11 @@ module npu_full_sequencer (
 	output wire array_en_o;
 	output wire psum_systolic_en_o;
 	output wire psum_lut_en_o;
-	output wire psum_skew_en_o;
 	output wire compute_bank_swap_o;
 	output wire [(ARRAY_HEIGHT * 4) - 1:0] crossbar_sel_o;
 	output wire [(ARRAY_HEIGHT * 9) - 1:0] act_sram_addr_o;
 	output wire [ARRAY_HEIGHT - 1:0] act_sram_we_o;
-	output wire [1:0] weight_shift_en_o;
+	output wire [ARRAY_HEIGHT - 1:0] weight_shift_en_o;
 	output wire swap_weights_o;
 	output wire [2:0] weight_shift_step_o;
 	output wire [7:0] psum_A_addr_o;
@@ -113,7 +111,6 @@ module npu_full_sequencer (
 	assign dma_channel_to_load_o = (mode_1x1_i ? -8'sd1 : (state == SEQ_COMPUTE ? sv2v_cast_8(dma_ch_3x3) : -8'sd1));
 	assign array_en_o = state == SEQ_COMPUTE;
 	assign psum_systolic_en_o = state == SEQ_COMPUTE;
-	assign psum_skew_en_o = state == SEQ_COMPUTE;
 	assign compute_bank_swap_o = (state == SEQ_COMPUTE ? swap_val : 1'b0);
 	npu_seq_fsm #(
 		.ARRAY_HEIGHT(ARRAY_HEIGHT),
@@ -142,7 +139,7 @@ module npu_full_sequencer (
 		.drain_phase_o(drain_phase),
 		.drain_cnt_o(drain_cnt)
 	);
-	npu_seq_weights weights_inst(
+	npu_seq_weights #(.ARRAY_HEIGHT(ARRAY_HEIGHT)) weights_inst(
 		.preload_phase_i(preload_phase),
 		.preload_cnt_i(preload_cnt),
 		.state_i(state),

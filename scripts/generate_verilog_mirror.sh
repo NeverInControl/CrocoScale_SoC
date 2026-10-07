@@ -179,6 +179,7 @@ if [[ -z "${TARGET_SUBDIR}" ]]; then
     # Full Tree Mode: Clean and prepare output directory structure
     rm -rf "${OUT_DIR}"
     mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
+    ln -sfn "${REPO_ROOT}/FABulousProject" "${OUT_DIR}/FABulousProject"
 
     # Document auto-generated nature of the mirror directory
     cat << 'EOF' > "${OUT_DIR}/README.md"

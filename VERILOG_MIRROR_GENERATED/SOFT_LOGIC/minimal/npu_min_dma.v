@@ -33,6 +33,7 @@ module npu_min_dma (
 	start_bias_i,
 	bias_done_o,
 	start_act_i,
+	act_chunk_idx_i,
 	act_done_o,
 	start_weight_i,
 	weight_pass_idx_i,
@@ -99,12 +100,13 @@ module npu_min_dma (
 	input wire start_bias_i;
 	output reg bias_done_o;
 	input wire start_act_i;
+	input wire [3:0] act_chunk_idx_i;
 	output reg act_done_o;
 	input wire start_weight_i;
-	input wire [3:0] weight_pass_idx_i;
+	input wire [7:0] weight_pass_idx_i;
 	output reg weight_done_o;
 	output wire signed [(ARRAY_HEIGHT * WEIGHT_WIDTH) - 1:0] weight_shift_in_o;
-	output wire [WEIGHT_SPLIT - 1:0] weight_shift_en_o;
+	output wire [ARRAY_HEIGHT - 1:0] weight_shift_en_o;
 	input wire start_drain_i;
 	output reg drain_done_o;
 	output reg [7:0] drain_psum_addr_o;
@@ -142,8 +144,8 @@ module npu_min_dma (
 	assign ext_act_sram_wdata_o[7 * ACTIVATION_WIDTH+:ACTIVATION_WIDTH] = $signed(m_axi_rdata[31:24]);
 	reg w_phase;
 	wire weight_beat_valid = ((state == 4'd6) && m_axi_rvalid) && m_axi_rready;
-	assign weight_shift_en_o[0] = weight_beat_valid && ~w_phase;
-	assign weight_shift_en_o[1] = weight_beat_valid && w_phase;
+	assign weight_shift_en_o[3:0] = {4 {weight_beat_valid && ~w_phase}};
+	assign weight_shift_en_o[7:4] = {4 {weight_beat_valid && w_phase}};
 	assign weight_shift_in_o[0+:WEIGHT_WIDTH] = $signed(m_axi_rdata[7:0]);
 	assign weight_shift_in_o[WEIGHT_WIDTH+:WEIGHT_WIDTH] = $signed(m_axi_rdata[15:8]);
 	assign weight_shift_in_o[2 * WEIGHT_WIDTH+:WEIGHT_WIDTH] = $signed(m_axi_rdata[23:16]);
@@ -157,6 +159,10 @@ module npu_min_dma (
 	reg [2:0] drain_pipe_cnt;
 	reg [31:0] drain_high_sample;
 	assign drain_pixel_cnt_o = {1'b0, drain_burst_idx, drain_w_beat[3:1]};
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
 	function automatic signed [8:0] sv2v_cast_9_signed;
 		input reg signed [8:0] inp;
 		sv2v_cast_9_signed = inp;
@@ -213,12 +219,12 @@ module npu_min_dma (
 					else if (start_act_i) begin
 						act_pixel_cnt <= 1'sb0;
 						act_word_phase <= 1'b0;
-						axi_addr_reg <= act_base_i;
+						axi_addr_reg <= act_base_i + (sv2v_cast_32(act_chunk_idx_i) * (KERNEL_SIZE == 1 ? 32'd2048 : 32'd2592));
 						state <= 4'd3;
 					end
 					else if (start_weight_i) begin
 						w_phase <= 1'b0;
-						axi_addr_reg <= weight_base_i + {22'b0000000000000000000000, weight_pass_idx_i, 6'b000000};
+						axi_addr_reg <= weight_base_i + {18'b000000000000000000, weight_pass_idx_i, 6'b000000};
 						state <= 4'd5;
 					end
 					else if (start_drain_i) begin

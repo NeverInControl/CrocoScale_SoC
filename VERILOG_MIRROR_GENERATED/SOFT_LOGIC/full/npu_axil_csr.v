@@ -36,7 +36,7 @@ module npu_axil_csr (
 	irq_pulse_i
 );
 	reg _sv2v_0;
-	parameter signed [31:0] AXI_ADDR_WIDTH = 32;
+	parameter signed [31:0] AXI_ADDR_WIDTH = 10;
 	parameter signed [31:0] AXI_DATA_WIDTH = 32;
 	input wire clk_i;
 	input wire rst_n;
@@ -73,16 +73,16 @@ module npu_axil_csr (
 	input wire fsm_busy_i;
 	input wire fsm_done_i;
 	input wire irq_pulse_i;
-	localparam [7:0] REG_OFFSET_CTRL = 8'h00;
-	localparam [7:0] REG_OFFSET_STATUS = 8'h04;
-	localparam [7:0] REG_OFFSET_CONFIG = 8'h08;
-	localparam [7:0] REG_OFFSET_IRQ_STATUS = 8'h0c;
-	localparam [7:0] REG_OFFSET_ACT_BASE = 8'h10;
-	localparam [7:0] REG_OFFSET_WEIGHT_BASE = 8'h14;
-	localparam [7:0] REG_OFFSET_OUT_BASE = 8'h18;
-	localparam [7:0] REG_OFFSET_BIAS_BASE = 8'h1c;
-	localparam [7:0] REG_OFFSET_QUANT_BASE = 8'h20;
-	localparam [7:0] REG_OFFSET_LUT_BASE = 8'h24;
+	localparam [3:0] REG_IDX_CTRL = 4'd0;
+	localparam [3:0] REG_IDX_STATUS = 4'd1;
+	localparam [3:0] REG_IDX_CONFIG = 4'd2;
+	localparam [3:0] REG_IDX_IRQ_STATUS = 4'd3;
+	localparam [3:0] REG_IDX_ACT_BASE = 4'd4;
+	localparam [3:0] REG_IDX_WEIGHT_BASE = 4'd5;
+	localparam [3:0] REG_IDX_OUT_BASE = 4'd6;
+	localparam [3:0] REG_IDX_BIAS_BASE = 4'd7;
+	localparam [3:0] REG_IDX_QUANT_BASE = 4'd8;
+	localparam [3:0] REG_IDX_LUT_BASE = 4'd9;
 	reg reg_soft_reset;
 	reg reg_auto_drain;
 	reg reg_mode_1x1;
@@ -91,19 +91,20 @@ module npu_axil_csr (
 	reg [7:0] reg_total_passes;
 	reg reg_irq_status;
 	reg reg_done;
-	reg [31:0] reg_act_base;
-	reg [31:0] reg_weight_base;
-	reg [31:0] reg_out_base;
-	reg [31:0] reg_bias_base;
-	reg [31:0] reg_quant_base;
-	reg [31:0] reg_lut_base;
+	reg [11:0] reg_ram_base_high;
+	reg [19:0] reg_act_base;
+	reg [19:0] reg_weight_base;
+	reg [19:0] reg_out_base;
+	reg [19:0] reg_bias_base;
+	reg [19:0] reg_quant_base;
+	reg [19:0] reg_lut_base;
 	assign config_o = {16'b0000000000000000, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b000, reg_auto_drain};
-	assign act_base_o = reg_act_base;
-	assign weight_base_o = reg_weight_base;
-	assign out_base_o = reg_out_base;
-	assign bias_base_o = reg_bias_base;
-	assign quant_base_o = reg_quant_base;
-	assign lut_base_o = reg_lut_base;
+	assign act_base_o = {reg_ram_base_high, reg_act_base};
+	assign weight_base_o = {reg_ram_base_high, reg_weight_base};
+	assign out_base_o = {reg_ram_base_high, reg_out_base};
+	assign bias_base_o = {reg_ram_base_high, reg_bias_base};
+	assign quant_base_o = {reg_ram_base_high, reg_quant_base};
+	assign lut_base_o = {reg_ram_base_high, reg_lut_base};
 	assign soft_reset_o = reg_soft_reset;
 	assign usr_irq_o = {3'b000, irq_pulse_i};
 	wire write_req = s_axil_awvalid && s_axil_wvalid;
@@ -123,12 +124,13 @@ module npu_axil_csr (
 			reg_total_passes <= 8'd0;
 			reg_irq_status <= 1'b0;
 			reg_done <= 1'b0;
-			reg_act_base <= 32'h00001000;
-			reg_weight_base <= 32'h00002000;
-			reg_out_base <= 32'h00003000;
-			reg_bias_base <= 32'h00004000;
-			reg_quant_base <= 32'h00005000;
-			reg_lut_base <= 32'h00006000;
+			reg_ram_base_high <= 12'h000;
+			reg_act_base <= 20'h01000;
+			reg_weight_base <= 20'h02000;
+			reg_out_base <= 20'h03000;
+			reg_bias_base <= 20'h04000;
+			reg_quant_base <= 20'h05000;
+			reg_lut_base <= 20'h06000;
 		end
 		else begin
 			start_pulse_o <= 1'b0;
@@ -139,8 +141,8 @@ module npu_axil_csr (
 				reg_irq_status <= 1'b1;
 			if (write_req && !s_axil_bvalid) begin
 				s_axil_bvalid <= 1'b1;
-				case (s_axil_awaddr[7:0])
-					REG_OFFSET_CTRL: begin
+				case (s_axil_awaddr[5:2])
+					REG_IDX_CTRL: begin
 						if (s_axil_wdata[0]) begin
 							start_pulse_o <= 1'b1;
 							reg_done <= 1'b0;
@@ -156,22 +158,40 @@ module npu_axil_csr (
 							reg_done <= 1'b0;
 						end
 					end
-					REG_OFFSET_CONFIG: begin
+					REG_IDX_CONFIG: begin
 						reg_auto_drain <= s_axil_wdata[0];
 						reg_mode_1x1 <= s_axil_wdata[4];
 						reg_lut_en <= s_axil_wdata[5];
 						reg_pool_en <= s_axil_wdata[6];
 						reg_total_passes <= s_axil_wdata[15:8];
 					end
-					REG_OFFSET_IRQ_STATUS:
+					REG_IDX_IRQ_STATUS:
 						if (s_axil_wdata[0])
 							reg_irq_status <= 1'b0;
-					REG_OFFSET_ACT_BASE: reg_act_base <= s_axil_wdata;
-					REG_OFFSET_WEIGHT_BASE: reg_weight_base <= s_axil_wdata;
-					REG_OFFSET_OUT_BASE: reg_out_base <= s_axil_wdata;
-					REG_OFFSET_BIAS_BASE: reg_bias_base <= s_axil_wdata;
-					REG_OFFSET_QUANT_BASE: reg_quant_base <= s_axil_wdata;
-					REG_OFFSET_LUT_BASE: reg_lut_base <= s_axil_wdata;
+					REG_IDX_ACT_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_act_base <= s_axil_wdata[19:0];
+					end
+					REG_IDX_WEIGHT_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_weight_base <= s_axil_wdata[19:0];
+					end
+					REG_IDX_OUT_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_out_base <= s_axil_wdata[19:0];
+					end
+					REG_IDX_BIAS_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_bias_base <= s_axil_wdata[19:0];
+					end
+					REG_IDX_QUANT_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_quant_base <= s_axil_wdata[19:0];
+					end
+					REG_IDX_LUT_BASE: begin
+						reg_ram_base_high <= s_axil_wdata[31:20];
+						reg_lut_base <= s_axil_wdata[19:0];
+					end
 					default:
 						;
 				endcase
@@ -183,11 +203,11 @@ module npu_axil_csr (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		case (s_axil_araddr[7:0])
-			REG_OFFSET_CTRL: rdata_comb = {30'b000000000000000000000000000000, reg_soft_reset, 1'b0};
-			REG_OFFSET_STATUS: rdata_comb = {30'b000000000000000000000000000000, reg_done, fsm_busy_i};
-			REG_OFFSET_CONFIG: rdata_comb = {16'b0000000000000000, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b000, reg_auto_drain};
-			REG_OFFSET_IRQ_STATUS: rdata_comb = {31'b0000000000000000000000000000000, reg_irq_status};
+		case (s_axil_araddr[5:2])
+			REG_IDX_CTRL: rdata_comb = {30'b000000000000000000000000000000, reg_soft_reset, 1'b0};
+			REG_IDX_STATUS: rdata_comb = {30'b000000000000000000000000000000, reg_done, fsm_busy_i};
+			REG_IDX_CONFIG: rdata_comb = {16'b0000000000000000, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b000, reg_auto_drain};
+			REG_IDX_IRQ_STATUS: rdata_comb = {31'b0000000000000000000000000000000, reg_irq_status};
 			default: rdata_comb = 32'd0;
 		endcase
 	end

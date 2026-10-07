@@ -47,7 +47,8 @@ python3 scripts/export_subsystem.py [OPTIONS]
 | `--format` | `choice` | `v` | HDL format to package: `v` (pure Verilog from mirror), `sv` (SystemVerilog), or `both`. |
 | `--include-tb` | `flag` | `False` | Dynamically discover and bundle associated testbenches, test filelists, and `.mem` vectors into `TEST/`. |
 | `--include-hal`| `flag` | `False` | Dynamically discover and bundle matching C driver headers/sources into `HAL/`. |
-| `--output-dir` | `path` | `exports/<target>/` | Custom destination directory for the exported package. |
+| `--config` | `path` | `scripts/export_config.yaml` | Path to YAML configuration defining external submodule path mappings and prefix stripping. |
+| `--output-dir` | `path` | `exports/<target>_<format>/` | Custom destination directory for the exported package. |
 | `--no-clean` | `flag` | `False` | Do not wipe the destination directory before exporting. |
 
 #### HAL Automatic Detection Naming Rule

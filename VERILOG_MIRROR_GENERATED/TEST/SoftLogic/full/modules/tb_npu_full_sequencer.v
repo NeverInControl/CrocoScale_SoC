@@ -59,7 +59,6 @@ module tb_npu_full_sequencer;
 		.array_en_o(array_en),
 		.psum_systolic_en_o(psum_systolic_en),
 		.psum_lut_en_o(psum_lut_en),
-		.psum_skew_en_o(psum_skew_en),
 		.compute_bank_swap_o(compute_bank_swap),
 		.crossbar_sel_o(crossbar_sel),
 		.act_sram_addr_o(act_sram_addr),

@@ -26,7 +26,8 @@ module npu_min_csr (
 	weight_base_o,
 	out_base_o,
 	bias_base_o,
-	quant_param_o,
+	quant_shift_in_o,
+	quant_shift_en_o,
 	config_o,
 	usr_irq_o,
 	fsm_busy_i,
@@ -62,7 +63,8 @@ module npu_min_csr (
 	output wire [31:0] weight_base_o;
 	output wire [31:0] out_base_o;
 	output wire [31:0] bias_base_o;
-	output wire [31:0] quant_param_o;
+	output reg [29:0] quant_shift_in_o;
+	output reg quant_shift_en_o;
 	output wire [31:0] config_o;
 	output wire [3:0] usr_irq_o;
 	input wire fsm_busy_i;
@@ -72,16 +74,15 @@ module npu_min_csr (
 	reg [31:0] reg_weight_base;
 	reg [31:0] reg_out_base;
 	reg [31:0] reg_bias_base;
-	reg [29:0] reg_quant_param;
 	reg reg_auto_drain;
+	reg [7:0] reg_total_passes;
 	reg reg_irq_status;
 	reg reg_done;
 	assign act_base_o = reg_act_base;
 	assign weight_base_o = reg_weight_base;
 	assign out_base_o = reg_out_base;
 	assign bias_base_o = reg_bias_base;
-	assign quant_param_o = {2'b00, reg_quant_param};
-	assign config_o = {31'b0000000000000000000000000000000, reg_auto_drain};
+	assign config_o = {16'b0000000000000000, reg_total_passes, 7'b0000000, reg_auto_drain};
 	assign usr_irq_o = {3'b000, irq_pulse_i};
 	assign s_axil_awready = !s_axil_bvalid;
 	assign s_axil_wready = !s_axil_bvalid;
@@ -91,18 +92,21 @@ module npu_min_csr (
 			s_axil_bresp <= 2'b00;
 			start_pulse_o <= 1'b0;
 			soft_reset_o <= 1'b0;
+			quant_shift_en_o <= 1'b0;
+			quant_shift_in_o <= 1'sb0;
 			reg_act_base <= 32'h00001000;
 			reg_weight_base <= 32'h00002000;
 			reg_out_base <= 32'h00003000;
 			reg_bias_base <= 32'h00004000;
-			reg_quant_param <= 30'h000f4000;
 			reg_auto_drain <= 1'b1;
+			reg_total_passes <= 8'd0;
 			reg_irq_status <= 1'b0;
 			reg_done <= 1'b0;
 		end
 		else begin
 			start_pulse_o <= 1'b0;
 			soft_reset_o <= 1'b0;
+			quant_shift_en_o <= 1'b0;
 			if (fsm_done_i)
 				reg_done <= 1'b1;
 			if (irq_pulse_i)
@@ -124,8 +128,14 @@ module npu_min_csr (
 					4'h3: reg_weight_base <= s_axil_wdata;
 					4'h4: reg_out_base <= s_axil_wdata;
 					4'h5: reg_bias_base <= s_axil_wdata;
-					4'h6: reg_quant_param <= s_axil_wdata[29:0];
-					4'h7: reg_auto_drain <= s_axil_wdata[0];
+					4'h6: begin
+						quant_shift_en_o <= 1'b1;
+						quant_shift_in_o <= s_axil_wdata[29:0];
+					end
+					4'h7: begin
+						reg_auto_drain <= s_axil_wdata[0];
+						reg_total_passes <= s_axil_wdata[15:8];
+					end
 					4'h8:
 						if (s_axil_wdata[0])
 							reg_irq_status <= 1'b0;
@@ -147,6 +157,8 @@ module npu_min_csr (
 			s_axil_rvalid <= 1'b1;
 			if (s_axil_araddr[5:2] == 4'h8)
 				s_axil_rdata <= {31'b0000000000000000000000000000000, reg_irq_status};
+			else if (s_axil_araddr[5:2] == 4'h7)
+				s_axil_rdata <= {16'b0000000000000000, reg_total_passes, 7'b0000000, reg_auto_drain};
 			else
 				s_axil_rdata <= {30'b000000000000000000000000000000, reg_done, fsm_busy_i};
 		end
