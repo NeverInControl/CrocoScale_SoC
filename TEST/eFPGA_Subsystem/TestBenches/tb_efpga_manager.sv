@@ -77,7 +77,7 @@ module tb_efpga_manager;
         .NUM_PMP_REGIONS(NUM_PMP_REGIONS),
         .HW_VERSION(HW_VERSION),
         .PAGE_GRANULARITY(1'b1),
-        .MAX_ADDRESS_WIDTH(32),
+        .ADDR_WIDTH(32),
         .ENABLE_PMP(1'b1),
         .ENABLE_WDOG_CTRL_SLAVE(1'b1),
         .ENABLE_WDOG_DMA_MASTER(1'b1),
@@ -161,7 +161,7 @@ module tb_efpga_manager;
     // =========================================================================
     // AXI-Lite Master Tasks
     // =========================================================================
-    task automatic axi_write(input [31:0] addr, input [31:0] data, input [3:0] strb = 4'hF);
+    task automatic axi_write_strb(input [31:0] addr, input [31:0] data, input [3:0] strb);
         @(posedge clk);
         s_axil_awaddr  <= addr;
         s_axil_awprot  <= 3'b000;
@@ -188,6 +188,10 @@ module tb_efpga_manager;
         @(posedge clk);
         s_axil_bready <= 1'b0;
         @(posedge clk);
+    endtask
+
+    task automatic axi_write(input [31:0] addr, input [31:0] data);
+        axi_write_strb(addr, data, 4'hF);
     endtask
 
     task automatic axi_read(input [31:0] addr, output [31:0] data);
@@ -335,7 +339,7 @@ module tb_efpga_manager;
         // ---------------------------------------------------------------------
         // TEST 4: SLOT_CTRL @ 0x1004 & SLOT_STATUS @ 0x1008
         // ---------------------------------------------------------------------
-        axi_write(32'h1004, 32'h00000001, 4'b0001); // DECOUPLE_REQ (byte 0 only)
+        axi_write_strb(32'h1004, 32'h00000001, 4'b0001); // DECOUPLE_REQ (byte 0 only)
         #10;
         if (decoupler_req_o[0] !== 1'b1) begin
             $display("[FAIL] SLOT_CTRL: decoupler_req_o[0] not asserted!");
@@ -411,7 +415,7 @@ module tb_efpga_manager;
         // ---------------------------------------------------------------------
         // Re-couple slot
         decoupler_is_decoupled_i[0] = 1'b0;
-        axi_write(32'h1004, 32'h00000000, 4'b0001); // Clear decouple req in SLOT_CTRL (byte 0 only)
+        axi_write_strb(32'h1004, 32'h00000000, 4'b0001); // Clear decouple req in SLOT_CTRL (byte 0 only)
 
         // Attempt unauthorized write to PMP while coupled
         axi_write(32'h1018, 32'hDEADBEEF);
@@ -510,7 +514,7 @@ module tb_efpga_manager;
         end
 
         // 2. Program AWPROT = 3'b001 (Privileged) and ARPROT = 3'b010 (Non-Secure) via Byte 1 write to SLOT_CTRL (0x1004)
-        axi_write(32'h1004, 32'h0000_4400, 4'b0010);
+        axi_write_strb(32'h1004, 32'h0000_4400, 4'b0010);
         #10;
         if (slot_dma_awprot_o[2:0] !== 3'b001 || slot_dma_arprot_o[2:0] !== 3'b010) begin
             $display("[FAIL] DMA PROT write 1 pin mismatch! AWPROT=%b (expected 001), ARPROT=%b (expected 010)",
@@ -531,7 +535,7 @@ module tb_efpga_manager;
         end
 
         // 4. Program arbitrary alternate pattern: AWPROT = 3'b110, ARPROT = 3'b101
-        axi_write(32'h1004, 32'h0000_B800, 4'b0010);
+        axi_write_strb(32'h1004, 32'h0000_B800, 4'b0010);
         #10;
         if (slot_dma_awprot_o[2:0] !== 3'b110 || slot_dma_arprot_o[2:0] !== 3'b101) begin
             $display("[FAIL] DMA PROT write 2 pin mismatch! AWPROT=%b (expected 110), ARPROT=%b (expected 101)",

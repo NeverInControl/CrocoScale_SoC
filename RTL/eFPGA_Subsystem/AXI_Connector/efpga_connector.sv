@@ -6,9 +6,7 @@ module efpga_connector #(
     parameter int AXI_ID_WIDTH = 8,
     parameter logic [31:0] HW_VERSION = 32'hFAB00001,
     parameter bit PAGE_GRANULARITY = 1'b1, // 1 = 4KB, 0 = Word
-    parameter int MAX_ADDRESS_WIDTH = 30,
-    parameter bit ENABLE_STRICT_PAYLOAD_CHECK = 1'b0,
-    parameter int WATCHDOG_LIMIT              = 512,
+    parameter int ADDR_WIDTH = 32,
     
     // --- IP Generation Parameters ---
     parameter bit ENABLE_PMP              = 1'b1, // Synthesize Physical Memory Protection
@@ -93,16 +91,9 @@ module efpga_connector #(
     logic [NUM_SLOTS-1:0][NUM_PMP_REGIONS-1:0][31:0] p_base;
     logic [NUM_SLOTS-1:0][NUM_PMP_REGIONS-1:0][31:0] p_limit;
 
-    logic [NUM_SLOTS-1:0][31:0] slot_reset_reg;
-    logic [NUM_SLOTS-1:0][31:0] slot_soft_rst_q;
+    localparam bit ANY_WDOG_ENABLED = ENABLE_WDOG_CTRL_SLAVE | ENABLE_WDOG_DMA_MASTER | ENABLE_WDOG_CTRL_MASTER | ENABLE_WDOG_DMA_SLAVE;
 
-    always_ff @(posedge clk_i or negedge rstn_i) begin
-        if (!rstn_i) begin
-            slot_soft_rst_q <= '0;
-        end else begin
-            slot_soft_rst_q <= slot_reset_reg;
-        end
-    end
+    logic [NUM_SLOTS-1:0][31:0] slot_reset_reg;
 
     // Fault Arrays for the 4 Watchdogs
     logic [NUM_SLOTS-1:0] wdog_cs_to_w, wdog_cs_to_r, wdog_cs_pr_w, wdog_cs_pr_r;
@@ -115,7 +106,7 @@ module efpga_connector #(
         .NUM_PMP_REGIONS(NUM_PMP_REGIONS),
         .HW_VERSION(HW_VERSION),
         .PAGE_GRANULARITY(PAGE_GRANULARITY), // 1 = 4KB, 0 = Word
-        .MAX_ADDRESS_WIDTH(MAX_ADDRESS_WIDTH),
+        .ADDR_WIDTH(ADDR_WIDTH),
         .ENABLE_PMP(ENABLE_PMP),
         .ENABLE_WDOG_CTRL_SLAVE(ENABLE_WDOG_CTRL_SLAVE),
         .ENABLE_WDOG_DMA_MASTER(ENABLE_WDOG_DMA_MASTER),
@@ -163,11 +154,11 @@ module efpga_connector #(
             // -----------------------------------------------------------
             // RESET GENERATION (Synchronous Soft Reset + Cold Reset)
             // -----------------------------------------------------------
-            wire [3:0] slot_fabric_rst_n      = {4{rstn_i}} & ~slot_soft_rst_q[i][3:0];
-            wire       slot_npu_rst_n         = rstn_i & ~slot_soft_rst_q[i][4];
-            wire       slot_wdog_rst_n        = rstn_i & ~slot_soft_rst_q[i][16];
-            wire       slot_bridge_ctrl_rst_n = rstn_i & ~slot_soft_rst_q[i][24];
-            wire       slot_bridge_dma_rst_n  = rstn_i & ~slot_soft_rst_q[i][25];
+            wire [3:0] slot_fabric_rst_n      = {4{rstn_i}} & ~slot_reset_reg[i][3:0];
+            wire       slot_npu_rst_n         = rstn_i & ~slot_reset_reg[i][4];
+            wire       slot_wdog_rst_n        = rstn_i & ~slot_reset_reg[i][16];
+            wire       slot_bridge_ctrl_rst_n = rstn_i & ~slot_reset_reg[i][24];
+            wire       slot_bridge_dma_rst_n  = rstn_i & ~slot_reset_reg[i][25];
 
             assign slot_fabric_rst_n_o[i] = slot_fabric_rst_n;
             assign slot_npu_rst_n_o[i]    = slot_npu_rst_n;
@@ -266,7 +257,7 @@ module efpga_connector #(
                     .m_axi_wdata    (dma_m_wdata[i*32 +: 32]), .m_axi_wstrb  (dma_m_wstrb[i*4 +: 4]), .m_axi_wlast  (dma_m_wlast[i]), 
                     .m_axi_wuser    (), .m_axi_wvalid (dma_m_wvalid[i]), .m_axi_wready (dma_m_wready[i]),
                     
-                    .m_axi_bid      (dma_m_bid[i*AXI_ID_WIDTH +: AXI_ID_WIDTH]), .m_axi_bresp  (dma_m_bresp[i*2 +: 2]), .m_axi_buser  (), .m_axi_bvalid (dma_m_bvalid[i]), .m_axi_bready (dma_m_bready[i]),
+                    .m_axi_bid      (dma_m_bid[i*AXI_ID_WIDTH +: AXI_ID_WIDTH]), .m_axi_bresp  (dma_m_bresp[i*2 +: 2]), .m_axi_buser  (1'b0), .m_axi_bvalid (dma_m_bvalid[i]), .m_axi_bready (dma_m_bready[i]),
                     
                     .m_axi_arid     (dma_m_arid[i*AXI_ID_WIDTH +: AXI_ID_WIDTH]), .m_axi_araddr (dma_m_araddr[i*32 +: 32]), .m_axi_arlen  (dma_m_arlen[i*8 +: 8]), .m_axi_arsize (dma_m_arsize[i*3 +: 3]), .m_axi_arburst(dma_m_arburst[i*2 +: 2]),
                     .m_axi_arlock   (dma_m_arlock[i]), .m_axi_arcache(dma_m_arcache[i*4 +: 4]), .m_axi_arprot (dma_m_arprot[i*3 +: 3]), 
@@ -274,7 +265,7 @@ module efpga_connector #(
                     .m_axi_arvalid  (dma_m_arvalid[i]), .m_axi_arready(dma_m_arready[i]),
                     
                     .m_axi_rid      (dma_m_rid[i*AXI_ID_WIDTH +: AXI_ID_WIDTH]), .m_axi_rdata  (dma_m_rdata[i*32 +: 32]), .m_axi_rresp  (dma_m_rresp[i*2 +: 2]), .m_axi_rlast  (dma_m_rlast[i]), 
-                    .m_axi_ruser    (), .m_axi_rvalid (dma_m_rvalid[i]), .m_axi_rready (dma_m_rready[i])
+                    .m_axi_ruser    (1'b0), .m_axi_rvalid (dma_m_rvalid[i]), .m_axi_rready (dma_m_rready[i])
                 );
             end else begin : gen_no_reg_slice
                 // Pure Bypass - Map Crossbar wires straight to Internal slice logic
@@ -325,11 +316,15 @@ module efpga_connector #(
             // WATCHDOG 1: SoC AXI-Lite Master (Fabric Side of Slice)
             // -----------------------------------------------------------
             if (ENABLE_WDOG_CTRL_MASTER) begin : gen_wdog_cm
+                wire cm_fault_to_w, cm_fault_to_r;
+                wire cm_fault_drop_w, cm_fault_drop_r;
+                wire cm_fault_unst_w, cm_fault_unst_r;
+
                 axil_watchdog_master_monitor #(
-                    .ENABLE_TIMEOUT(1'b1),
-                    .ENABLE_PROTOCOL_CHECK(1'b1),
-                    .ENABLE_STRICT_PAYLOAD_CHECK(ENABLE_STRICT_PAYLOAD_CHECK),
-                    .WATCHDOG_LIMIT(WATCHDOG_LIMIT)
+                    .ENABLE_TIMEOUT          (1'b1),
+                    .ENABLE_DROPPED_VALID    (1'b1),
+                    .ENABLE_PAYLOAD_STABILITY(1'b0),
+                    .WATCHDOG_LIMIT          (512)
                 ) inst_wdog_cm (
                     .clk_i(clk_i), .rstn_i(slot_wdog_rst_n),
                     .awvalid(slice_ctrl_awvalid), .awready(slice_ctrl_awready), .awaddr(slice_ctrl_awaddr), .awprot(slice_ctrl_awprot),
@@ -337,11 +332,19 @@ module efpga_connector #(
                     .bvalid (slice_ctrl_bvalid),  .bready (slice_ctrl_bready),
                     .arvalid(slice_ctrl_arvalid), .arready(slice_ctrl_arready), .araddr(slice_ctrl_araddr), .arprot(slice_ctrl_arprot),
                     .rvalid (slice_ctrl_rvalid),  .rready (slice_ctrl_rready),
-                    .timeout_w_fault_o(wdog_cm_to_w[i]), .timeout_r_fault_o(wdog_cm_to_r[i]),
-                    .protocol_w_fault_o(wdog_cm_pr_w[i]), .protocol_r_fault_o(wdog_cm_pr_r[i])
+                    .fault_timeout_w_o      (cm_fault_to_w),
+                    .fault_timeout_r_o      (cm_fault_to_r),
+                    .fault_dropped_valid_w_o(cm_fault_drop_w),
+                    .fault_dropped_valid_r_o(cm_fault_drop_r),
+                    .fault_unstable_w_o     (cm_fault_unst_w),
+                    .fault_unstable_r_o     (cm_fault_unst_r)
                 );
+                assign wdog_cm_to_w[i] = cm_fault_to_w;
+                assign wdog_cm_to_r[i] = cm_fault_to_r;
+                assign wdog_cm_pr_w[i] = cm_fault_drop_w | cm_fault_unst_w;
+                assign wdog_cm_pr_r[i] = cm_fault_drop_r | cm_fault_unst_r;
             end else begin : gen_no_wdog_cm
-                assign wdog_cm_to_w[i] = 0; assign wdog_cm_to_r[i] = 0; assign wdog_cm_pr_w[i] = 0; assign wdog_cm_pr_r[i] = 0;
+                assign wdog_cm_to_w[i] = 1'b0; assign wdog_cm_to_r[i] = 1'b0; assign wdog_cm_pr_w[i] = 1'b0; assign wdog_cm_pr_r[i] = 1'b0;
             end
 
             // -----------------------------------------------------------
@@ -395,11 +398,15 @@ module efpga_connector #(
             // WATCHDOG 2: Fabric AXI-Lite Slave (Fabric Side)
             // -----------------------------------------------------------
             if (ENABLE_WDOG_CTRL_SLAVE) begin : gen_wdog_cs
+                wire cs_fault_to_w, cs_fault_to_r;
+                wire cs_fault_drop_w, cs_fault_drop_r;
+                wire cs_fault_unst_w, cs_fault_unst_r;
+
                 axil_watchdog_slave_monitor #(
-                    .ENABLE_TIMEOUT(1'b1),
-                    .ENABLE_PROTOCOL_CHECK(1'b1),
-                    .ENABLE_STRICT_PAYLOAD_CHECK(ENABLE_STRICT_PAYLOAD_CHECK),
-                    .WATCHDOG_LIMIT(WATCHDOG_LIMIT)
+                    .ENABLE_TIMEOUT          (1'b1),
+                    .ENABLE_DROPPED_VALID    (1'b1),
+                    .ENABLE_PAYLOAD_STABILITY(1'b0),
+                    .WATCHDOG_LIMIT          (512)
                 ) inst_wdog_cs (
                     .clk_i(clk_i), .rstn_i(slot_wdog_rst_n),
                     .awvalid(dec_ctrl_awvalid), .awready(dec_ctrl_awready),
@@ -407,11 +414,19 @@ module efpga_connector #(
                     .bvalid (dec_ctrl_bvalid),  .bready (dec_ctrl_bready), .bresp(dec_ctrl_bresp),
                     .arvalid(dec_ctrl_arvalid), .arready(dec_ctrl_arready),
                     .rvalid (dec_ctrl_rvalid),  .rready (dec_ctrl_rready), .rdata(dec_ctrl_rdata), .rresp(dec_ctrl_rresp),
-                    .timeout_w_fault_o(wdog_cs_to_w[i]), .timeout_r_fault_o(wdog_cs_to_r[i]),
-                    .protocol_w_fault_o(wdog_cs_pr_w[i]), .protocol_r_fault_o(wdog_cs_pr_r[i])
+                    .fault_timeout_w_o      (cs_fault_to_w),
+                    .fault_timeout_r_o      (cs_fault_to_r),
+                    .fault_dropped_valid_w_o(cs_fault_drop_w),
+                    .fault_dropped_valid_r_o(cs_fault_drop_r),
+                    .fault_unstable_w_o     (cs_fault_unst_w),
+                    .fault_unstable_r_o     (cs_fault_unst_r)
                 );
+                assign wdog_cs_to_w[i] = cs_fault_to_w;
+                assign wdog_cs_to_r[i] = cs_fault_to_r;
+                assign wdog_cs_pr_w[i] = cs_fault_drop_w | cs_fault_unst_w;
+                assign wdog_cs_pr_r[i] = cs_fault_drop_r | cs_fault_unst_r;
             end else begin : gen_no_wdog_cs
-                assign wdog_cs_to_w[i] = 0; assign wdog_cs_to_r[i] = 0; assign wdog_cs_pr_w[i] = 0; assign wdog_cs_pr_r[i] = 0;
+                assign wdog_cs_to_w[i] = 1'b0; assign wdog_cs_to_r[i] = 1'b0; assign wdog_cs_pr_w[i] = 1'b0; assign wdog_cs_pr_r[i] = 1'b0;
             end
 
             // -----------------------------------------------------------
@@ -421,7 +436,7 @@ module efpga_connector #(
                 pmp_math #(
                     .NUM_PMP_REGIONS(NUM_PMP_REGIONS),
                     .PAGE_GRANULARITY(PAGE_GRANULARITY), // 1 = 4KB, 0 = Word
-                    .MAX_ADDRESS_WIDTH(MAX_ADDRESS_WIDTH)
+                    .ADDR_WIDTH(ADDR_WIDTH)
                 ) pmp_inst (
                     .g_en_i         (p_g_en[i]),
                     .base_i         (p_base[i]),
@@ -442,12 +457,27 @@ module efpga_connector #(
             // WATCHDOG 3: Fabric AXI-Full Master (Fabric Side)
             // -----------------------------------------------------------
             if (ENABLE_WDOG_DMA_MASTER) begin : gen_wdog_dm
+                wire dm_fault_to_w, dm_fault_to_r;
+                wire dm_fault_drop_w, dm_fault_drop_r;
+                wire dm_fault_unst_w, dm_fault_unst_r;
+                wire dm_fault_4k_w, dm_fault_4k_r;
+                wire dm_fault_size_w, dm_fault_size_r;
+                wire dm_fault_burst_w, dm_fault_burst_r;
+                wire dm_fault_wlast;
+                wire dm_fault_fifo_ovf;
+
                 axi_watchdog_master_monitor #(
-                    .ENABLE_TIMEOUT(1'b1),
-                    .ENABLE_PROTOCOL_CHECK(1'b1),
-                    .ENABLE_STRICT_PAYLOAD_CHECK(ENABLE_STRICT_PAYLOAD_CHECK),
-                    .WATCHDOG_LIMIT(WATCHDOG_LIMIT),
-                    .AXI_ID_WIDTH(AXI_ID_WIDTH)
+                    .ENABLE_TIMEOUT          (1'b1),
+                    .ENABLE_DROPPED_VALID    (1'b1),
+                    .ENABLE_PAYLOAD_STABILITY(1'b0),
+                    .ENABLE_4K_CHECK         (1'b1),
+                    .ENABLE_SIZE_CHECK       (1'b1),
+                    .ENABLE_BURST_CHECK      (1'b1),
+                    .ENABLE_WLAST_CHECK      (1'b1),
+                    .ENABLE_FIFO_OVERFLOW    (1'b1),
+                    .MAX_OUTSTANDING_WRITES  (1),
+                    .WATCHDOG_LIMIT          (512),
+                    .AXI_ID_WIDTH            (AXI_ID_WIDTH)
                 ) inst_wdog_dm (
                     .clk_i(clk_i), .rstn_i(slot_wdog_rst_n),
                     .awvalid(dec_dma_awvalid), .awready(dec_dma_awready), .awid(dec_dma_awid), .awaddr(dec_dma_awaddr), .awlen(dec_dma_awlen), .awsize(dec_dma_awsize), .awburst(dec_dma_awburst), .awlock(dec_dma_awlock), .awcache(dec_dma_awcache), .awprot(dec_dma_awprot),
@@ -455,11 +485,29 @@ module efpga_connector #(
                     .bvalid (dec_dma_bvalid),  .bready (dec_dma_bready),
                     .arvalid(dec_dma_arvalid), .arready(dec_dma_arready), .arid(dec_dma_arid), .araddr(dec_dma_araddr), .arlen(dec_dma_arlen), .arsize(dec_dma_arsize), .arburst(dec_dma_arburst), .arlock(dec_dma_arlock), .arcache(dec_dma_arcache), .arprot(dec_dma_arprot),
                     .rvalid (dec_dma_rvalid),  .rready (dec_dma_rready),  .rlast(dec_dma_rlast),
-                    .timeout_w_fault_o(wdog_dm_to_w[i]), .timeout_r_fault_o(wdog_dm_to_r[i]),
-                    .protocol_w_fault_o(wdog_dm_pr_w[i]), .protocol_r_fault_o(wdog_dm_pr_r[i])
+                    .fault_timeout_w_o       (dm_fault_to_w),
+                    .fault_timeout_r_o       (dm_fault_to_r),
+                    .fault_dropped_valid_w_o (dm_fault_drop_w),
+                    .fault_dropped_valid_r_o (dm_fault_drop_r),
+                    .fault_unstable_w_o      (dm_fault_unst_w),
+                    .fault_unstable_r_o      (dm_fault_unst_r),
+                    .fault_4k_cross_w_o      (dm_fault_4k_w),
+                    .fault_4k_cross_r_o      (dm_fault_4k_r),
+                    .fault_illegal_size_w_o  (dm_fault_size_w),
+                    .fault_illegal_size_r_o  (dm_fault_size_r),
+                    .fault_illegal_burst_w_o (dm_fault_burst_w),
+                    .fault_illegal_burst_r_o (dm_fault_burst_r),
+                    .fault_wlast_timing_o    (dm_fault_wlast),
+                    .fault_fifo_overflow_o   (dm_fault_fifo_ovf)
                 );
+                assign wdog_dm_to_w[i] = dm_fault_to_w;
+                assign wdog_dm_to_r[i] = dm_fault_to_r;
+                assign wdog_dm_pr_w[i] = dm_fault_drop_w | dm_fault_unst_w | dm_fault_4k_w | 
+                                         dm_fault_size_w | dm_fault_burst_w | dm_fault_wlast | dm_fault_fifo_ovf;
+                assign wdog_dm_pr_r[i] = dm_fault_drop_r | dm_fault_unst_r | dm_fault_4k_r | 
+                                         dm_fault_size_r | dm_fault_burst_r;
             end else begin : gen_no_wdog_dm
-                assign wdog_dm_to_w[i] = 0; assign wdog_dm_to_r[i] = 0; assign wdog_dm_pr_w[i] = 0; assign wdog_dm_pr_r[i] = 0;
+                assign wdog_dm_to_w[i] = 1'b0; assign wdog_dm_to_r[i] = 1'b0; assign wdog_dm_pr_w[i] = 1'b0; assign wdog_dm_pr_r[i] = 1'b0;
             end
 
             // -----------------------------------------------------------
@@ -534,12 +582,16 @@ module efpga_connector #(
             // WATCHDOG 4: SoC AXI-Full Slave (Fabric Side of Slice)
             // -----------------------------------------------------------
             if (ENABLE_WDOG_DMA_SLAVE) begin : gen_wdog_ds
+                wire ds_fault_to_w, ds_fault_to_r;
+                wire ds_fault_drop_w, ds_fault_drop_r;
+                wire ds_fault_unst_w, ds_fault_unst_r;
+
                 axi_watchdog_slave_monitor #(
-                    .ENABLE_TIMEOUT(1'b1),
-                    .ENABLE_PROTOCOL_CHECK(1'b1),
-                    .ENABLE_STRICT_PAYLOAD_CHECK(ENABLE_STRICT_PAYLOAD_CHECK),
-                    .WATCHDOG_LIMIT(WATCHDOG_LIMIT),
-                    .AXI_ID_WIDTH(AXI_ID_WIDTH)
+                    .ENABLE_TIMEOUT          (1'b1),
+                    .ENABLE_DROPPED_VALID    (1'b1),
+                    .ENABLE_PAYLOAD_STABILITY(1'b0),
+                    .WATCHDOG_LIMIT          (512),
+                    .AXI_ID_WIDTH            (AXI_ID_WIDTH)
                 ) inst_wdog_ds (
                     .clk_i(clk_i), .rstn_i(slot_wdog_rst_n),
                     .awvalid(slice_dma_awvalid), .awready(slice_dma_awready),
@@ -547,11 +599,19 @@ module efpga_connector #(
                     .bvalid (slice_dma_bvalid),  .bready (slice_dma_bready),  .bid   (slice_dma_bid), .bresp(slice_dma_bresp),
                     .arvalid(slice_dma_arvalid), .arready(slice_dma_arready),
                     .rvalid (slice_dma_rvalid),  .rready (slice_dma_rready),  .rlast (slice_dma_rlast),  .rid(slice_dma_rid), .rdata(slice_dma_rdata), .rresp(slice_dma_rresp),
-                    .timeout_w_fault_o(wdog_ds_to_w[i]), .timeout_r_fault_o(wdog_ds_to_r[i]),
-                    .protocol_w_fault_o(wdog_ds_pr_w[i]), .protocol_r_fault_o(wdog_ds_pr_r[i])
+                    .fault_timeout_w_o      (ds_fault_to_w),
+                    .fault_timeout_r_o      (ds_fault_to_r),
+                    .fault_dropped_valid_w_o(ds_fault_drop_w),
+                    .fault_dropped_valid_r_o(ds_fault_drop_r),
+                    .fault_unstable_w_o     (ds_fault_unst_w),
+                    .fault_unstable_r_o     (ds_fault_unst_r)
                 );
+                assign wdog_ds_to_w[i] = ds_fault_to_w;
+                assign wdog_ds_to_r[i] = ds_fault_to_r;
+                assign wdog_ds_pr_w[i] = ds_fault_drop_w | ds_fault_unst_w;
+                assign wdog_ds_pr_r[i] = ds_fault_drop_r | ds_fault_unst_r;
             end else begin : gen_no_wdog_ds
-                assign wdog_ds_to_w[i] = 0; assign wdog_ds_to_r[i] = 0; assign wdog_ds_pr_w[i] = 0; assign wdog_ds_pr_r[i] = 0;
+                assign wdog_ds_to_w[i] = 1'b0; assign wdog_ds_to_r[i] = 1'b0; assign wdog_ds_pr_w[i] = 1'b0; assign wdog_ds_pr_r[i] = 1'b0;
             end
         end
     endgenerate
