@@ -12,7 +12,7 @@ module sram_bank #(
     output logic signed [DATA_WIDTH-1:0] rdata
 );
 
-`ifdef ASIC_MACROS
+`ifdef SRAM_MACROS
     // -------------------------------------------------------------------------
     // IHP SG13G2 Hard Macro Instantiations
     // -------------------------------------------------------------------------

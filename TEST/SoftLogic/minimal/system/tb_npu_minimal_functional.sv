@@ -215,8 +215,6 @@ module tb_npu_minimal_functional;
 
         .quant_shift_in     (npu_quant_shift_in),
         .quant_shift_en     (npu_quant_shift_en),
-        .stochastic_round_en(npu_stochastic_round_en),
-        .lfsr_data_out      (npu_lfsr_data_out),
 
         .psum_skew_en       (npu_psum_skew_en),
         .compute_bank_swap  (npu_compute_bank_swap),

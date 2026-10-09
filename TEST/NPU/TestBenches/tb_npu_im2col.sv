@@ -105,7 +105,6 @@ module tb_npu_im2col;
         .WEIGHT_WIDTH    (WEIGHT_WIDTH),
         .PSUM_WIDTH      (PSUM_WIDTH),
         .SCALE_WIDTH     (SCALE_WIDTH),
-        .ENABLE_LFSR     (ENABLE_LFSR),
         .WEIGHT_SPLIT    (WEIGHT_SPLIT)
     ) dut (
         .clk_i              (clk_i),
@@ -119,8 +118,6 @@ module tb_npu_im2col;
         .swap_weights       (swap_weights),
         .quant_shift_in     (quant_shift_in),
         .quant_shift_en     (quant_shift_en),
-        .stochastic_round_en(stochastic_round_en),
-        .lfsr_data_out      (lfsr_data_out),
         .psum_skew_en       (psum_skew_en),
         .compute_bank_swap  (compute_bank_swap),
         .psum_A_addr        (psum_A_addr),

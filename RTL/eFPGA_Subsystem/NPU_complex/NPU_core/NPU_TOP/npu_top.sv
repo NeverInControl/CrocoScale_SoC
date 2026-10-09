@@ -9,7 +9,6 @@ module npu_top #(
     parameter int WEIGHT_WIDTH     = 8,
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
-    parameter bit ENABLE_LFSR      = 0,
     parameter int WEIGHT_SPLIT     = 8,
     
     localparam int PSUM_WORDS      = TILE_SIZE * TILE_SIZE,
@@ -42,8 +41,6 @@ module npu_top #(
     // Quantizer Configuration Interface
     input  wire        [QUANT_CFG_WIDTH-1:0]                             quant_shift_in,
     input  wire                                                          quant_shift_en,
-    input  wire                                                          stochastic_round_en,
-    output wire        [SCALE_WIDTH-1:0]                                 lfsr_data_out,
 
     // PSum Datapath & Mode Controls
     input  wire                                                          psum_skew_en,
@@ -245,16 +242,13 @@ module npu_top #(
         .CHANNELS        (ARRAY_WIDTH),
         .PSUM_WIDTH      (PSUM_WIDTH),
         .SCALE_WIDTH     (SCALE_WIDTH),
-        .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
-        .ENABLE_LFSR     (ENABLE_LFSR)
+        .ACTIVATION_WIDTH(ACTIVATION_WIDTH)
     ) requant_inst (
         .clk_i              (clk_i),
         .rst_n              (rst_n),
         .psum_in            (drain_psum_data),
         .quant_shift_in     (quant_shift_in),
         .quant_shift_en     (quant_shift_en),
-        .stochastic_round_en(stochastic_round_en),
-        .lfsr_data_out      (lfsr_data_out),
         .act_out            (quant_direct_act)
     );
 

@@ -4,8 +4,7 @@ module efpga_subsystem_top #(
     parameter int NUM_SLOTS        = 1,
     parameter int AXI_ID_WIDTH     = 8,
     parameter logic [31:0] HW_VERSION = 32'hFAB00001,
-    parameter int WEIGHT_SPLIT     = 8,
-    parameter bit ENABLE_LFSR      = 1'b0
+    parameter int WEIGHT_SPLIT     = 8
 ) (
     // Global Clock & Synchronized System Resets (from Top Level)
     input  logic                                clk_i,
@@ -364,15 +363,6 @@ module efpga_subsystem_top #(
     wire        [31:0] npu_xbar_sel;
     wire        [7:0]  npu_weight_shift_en;
 
-    // Stochastic Rounding & LFSR PRNG Interconnect:
-    // The NPU complex contains a hardware 16-bit Galois LFSR PRNG generator.
-    // When an LFSR-enabled fabric variant is present, npu_lfsr_data_out flows into
-    // fabric soft-logic, and fabric soft-logic drives npu_stochastic_round_en.
-    // In this specific 9x16 fabric variant, fabric ports for LFSR are unrouted,
-    // so npu_lfsr_data_out is left unconnected and npu_stochastic_round_en is tied low.
-    wire               npu_stochastic_round_en = 1'b0;
-    wire signed [15:0] npu_lfsr_data_out; // Unrouted in this fabric configuration
-
     // Static DMA Master Attributes
     assign axi4_dma_s_awid   = {NUM_SLOTS{AXI_ID_WIDTH'(1)}};
     assign axi4_dma_s_arid   = {NUM_SLOTS{AXI_ID_WIDTH'(1)}};
@@ -508,7 +498,6 @@ module efpga_subsystem_top #(
         .WEIGHT_WIDTH        (8),
         .PSUM_WIDTH          (32),
         .SCALE_WIDTH         (16),
-        .ENABLE_LFSR         (ENABLE_LFSR),
         .WEIGHT_SPLIT        (WEIGHT_SPLIT)
     ) npu_inst (
         .clk_i               (clk_i),
@@ -521,8 +510,6 @@ module efpga_subsystem_top #(
         .psum_lut_en         (npu_psum_lut_en),
         .weight_shift_en     (npu_weight_shift_en[WEIGHT_SPLIT-1:0]),
         .swap_weights        (npu_swap_weights),
-        .stochastic_round_en (npu_stochastic_round_en),
-        .lfsr_data_out       (npu_lfsr_data_out),
         .psum_skew_en        (npu_psum_skew_en),
         .compute_bank_swap   (npu_compute_bank_swap),
 

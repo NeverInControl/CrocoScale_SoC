@@ -8,12 +8,11 @@ This directory contains ASIC hard macro models, simulation blackboxes, and behav
 * **`NPU_core/`**: Hard macro model for the systolic array compute core, including the systolic matrix engine, accumulation registers, and requantizer pipeline.
 * **`SRAM/`**: ASIC SRAM macro models and memory wrappers replacing generic behavioral arrays.
 
-## Preprocessor Directive
+## Preprocessor Directives
+ 
+* **`SRAM_MACROS`**:
+  Defines instantiation of IHP 130nm CMOS5L foundry SRAM hard macros (`RM_IHPSG13_1P_*`) inside `sram_bank.sv` (used inside floorplan container macros). When undefined (default), behavioral memory arrays are inferred (targeting FPGA BRAMs in Vivado).
+ 
+* **`ASIC_MACROS`**:
+  Controls instantiation of top-level hardened physical macro blocks (such as the eFPGA fabric core `eFPGA_top` and floorplan container macros) across subsystem wrappers. When undefined, synthesizable/behavioral RTL descriptions are elaborated.
 
-When targeting ASIC synthesis or netlist simulation with hard macros instantiated, define the macro directive:
-
-```verilog
-`define ASIC_MACROS
-```
-
-This directive switches instantiation from synthesizable RTL descriptions to the dedicated ASIC macro cells across the eFPGA Subsystem wrappers.

@@ -493,7 +493,6 @@ module tb_npu_full_sys_functional;
         .swap_weights           (npu_swap_weights),
         .quant_shift_in         (npu_quant_shift_in),
         .quant_shift_en         (npu_quant_shift_en),
-        .stochastic_round_en    (1'b0),
         .psum_A_addr            (npu_psum_A_addr),
         .psum_A_we              (npu_psum_A_we),
         .psum_A_wdata           (npu_psum_A_wdata),

@@ -99,12 +99,12 @@ module tb_npu_whole_net;
     npu_wrapper #(
         .ARRAY_HEIGHT(ARRAY_HEIGHT), .ARRAY_WIDTH(ARRAY_WIDTH), .TILE_SIZE(TILE_SIZE),
         .ACT_HALO_PAD(ACT_HALO_PAD), .ACTIVATION_WIDTH(ACTIVATION_WIDTH), .WEIGHT_WIDTH(WEIGHT_WIDTH),
-        .PSUM_WIDTH(PSUM_WIDTH), .SCALE_WIDTH(SCALE_WIDTH), .ENABLE_LFSR(ENABLE_LFSR), .WEIGHT_SPLIT(WEIGHT_SPLIT)
+        .PSUM_WIDTH(PSUM_WIDTH), .SCALE_WIDTH(SCALE_WIDTH), .WEIGHT_SPLIT(WEIGHT_SPLIT)
     ) dut (
         .clk_i(clk_i), .rst_n(rst_n), .array_en(array_en), .psum_systolic_en(psum_systolic_en),
         .psum_lut_en(psum_lut_en), .crossbar_sel(crossbar_sel), .weight_shift_in(weight_shift_in),
         .weight_shift_en(weight_shift_en), .swap_weights(swap_weights), .quant_shift_in(quant_shift_in),
-        .quant_shift_en(quant_shift_en), .stochastic_round_en(stochastic_round_en), .lfsr_data_out(lfsr_data_out),
+        .quant_shift_en(quant_shift_en),
         .psum_skew_en(psum_skew_en), .compute_bank_swap(compute_bank_swap),
         .psum_A_addr(psum_A_addr), .psum_A_we(psum_A_we), .psum_A_wdata(psum_A_wdata),
         .psum_A_read_bank_sel(psum_A_read_bank_sel), .psum_A_rdata(psum_A_rdata),

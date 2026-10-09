@@ -3,8 +3,7 @@
 module npu_requantizer_lane #(
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
-    parameter int ACTIVATION_WIDTH = 8,
-    parameter bit ENABLE_LFSR      = 0
+    parameter int ACTIVATION_WIDTH = 8
 )(
     input  wire                                               clk_i,
     input  wire                                               rst_n,
@@ -14,10 +13,6 @@ module npu_requantizer_lane #(
     input  wire signed [SCALE_WIDTH-1:0]                     scale_m0,
     input  wire        [$clog2(PSUM_WIDTH+SCALE_WIDTH)-1:0] shift_n,
     input  wire signed [ACTIVATION_WIDTH-1:0]                zero_point,
-    
-    // Training Mode Stochastic Switch & Decorrelated Dither Noise
-    input  wire                                               stochastic_round_en,
-    input  wire        [SCALE_WIDTH-1:0]                     noise_in,
 
     // Direct Quantized Output Stream
     output reg  signed [ACTIVATION_WIDTH-1:0]                act_out
@@ -51,6 +46,7 @@ module npu_requantizer_lane #(
 
     // -------------------------------------------------------------------------
     // Stage 2: Rounding, Arithmetic Right-Shift & Saturation Clamp
+    // Google Edge TPU Standard: Round-Half-Away-From-Zero
     // -------------------------------------------------------------------------
     logic signed [PROD_WIDTH-1:0]       round_offset;
     logic signed [PROD_WIDTH-1:0]       rounded_prod;
@@ -58,45 +54,13 @@ module npu_requantizer_lane #(
     logic signed [PROD_WIDTH-1:0]       offset_val;
     logic signed [ACTIVATION_WIDTH-1:0] clamped_val;
 
-    generate
-        if (ENABLE_LFSR) begin : gen_stochastic_pipeline
-            reg                   stage1_stochastic;
-            reg [SCALE_WIDTH-1:0] stage1_noise;
-
-            always_ff @(posedge clk_i or negedge rst_n) begin
-                if (!rst_n) begin
-                    stage1_stochastic <= 1'b0;
-                    stage1_noise      <= '0;
-                end else begin
-                    stage1_stochastic <= stochastic_round_en;
-                    stage1_noise      <= noise_in;
-                end
-            end
-
-            wire [PROD_WIDTH-1:0] noise_mask = (PROD_WIDTH'(1) << stage1_shift) - 1'b1;
-            wire [PROD_WIDTH-1:0] dither_val = PROD_WIDTH'(stage1_noise) & noise_mask;
-
-            always_comb begin
-                if (stage1_stochastic && (stage1_shift > 6'd0)) begin
-                    round_offset = $signed(dither_val);
-                end else if (stage1_shift > 6'd0) begin
-                    // Google Edge TPU Standard: Round-Half-Away-From-Zero
-                    round_offset = (ONE << (stage1_shift - 1'b1)) - (stage1_prod[PROD_WIDTH-1] ? ONE : '0);
-                end else begin
-                    round_offset = '0;
-                end
-            end
-        end else begin : gen_deterministic_rounding
-            always_comb begin
-                if (stage1_shift > 6'd0) begin
-                    // Google Edge TPU Standard: Round-Half-Away-From-Zero
-                    round_offset = (ONE << (stage1_shift - 1'b1)) - (stage1_prod[PROD_WIDTH-1] ? ONE : '0);
-                end else begin
-                    round_offset = '0;
-                end
-            end
+    always_comb begin
+        if (stage1_shift > 6'd0) begin
+            round_offset = (ONE << (stage1_shift - 1'b1)) - (stage1_prod[PROD_WIDTH-1] ? ONE : '0);
+        end else begin
+            round_offset = '0;
         end
-    endgenerate
+    end
 
     always_comb begin
         rounded_prod = stage1_prod + round_offset;

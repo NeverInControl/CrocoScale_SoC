@@ -14,7 +14,6 @@ module npu_core_macro #(
     parameter int WEIGHT_WIDTH     = 8,
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
-    parameter bit ENABLE_LFSR      = 0,
     parameter int WEIGHT_SPLIT     = 2,
 
     localparam int PSUM_WORDS       = TILE_SIZE * TILE_SIZE,
@@ -43,8 +42,6 @@ module npu_core_macro #(
 
     input  wire        [QUANT_CFG_WIDTH-1:0]                             quant_shift_in,
     input  wire                                                          quant_shift_en,
-    input  wire                                                          stochastic_round_en,
-    output wire        [SCALE_WIDTH-1:0]                                 lfsr_data_out,
 
     input  wire                                                          psum_skew_en,
     input  wire                                                          compute_bank_swap,
