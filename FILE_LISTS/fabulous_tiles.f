@@ -109,8 +109,8 @@ FABulousProject/CrocoScale_Fabric/Tile/AXI_M_IO_W/AXI_M_IO_W_ConfigMem.v
 FABulousProject/CrocoScale_Fabric/Tile/AXI_M_IO_W/AXI_M_IO_W_switch_matrix.v
 FABulousProject/CrocoScale_Fabric/Tile/EXT_PMOD/EXT_PMOD_ConfigMem.v
 FABulousProject/CrocoScale_Fabric/Tile/EXT_PMOD/EXT_PMOD_switch_matrix.v
-FABulousProject/CrocoScale_Fabric/Tile/LUT4AB/LUT4AB_ConfigMem.v
-FABulousProject/CrocoScale_Fabric/Tile/LUT4AB/LUT4AB_switch_matrix.v
+FABulousProject/CrocoScale_Fabric/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM_ConfigMem.v
+FABulousProject/CrocoScale_Fabric/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM_switch_matrix.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_ACCUM_N/NPU_ACCUM_N_ConfigMem.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_ACCUM_N/NPU_ACCUM_N_switch_matrix.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_ACCUM_S/NPU_ACCUM_S_ConfigMem.v
@@ -128,7 +128,7 @@ FABulousProject/CrocoScale_Fabric/Tile/S_term_RAM_IO/S_term_RAM_IO_switch_matrix
 FABulousProject/CrocoScale_Fabric/Tile/AXIL_S_IO_W/AXIL_S_IO_W.v
 FABulousProject/CrocoScale_Fabric/Tile/AXI_M_IO_W/AXI_M_IO_W.v
 FABulousProject/CrocoScale_Fabric/Tile/EXT_PMOD/EXT_PMOD.v
-FABulousProject/CrocoScale_Fabric/Tile/LUT4AB/LUT4AB.v
+FABulousProject/CrocoScale_Fabric/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_ACCUM_N/NPU_ACCUM_N.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_ACCUM_S/NPU_ACCUM_S.v
 FABulousProject/CrocoScale_Fabric/Tile/NPU_CTRL_CFG/NPU_CTRL_CFG.v

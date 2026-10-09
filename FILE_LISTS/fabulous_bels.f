@@ -2,8 +2,8 @@
 # CrocoScale SoC -- FABulous BELs and Shared Primitives (9x16 Architecture)
 # =============================================================================
 FABulousProject/CrocoScale_Fabric/Fabric/models_pack.v
-FABulousProject/CrocoScale_Fabric/Tile/LUT4AB/LUT4c_frame_config_dffesr.v
-FABulousProject/CrocoScale_Fabric/Tile/LUT4AB/MUX8LUT_frame_config_mux.v
+FABulousProject/CrocoScale_Fabric/Tile/FLUT51PSDM/common/FLUT51PSDM_architecture.v
+FABulousProject/CrocoScale_Fabric/Tile/FLUT51PSDM/common/MUX8LUT_frame_config_mux.v
 FABulousProject/CrocoScale_Fabric/Tile/AXIL_S_IO_W/AXIL_S_BEL.v
 FABulousProject/CrocoScale_Fabric/Tile/AXI_M_IO_W/AXI_M_BEL.v
 FABulousProject/CrocoScale_Fabric/Tile/EXT_PMOD/EXT_PMOD_BEL.v
