@@ -5,7 +5,6 @@ This directory contains ASIC hard macro models, simulation blackboxes, and behav
 ## Directory Structure
 
 * **`FABulous/`**: Hard macro interface wrapper and simulation models for the reconfigurable eFPGA fabric core.
-* **`NPU_core/`**: Hard macro model for the systolic array compute core, including the systolic matrix engine, accumulation registers, and requantizer pipeline.
 * **`SRAM/`**: ASIC SRAM macro models and memory wrappers replacing generic behavioral arrays.
 
 ## Preprocessor Directives

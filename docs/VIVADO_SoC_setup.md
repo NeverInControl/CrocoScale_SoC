@@ -146,7 +146,7 @@ if {[llength $sim_files] > 0} {
 | :--- | :--- | :--- | :--- |
 | **FPGA Emulation (Vivado)** | `VIVADO=1` | Golden RTL (`RTL/`) or Mirrored Verilog | Enables 10 MHz clock divider, Xilinx `BUFG`, and `ASYNC_REG` reset attributes. |
 | **Simulation / Lint (Icarus)** | `__ICARUS__` | `VERILOG_MIRROR_GENERATED/` | Automatically set by `generate_verilog_mirror.sh`. Uses Verilog-2001 mirror. Soft-fabric loops are bypassed via `EXCLUDE_FPGA`. |
-| **ASIC Tapeout (IHP 130nm)** | `ASIC_MACROS` | Golden RTL (`RTL/`) | Instantiates IHP SG13G2 hard macros (`eFPGA_top_macro`, `npu_core_macro`, `sram_bank`). **DO NOT SET `VIVADO=1`!** External clock directly drives core clock tree without FPGA divider or buffer. |
+| **ASIC Tapeout (IHP 130nm)** | `ASIC_MACROS`, `SRAM_MACROS` | Golden RTL (`RTL/`) | Instantiates IHP SG13G2 hard macros (`eFPGA_top_macro`, container macros, leaf SRAM macros). **DO NOT SET `VIVADO=1`!** External clock directly drives core clock tree without FPGA divider or buffer. |
 
 > [!CAUTION]
 > **CRITICAL ASIC RULE**: **NEVER define `VIVADO` during ASIC synthesis or tapeout.** Setting `VIVADO` inserts FPGA-specific `BUFG` primitives and an unconstrained clock divider into the silicon path, breaking ASIC clock distribution.
