@@ -13,7 +13,12 @@ module crocoscale_soc #(
     input  logic       uart0_rxd_i
 `ifdef VIVADO
     ,
-    inout  wire  [7:0] ja           // Digilent Nexys Video PMOD Header JA
+    inout  wire  [7:0] ja,          // Digilent Nexys Video PMOD Header JA (eFPGA Fabric User I/O)
+    inout  wire  [7:0] jb           // Digilent Nexys Video PMOD Header JB (eFPGA BitBang Config)
+`else
+    ,
+    input  logic       efpga_cfg_sclk_i = 1'b0,
+    input  logic       efpga_cfg_sdata_i = 1'b0
 `endif
 );
 
@@ -394,6 +399,20 @@ module crocoscale_soc #(
 `endif
 
     // ===========================================================================
+    // External BitBang Configuration Interface (Header JB on Digilent Nexys Video)
+    // ===========================================================================
+    logic efpga_cfg_sclk;
+    logic efpga_cfg_sdata;
+
+`ifdef VIVADO
+    assign efpga_cfg_sclk  = jb[0]; // JB Pin 1 (Package Pin V8)
+    assign efpga_cfg_sdata = jb[1]; // JB Pin 2 (Package Pin V9)
+`else
+    assign efpga_cfg_sclk  = efpga_cfg_sclk_i;
+    assign efpga_cfg_sdata = efpga_cfg_sdata_i;
+`endif
+
+    // ===========================================================================
     // eFPGA Subsystem (Encapsulated Connector & eFPGA Fabric)
     // ===========================================================================
     efpga_subsystem_top #(
@@ -488,6 +507,10 @@ module crocoscale_soc #(
         .pmod_io_i          (pmod_io_i),
         .pmod_io_o          (pmod_io_o),
         .pmod_io_oe_o       (pmod_io_oe_o),
+
+        // External BitBang Configuration Interface
+        .efpga_cfg_sclk_i   (efpga_cfg_sclk),
+        .efpga_cfg_sdata_i  (efpga_cfg_sdata),
 
         // Interrupt Lines to CPU / SoC (5 Lines)
         .efpga_usr_irq_o    (efpga_usr_irq),

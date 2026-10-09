@@ -105,6 +105,12 @@ module efpga_subsystem_top #(
     output logic [7:0]                          pmod_io_oe_o,
 
     // =========================================================================
+    // External BitBang Configuration Interface
+    // =========================================================================
+    input  logic                                efpga_cfg_sclk_i = 1'b0,
+    input  logic                                efpga_cfg_sdata_i = 1'b0,
+
+    // =========================================================================
     // Interrupt Lines to CPU and SoC Subsystems
     // =========================================================================
     output logic [3:0]                          efpga_usr_irq_o,
@@ -140,6 +146,33 @@ module efpga_subsystem_top #(
     logic [NUM_SLOTS-1:0][31:0]         slot_debug_out;
     logic [NUM_SLOTS*3-1:0]             slot_dma_awprot;
     logic [NUM_SLOTS*3-1:0]             slot_dma_arprot;
+
+    // =========================================================================
+    // External BitBang Configuration Clock Snooper (4-bit Glitch Filter)
+    // =========================================================================
+    logic [2:0] sclk_sync;
+    always_ff @(posedge clk_i or negedge rstn_i) begin
+        if (!rstn_i) begin
+            sclk_sync <= 3'b000;
+        end else begin
+            sclk_sync <= {sclk_sync[1:0], efpga_cfg_sclk_i};
+        end
+    end
+    wire sclk_edge = sclk_sync[2] ^ sclk_sync[1];
+
+    // 4-bit saturating edge filter: confirms 16 transitions on s_clk to reject glitches
+    logic [3:0] bb_edge_cnt;
+    always_ff @(posedge clk_i or negedge rstn_i) begin
+        if (!rstn_i) begin
+            bb_edge_cnt <= 4'd0;
+        end else if (!slot_fabric_rst_n[0][0]) begin
+            bb_edge_cnt <= 4'd0;
+        end else if (sclk_edge && (bb_edge_cnt != 4'd15)) begin
+            bb_edge_cnt <= bb_edge_cnt + 4'd1;
+        end
+    end
+
+    wire bitbang_active = (bb_edge_cnt == 4'd15);
 
     // =========================================================================
     // eFPGA Connector (Isolation, Decouplers, Watchdogs, Dynamic PMP)
@@ -296,6 +329,7 @@ module efpga_subsystem_top #(
         .slot_fabric_rst_n_o (slot_fabric_rst_n),
         .slot_npu_rst_n_o    (slot_npu_rst_n),
         .efpga_com_active_i  (efpga_com_active),
+        .efpga_bitbang_active_i (bitbang_active),
         .slot_debug_in_i     (slot_debug_in),
         .slot_debug_out_o    (slot_debug_out),
         .slot_dma_awprot_o   (slot_dma_awprot),
@@ -370,8 +404,8 @@ module efpga_subsystem_top #(
         .ComActive           (efpga_com_active),
         .Rx                  (1'b1),
         .ReceiveLED          (),
-        .s_clk               (1'b0),
-        .s_data              (1'b0),
+        .s_clk               (efpga_cfg_sclk_i),
+        .s_data              (efpga_cfg_sdata_i),
 
         // Slot 0 Control (AXI-Lite Slave from Connector)
         .AXIL_S_SOC_AWADDR   (axil_ctrl_m_awaddr[9:0]),

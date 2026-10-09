@@ -10,7 +10,7 @@
  * Offset | Register Name  | R/W | Description / Bit Mapping
  * -------|----------------|-----|----------------------------------------------------------------
  * 0x000  | HW_VERSION     | R   | [31:0]: Hardware Version ID (Returns HW_VERSION parameter)
- * 0x004  | GLOBAL_CTRL    | R/W | [2]: User Design Loaded (R/W) | [1]: Com Active (R) | [0]: Soft Reset (R/W)
+ * 0x004  | GLOBAL_CTRL    | R/W | [4]: BitBang Programmed (W1C) | [3]: BitBang Active (R) | [2]: User Design Loaded (R/W) | [1]: Com Active (R) | [0]: Soft Reset (R/W)
  * 0x008  | CONFIG_DATA    | W   | [31:0]: Config Payload (translates little-endian CPU words to big-endian fabric frames)
  * 0x00C  | CONFIG_COUNT   | R   | [31:0]: Number of words written to CONFIG_DATA
  *
@@ -63,7 +63,7 @@ module efpga_manager #(
     output logic [31:0] s_axil_rdata,  output logic [1:0]  s_axil_rresp,  output logic        s_axil_rvalid,  input  logic        s_axil_rready,
     
     // Global eFPGA Interfacing
-    output logic [31:0] efpga_config_data_o, output logic efpga_config_we_o, input logic efpga_com_active_i,
+    output logic [31:0] efpga_config_data_o, output logic efpga_config_we_o, input logic efpga_com_active_i, input logic efpga_bitbang_active_i,
     
     // Per-Slot Control Arrays
     input  logic [NUM_SLOTS-1:0][31:0] slot_debug_in_i,
@@ -126,6 +126,7 @@ module efpga_manager #(
     // Global Registers
     logic [31:0] config_count_reg;
     logic user_design_loaded_reg, com_active_q; 
+    logic bitbang_active_q, bitbang_sticky_reg; 
     
     // Per-Slot Trimmed Registers
     logic [NUM_SLOTS-1:0][3:0]  slot_reset_fabric_reg;
@@ -511,6 +512,8 @@ module efpga_manager #(
             efpga_config_we_o          <= 1'b0;
             user_design_loaded_reg     <= 1'b0;
             com_active_q               <= 1'b0;
+            bitbang_active_q           <= 1'b0;
+            bitbang_sticky_reg         <= 1'b0;
             slot_reset_fabric_reg      <= '0;
             slot_reset_npu_reg         <= '0;
             slot_reset_wdog_reg        <= '0;
@@ -524,6 +527,11 @@ module efpga_manager #(
         end else begin
             efpga_config_we_o <= 1'b0;
             com_active_q      <= efpga_com_active_i;
+            bitbang_active_q  <= efpga_bitbang_active_i;
+
+            if (efpga_bitbang_active_i && !bitbang_active_q) begin
+                bitbang_sticky_reg <= 1'b1;
+            end
 
             if (axi_write_en) begin
                 axi_awready <= 1'b1;
@@ -532,7 +540,12 @@ module efpga_manager #(
 
                 if (local_awaddr < 16'h1000) begin
                     case (local_awaddr[11:0] & 12'hFFC)
-                        12'h004: if (s_axil_wstrb[0]) user_design_loaded_reg <= s_axil_wdata[2];
+                        12'h004: begin
+                            if (s_axil_wstrb[0]) begin
+                                user_design_loaded_reg <= s_axil_wdata[2];
+                                if (s_axil_wdata[4]) bitbang_sticky_reg <= 1'b0; // W1C
+                            end
+                        end
                         12'h008: begin
                             config_count_reg       <= config_count_reg + 32'd1;
                             efpga_config_data_o    <= {s_axil_wdata[7:0], s_axil_wdata[15:8], s_axil_wdata[23:16], s_axil_wdata[31:24]};
@@ -600,7 +613,7 @@ module efpga_manager #(
                 if (local_araddr < 16'h1000) begin
                     case (local_araddr[11:0] & 12'hFFC)
                         12'h000: axi_rdata <= HW_VERSION;
-                        12'h004: axi_rdata <= {29'd0, user_design_loaded_reg, efpga_com_active_i, 1'b0};
+                        12'h004: axi_rdata <= {27'd0, bitbang_sticky_reg, efpga_bitbang_active_i, user_design_loaded_reg, efpga_com_active_i, 1'b0};
                         12'h008: axi_rdata <= 32'h00000000;
                         12'h00C: axi_rdata <= config_count_reg;
                         default: axi_rdata <= 32'hBAD00000;
