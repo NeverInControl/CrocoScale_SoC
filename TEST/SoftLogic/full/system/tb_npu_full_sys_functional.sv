@@ -753,14 +753,14 @@ module tb_npu_full_sys_functional;
 
     function automatic logic signed [31:0] peek_psum(input int ch_idx, input int p_idx);
         case (ch_idx)
-            0: return npu_inst.gen_psum_srams[0].psum_sram_inst.mem[p_idx];
-            1: return npu_inst.gen_psum_srams[1].psum_sram_inst.mem[p_idx];
-            2: return npu_inst.gen_psum_srams[2].psum_sram_inst.mem[p_idx];
-            3: return npu_inst.gen_psum_srams[3].psum_sram_inst.mem[p_idx];
-            4: return npu_inst.gen_psum_srams[4].psum_sram_inst.mem[p_idx];
-            5: return npu_inst.gen_psum_srams[5].psum_sram_inst.mem[p_idx];
-            6: return npu_inst.gen_psum_srams[6].psum_sram_inst.mem[p_idx];
-            7: return npu_inst.gen_psum_srams[7].psum_sram_inst.mem[p_idx];
+            0: return npu_inst.psum_requant_stage.gen_containers[0].container_inst.bank_A_sram.mem[p_idx];
+            1: return npu_inst.psum_requant_stage.gen_containers[1].container_inst.bank_A_sram.mem[p_idx];
+            2: return npu_inst.psum_requant_stage.gen_containers[2].container_inst.bank_A_sram.mem[p_idx];
+            3: return npu_inst.psum_requant_stage.gen_containers[3].container_inst.bank_A_sram.mem[p_idx];
+            4: return npu_inst.psum_requant_stage.gen_containers[4].container_inst.bank_A_sram.mem[p_idx];
+            5: return npu_inst.psum_requant_stage.gen_containers[5].container_inst.bank_A_sram.mem[p_idx];
+            6: return npu_inst.psum_requant_stage.gen_containers[6].container_inst.bank_A_sram.mem[p_idx];
+            7: return npu_inst.psum_requant_stage.gen_containers[7].container_inst.bank_A_sram.mem[p_idx];
             default: return 32'sd0;
         endcase
     endfunction

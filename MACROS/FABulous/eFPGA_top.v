@@ -2,9 +2,10 @@
 
 /* ===============================================================================================
  * FABulous eFPGA Fabric Hard Macro Blackbox Model
+ * Drop-in replacement for FABulous eFPGA_top.v
  * =============================================================================================== */
 
-module eFPGA_top_macro #(
+module eFPGA_top #(
     parameter include_eFPGA     = 1,
     parameter NumberOfRows      = 10,
     parameter NumberOfCols      = 12,

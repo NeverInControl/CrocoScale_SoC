@@ -1,5 +1,6 @@
-MACROS/NPU_core/npu_core_macro.v
-MACROS/FABulous/eFPGA_top_macro.v
+MACROS/FABulous/eFPGA_top.v
 MACROS/SRAM/sram_macros.v
-
+MACROS/SRAM/sram_bank.v
+MACROS/act_buffer/act_bank_container.v
+MACROS/psum_requant/psum_requant_container.v
 
