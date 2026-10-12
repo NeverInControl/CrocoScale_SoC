@@ -3,7 +3,9 @@ module crocoscale_soc (
 	rstn_i,
 	gpio_o,
 	uart0_txd_o,
-	uart0_rxd_i
+	uart0_rxd_i,
+	efpga_cfg_sclk_i,
+	efpga_cfg_sdata_i
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] MEM_SIZE = 131072;
@@ -14,6 +16,8 @@ module crocoscale_soc (
 	output wire [7:0] gpio_o;
 	output wire uart0_txd_o;
 	input wire uart0_rxd_i;
+	input reg efpga_cfg_sclk_i;
+	input reg efpga_cfg_sdata_i;
 	wire [7:0] con_gpio_out;
 	assign gpio_o = con_gpio_out;
 	wire clk_10mhz = clk_i;
@@ -511,6 +515,10 @@ module crocoscale_soc (
 	wire [7:0] pmod_io_o;
 	wire [7:0] pmod_io_oe_o;
 	assign pmod_io_i = 8'd0;
+	wire efpga_cfg_sclk;
+	wire efpga_cfg_sdata;
+	assign efpga_cfg_sclk = efpga_cfg_sclk_i;
+	assign efpga_cfg_sdata = efpga_cfg_sdata_i;
 	efpga_subsystem_top #(
 		.NUM_SLOTS(NUM_SLOTS),
 		.AXI_ID_WIDTH(AXI_ID_WIDTH),
@@ -595,6 +603,8 @@ module crocoscale_soc (
 		.pmod_io_i(pmod_io_i),
 		.pmod_io_o(pmod_io_o),
 		.pmod_io_oe_o(pmod_io_oe_o),
+		.efpga_cfg_sclk_i(efpga_cfg_sclk),
+		.efpga_cfg_sdata_i(efpga_cfg_sdata),
 		.efpga_usr_irq_o(efpga_usr_irq),
 		.efpga_fault_irq_o(efpga_fault_irq)
 	);

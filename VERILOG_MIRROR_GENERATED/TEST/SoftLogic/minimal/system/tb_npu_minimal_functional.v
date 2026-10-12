@@ -150,8 +150,6 @@ module tb_npu_minimal_functional;
 		.swap_weights(npu_swap_weights),
 		.quant_shift_in(npu_quant_shift_in),
 		.quant_shift_en(npu_quant_shift_en),
-		.stochastic_round_en(npu_stochastic_round_en),
-		.lfsr_data_out(npu_lfsr_data_out),
 		.psum_skew_en(npu_psum_skew_en),
 		.compute_bank_swap(npu_compute_bank_swap),
 		.psum_A_addr(npu_psum_A_addr),
@@ -902,7 +900,7 @@ module tb_npu_minimal_functional;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:935:13 - tb_npu_minimal_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:933:13 - tb_npu_minimal_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -1356,7 +1354,7 @@ module tb_npu_minimal_functional;
 		if ((errors_1x1 == 0) && (errors_3x3 == 0))
 			$display(">>> ALL DUAL-MODE MINIMAL TESTS PASSED SUCCESSFULLY! <<<\n");
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:1351:13 - tb_npu_minimal_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Verification failed with errors!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:1349:13 - tb_npu_minimal_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Verification failed with errors!");
 			$finish(1);
 		end
 		#(100)

@@ -1,8 +1,8 @@
 module NPU_SLICE
     #(
 `ifdef EMULATION
-        parameter [639:0] Tile_X0Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y1_Emulate_Bitstream=640'b0,
+        parameter [1503:0] Tile_X0Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y1_Emulate_Bitstream=1504'b0,
 `endif
         parameter MaxFramesPerCol=20,
         parameter FrameBitsPerRow=32
@@ -97,6 +97,7 @@ module NPU_SLICE
         output  NPU_XBAR_SEL1,
         output  NPU_XBAR_SEL2,
         output  NPU_XBAR_SEL3,
+        output  FAB_USER_CLK,
         output  [MaxFramesPerCol-1:0] Tile_X0Y0_FrameStrobe_O, //CONFIG_PORT
         input  [FrameBitsPerRow-1:0] Tile_X0Y0_FrameData, //CONFIG_PORT
         output  [FrameBitsPerRow-1:0] Tile_X0Y0_FrameData_O, //CONFIG_PORT
@@ -394,6 +395,7 @@ NPU_SLICE_DATA_SRAM_BEL Inst_ST_NPU_SLICE_DATA_SRAM_BEL (
     .NPU_WEIGHT_SHIFT_EN(NPU_WEIGHT_SHIFT_EN),
     .NPU_XBAR_SEL({NPU_XBAR_SEL3, NPU_XBAR_SEL2, NPU_XBAR_SEL1, NPU_XBAR_SEL0}),
     .NPU_OUT_ACT({NPU_OUT_ACT7, NPU_OUT_ACT6, NPU_OUT_ACT5, NPU_OUT_ACT4, NPU_OUT_ACT3, NPU_OUT_ACT2, NPU_OUT_ACT1, NPU_OUT_ACT0}),
+    .FAB_USER_CLK(FAB_USER_CLK),
     .UserCLK(Tile_X0Y1_UserCLK),
     .ConfigBits(ST_ConfigBits[6-1:0])
 );

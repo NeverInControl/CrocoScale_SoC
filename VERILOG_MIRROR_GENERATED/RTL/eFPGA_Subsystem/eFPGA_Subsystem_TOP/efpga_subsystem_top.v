@@ -78,6 +78,8 @@ module efpga_subsystem_top (
 	pmod_io_i,
 	pmod_io_o,
 	pmod_io_oe_o,
+	efpga_cfg_sclk_i,
+	efpga_cfg_sdata_i,
 	efpga_usr_irq_o,
 	efpga_fault_irq_o
 );
@@ -85,7 +87,6 @@ module efpga_subsystem_top (
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter signed [31:0] WEIGHT_SPLIT = 8;
-	parameter [0:0] ENABLE_LFSR = 1'b0;
 	input wire clk_i;
 	input wire rstn_i;
 	input wire rst_i;
@@ -165,6 +166,8 @@ module efpga_subsystem_top (
 	input wire [7:0] pmod_io_i;
 	output wire [7:0] pmod_io_o;
 	output wire [7:0] pmod_io_oe_o;
+	input reg efpga_cfg_sclk_i;
+	input reg efpga_cfg_sdata_i;
 	output wire [3:0] efpga_usr_irq_o;
 	output wire [NUM_SLOTS - 1:0] efpga_fault_irq_o;
 	wire [(NUM_SLOTS * 32) - 1:0] axil_ctrl_m_awaddr;
@@ -230,6 +233,22 @@ module efpga_subsystem_top (
 	wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out;
 	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot;
 	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot;
+	reg [2:0] sclk_sync;
+	always @(posedge clk_i or negedge rstn_i)
+		if (!rstn_i)
+			sclk_sync <= 3'b000;
+		else
+			sclk_sync <= {sclk_sync[1:0], efpga_cfg_sclk_i};
+	wire sclk_edge = sclk_sync[2] ^ sclk_sync[1];
+	reg [3:0] bb_edge_cnt;
+	always @(posedge clk_i or negedge rstn_i)
+		if (!rstn_i)
+			bb_edge_cnt <= 4'd0;
+		else if (!slot_fabric_rst_n[0])
+			bb_edge_cnt <= 4'd0;
+		else if (sclk_edge && (bb_edge_cnt != 4'd15))
+			bb_edge_cnt <= bb_edge_cnt + 4'd1;
+	wire bitbang_active = bb_edge_cnt == 4'd15;
 	efpga_connector #(
 		.NUM_SLOTS(NUM_SLOTS),
 		.AXI_ID_WIDTH(AXI_ID_WIDTH),
@@ -370,6 +389,7 @@ module efpga_subsystem_top (
 		.slot_fabric_rst_n_o(slot_fabric_rst_n),
 		.slot_npu_rst_n_o(slot_npu_rst_n),
 		.efpga_com_active_i(efpga_com_active),
+		.efpga_bitbang_active_i(bitbang_active),
 		.slot_debug_in_i(slot_debug_in),
 		.slot_debug_out_o(slot_debug_out),
 		.slot_dma_awprot_o(slot_dma_awprot),
@@ -397,8 +417,6 @@ module efpga_subsystem_top (
 	wire npu_quant_shift_en;
 	wire [31:0] npu_xbar_sel;
 	wire [7:0] npu_weight_shift_en;
-	wire npu_stochastic_round_en = 1'b0;
-	wire signed [15:0] npu_lfsr_data_out;
 	function automatic signed [AXI_ID_WIDTH - 1:0] sv2v_cast_14482_signed;
 		input reg signed [AXI_ID_WIDTH - 1:0] inp;
 		sv2v_cast_14482_signed = inp;
@@ -415,8 +433,8 @@ module efpga_subsystem_top (
 		.ComActive(efpga_com_active),
 		.Rx(1'b1),
 		.ReceiveLED(),
-		.s_clk(1'b0),
-		.s_data(1'b0),
+		.s_clk(efpga_cfg_sclk_i),
+		.s_data(efpga_cfg_sdata_i),
 		.AXIL_S_SOC_AWADDR(axil_ctrl_m_awaddr[9:0]),
 		.AXIL_S_SOC_AWPROT(axil_ctrl_m_awprot[2:0]),
 		.AXIL_S_SOC_AWVALID(axil_ctrl_m_awvalid[0]),
@@ -503,7 +521,6 @@ module efpga_subsystem_top (
 		.WEIGHT_WIDTH(8),
 		.PSUM_WIDTH(32),
 		.SCALE_WIDTH(16),
-		.ENABLE_LFSR(ENABLE_LFSR),
 		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) npu_inst(
 		.clk_i(clk_i),
@@ -514,8 +531,6 @@ module efpga_subsystem_top (
 		.psum_lut_en(npu_psum_lut_en),
 		.weight_shift_en(npu_weight_shift_en[WEIGHT_SPLIT - 1:0]),
 		.swap_weights(npu_swap_weights),
-		.stochastic_round_en(npu_stochastic_round_en),
-		.lfsr_data_out(npu_lfsr_data_out),
 		.psum_skew_en(npu_psum_skew_en),
 		.compute_bank_swap(npu_compute_bank_swap),
 		.weight_shift_in(npu_weight_in),

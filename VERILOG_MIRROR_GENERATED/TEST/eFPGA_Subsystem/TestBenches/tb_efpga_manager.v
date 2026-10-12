@@ -66,7 +66,7 @@ module tb_efpga_manager;
 		.NUM_PMP_REGIONS(NUM_PMP_REGIONS),
 		.HW_VERSION(HW_VERSION),
 		.PAGE_GRANULARITY(1'b1),
-		.MAX_ADDRESS_WIDTH(32),
+		.ADDR_WIDTH(32),
 		.ENABLE_PMP(1'b1),
 		.ENABLE_WDOG_CTRL_SLAVE(1'b1),
 		.ENABLE_WDOG_DMA_MASTER(1'b1),
@@ -134,12 +134,11 @@ module tb_efpga_manager;
 		.slot_dma_awprot_o(slot_dma_awprot_o),
 		.slot_dma_arprot_o(slot_dma_arprot_o)
 	);
-	task automatic axi_write;
+	task automatic axi_write_strb;
 		input [31:0] addr;
 		input [31:0] data;
 		input [3:0] strb;
 		begin
-			strb = 4'hf;
 			@(posedge clk)
 				;
 			s_axil_awaddr <= addr;
@@ -173,6 +172,11 @@ module tb_efpga_manager;
 			@(posedge clk)
 				;
 		end
+	endtask
+	task automatic axi_write;
+		input [31:0] addr;
+		input [31:0] data;
+		axi_write_strb(addr, data, 4'hf);
 	endtask
 	task automatic axi_read;
 		input [31:0] addr;
@@ -315,7 +319,7 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] CONFIG_COUNT (0x000C): Word counter accurately incremented to 2");
-		axi_write(32'h00001004, 32'h00000001, 4'b0001);
+		axi_write_strb(32'h00001004, 32'h00000001, 4'b0001);
 		#(10)
 			;
 		if (decoupler_req_o[0] !== 1'b1) begin
@@ -373,7 +377,7 @@ module tb_efpga_manager;
 		else
 			$display("[PASS] PMP Unmapped Boundary (0x1028): Returned 0xBAD00002 as expected");
 		decoupler_is_decoupled_i[0] = 1'b0;
-		axi_write(32'h00001004, 32'h00000000, 4'b0001);
+		axi_write_strb(32'h00001004, 32'h00000000, 4'b0001);
 		axi_write(32'h00001018, 32'hdeadbeef);
 		axi_read(32'h00001018, rdata);
 		if (rdata !== 32'h00012003) begin
@@ -452,7 +456,7 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] DMA PROT: Reset defaults correctly to 3'b000 on both AWPROT and ARPROT pins");
-		axi_write(32'h00001004, 32'h00004400, 4'b0010);
+		axi_write_strb(32'h00001004, 32'h00004400, 4'b0010);
 		#(10)
 			;
 		if ((slot_dma_awprot_o[2:0] !== 3'b001) || (slot_dma_arprot_o[2:0] !== 3'b010)) begin
@@ -468,7 +472,7 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] DMA PROT: Readback of SLOT_CTRL matched bits [15:13]=010, [12:10]=001");
-		axi_write(32'h00001004, 32'h0000b800, 4'b0010);
+		axi_write_strb(32'h00001004, 32'h0000b800, 4'b0010);
 		#(10)
 			;
 		if ((slot_dma_awprot_o[2:0] !== 3'b110) || (slot_dma_arprot_o[2:0] !== 3'b101)) begin

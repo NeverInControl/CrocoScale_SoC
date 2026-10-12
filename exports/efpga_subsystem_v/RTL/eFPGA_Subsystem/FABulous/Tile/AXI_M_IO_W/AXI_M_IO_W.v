@@ -1,16 +1,16 @@
 module AXI_M_IO_W
     #(
 `ifdef EMULATION
-        parameter [639:0] Tile_X0Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y1_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y2_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y3_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y4_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y5_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y6_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y7_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y8_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X0Y9_Emulate_Bitstream=640'b0,
+        parameter [1503:0] Tile_X0Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y1_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y2_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y3_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y4_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y5_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y6_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y7_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y8_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X0Y9_Emulate_Bitstream=1504'b0,
 `endif
         parameter MaxFramesPerCol=20,
         parameter FrameBitsPerRow=32

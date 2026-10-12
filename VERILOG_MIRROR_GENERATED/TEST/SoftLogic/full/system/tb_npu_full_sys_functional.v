@@ -432,7 +432,6 @@ module tb_npu_full_sys_functional;
 		.swap_weights(npu_swap_weights),
 		.quant_shift_in(npu_quant_shift_in),
 		.quant_shift_en(npu_quant_shift_en),
-		.stochastic_round_en(1'b0),
 		.psum_A_addr(npu_psum_A_addr),
 		.psum_A_we(npu_psum_A_we),
 		.psum_A_wdata(npu_psum_A_wdata),
@@ -626,7 +625,7 @@ module tb_npu_full_sys_functional;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:679:13 - tb_npu_full_sys_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:678:13 - tb_npu_full_sys_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -641,7 +640,7 @@ module tb_npu_full_sys_functional;
 				$display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
 				$display(" Please ensure files exist in TEST/GoldenReference/ or pass +MEM_DIR=<path>.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:691:13 - tb_npu_full_sys_functional.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:690:13 - tb_npu_full_sys_functional.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -658,7 +657,7 @@ module tb_npu_full_sys_functional;
 				$display(" [FATAL ERROR] Vector '%s' contains %0d non-zero entries (minimum required: %0d)!", vec_name, nonzero_count, min_required);
 				$display(" Aborting simulation to prevent false-positive pass on uninitialized data.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:707:13 - tb_npu_full_sys_functional.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Aborting simulation due to zeroed test vector.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:706:13 - tb_npu_full_sys_functional.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Aborting simulation due to zeroed test vector.");
 				$finish(1);
 			end
 		end
@@ -732,14 +731,14 @@ module tb_npu_full_sys_functional;
 		input reg signed [31:0] ch_idx;
 		input reg signed [31:0] p_idx;
 		case (ch_idx)
-			0: peek_psum = npu_inst.gen_psum_srams[0].psum_sram_inst.mem[p_idx];
-			1: peek_psum = npu_inst.gen_psum_srams[1].psum_sram_inst.mem[p_idx];
-			2: peek_psum = npu_inst.gen_psum_srams[2].psum_sram_inst.mem[p_idx];
-			3: peek_psum = npu_inst.gen_psum_srams[3].psum_sram_inst.mem[p_idx];
-			4: peek_psum = npu_inst.gen_psum_srams[4].psum_sram_inst.mem[p_idx];
-			5: peek_psum = npu_inst.gen_psum_srams[5].psum_sram_inst.mem[p_idx];
-			6: peek_psum = npu_inst.gen_psum_srams[6].psum_sram_inst.mem[p_idx];
-			7: peek_psum = npu_inst.gen_psum_srams[7].psum_sram_inst.mem[p_idx];
+			0: peek_psum = npu_inst.psum_requant_stage.gen_containers[0].container_inst.bank_A_sram.mem[p_idx];
+			1: peek_psum = npu_inst.psum_requant_stage.gen_containers[1].container_inst.bank_A_sram.mem[p_idx];
+			2: peek_psum = npu_inst.psum_requant_stage.gen_containers[2].container_inst.bank_A_sram.mem[p_idx];
+			3: peek_psum = npu_inst.psum_requant_stage.gen_containers[3].container_inst.bank_A_sram.mem[p_idx];
+			4: peek_psum = npu_inst.psum_requant_stage.gen_containers[4].container_inst.bank_A_sram.mem[p_idx];
+			5: peek_psum = npu_inst.psum_requant_stage.gen_containers[5].container_inst.bank_A_sram.mem[p_idx];
+			6: peek_psum = npu_inst.psum_requant_stage.gen_containers[6].container_inst.bank_A_sram.mem[p_idx];
+			7: peek_psum = npu_inst.psum_requant_stage.gen_containers[7].container_inst.bank_A_sram.mem[p_idx];
 			default: peek_psum = 32'sd0;
 		endcase
 	endfunction
@@ -1000,7 +999,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Raw 32-bit PSUM peek matches 100%% bit-exact!");
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1003:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Raw 32-bit PSUM peek failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1002:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Raw 32-bit PSUM peek failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s 40%% [Phase 1: Draining & Validating Mode A (Linear Requant)...]", get_progress_bar(2, 5));
@@ -1055,7 +1054,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode A Linear: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1042:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1041:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s 60%% [Phase 1: Draining & Validating Mode B (Mish LUT)...]", get_progress_bar(3, 5));
@@ -1108,7 +1107,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode B Mish LUT: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1075:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1074:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s 80%% [Phase 1: Draining & Validating Mode C (2x2 MaxPool)...]", get_progress_bar(4, 5));
@@ -1161,7 +1160,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode C MaxPool: 512/512 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1108:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1107:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("  %s100%% [Phase 1: Draining & Validating Mode D (Mish LUT + MaxPool)...]", get_progress_bar(5, 5));
@@ -1214,7 +1213,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 1x1 Mode D Mish+MaxPool: 512/512 matches (exact: %0d, tol: %0d)!\n", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1141:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1140:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "1x1 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("-----------------------------------------------------------------------------------------");
@@ -1269,7 +1268,7 @@ module tb_npu_full_sys_functional;
 								end
 						end
 					if (errs != 0) begin
-						$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1205:32 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Tile (%0d,%0d) Raw PSUM peek failed with %0d errors!", curr_ty, curr_tx, errs);
+						$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1204:32 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Tile (%0d,%0d) Raw PSUM peek failed with %0d errors!", curr_ty, curr_tx, errs);
 						$finish(1);
 					end
 					axil_write(32'h00000008, 32'h00000900);
@@ -1357,7 +1356,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 32x32 Mode A Linear: 8192/8192 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1270:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1269:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode A Linear failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 32x32 Mode B (Mish LUT) Across All 4 Tiles...");
@@ -1408,7 +1407,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 32x32 Mode B Mish LUT: 8192/8192 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1305:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1304:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 32x32 Mode B Mish LUT failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 16x16 Mode C (2x2 MaxPool) Across All 4 Tiles...");
@@ -1459,7 +1458,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 16x16 Mode C MaxPool: 2048/2048 matches (exact: %0d, tol: %0d)!", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1340:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1339:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode C MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("\n  -> Validating Full 16x16 Mode D (Mish LUT + MaxPool) Across All 4 Tiles...");
@@ -1510,7 +1509,7 @@ module tb_npu_full_sys_functional;
 		if (errs == 0)
 			$display("    -> [PASS] 3x3 Full 16x16 Mode D Mish+MaxPool: 2048/2048 matches (exact: %0d, tol: %0d)!\n", exact_ok, tol_ok);
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1375:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv:1374:14 - tb_npu_full_sys_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "3x3 Full 16x16 Mode D Mish+MaxPool failed with %0d errors (max diff %0d)!", errs, max_diff);
 			$finish(1);
 		end
 		$display("=========================================================================================");

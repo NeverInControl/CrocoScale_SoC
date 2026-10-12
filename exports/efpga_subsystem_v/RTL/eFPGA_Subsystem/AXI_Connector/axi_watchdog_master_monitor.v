@@ -31,14 +31,30 @@ module axi_watchdog_master_monitor (
 	rvalid,
 	rready,
 	rlast,
-	timeout_w_fault_o,
-	timeout_r_fault_o,
-	protocol_w_fault_o,
-	protocol_r_fault_o
+	fault_timeout_w_o,
+	fault_timeout_r_o,
+	fault_dropped_valid_w_o,
+	fault_dropped_valid_r_o,
+	fault_unstable_w_o,
+	fault_unstable_r_o,
+	fault_4k_cross_w_o,
+	fault_4k_cross_r_o,
+	fault_illegal_size_w_o,
+	fault_illegal_size_r_o,
+	fault_illegal_burst_w_o,
+	fault_illegal_burst_r_o,
+	fault_wlast_timing_o,
+	fault_fifo_overflow_o
 );
 	parameter [0:0] ENABLE_TIMEOUT = 1'b1;
-	parameter [0:0] ENABLE_PROTOCOL_CHECK = 1'b1;
-	parameter [0:0] ENABLE_STRICT_PAYLOAD_CHECK = 1'b1;
+	parameter [0:0] ENABLE_DROPPED_VALID = 1'b1;
+	parameter [0:0] ENABLE_PAYLOAD_STABILITY = 1'b0;
+	parameter [0:0] ENABLE_4K_CHECK = 1'b1;
+	parameter [0:0] ENABLE_SIZE_CHECK = 1'b1;
+	parameter [0:0] ENABLE_BURST_CHECK = 1'b1;
+	parameter [0:0] ENABLE_WLAST_CHECK = 1'b1;
+	parameter [0:0] ENABLE_FIFO_OVERFLOW = 1'b1;
+	parameter signed [31:0] MAX_OUTSTANDING_WRITES = 1;
 	parameter signed [31:0] WATCHDOG_LIMIT = 512;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	input wire clk_i;
@@ -73,125 +89,273 @@ module axi_watchdog_master_monitor (
 	input wire rvalid;
 	input wire rready;
 	input wire rlast;
-	output wire timeout_w_fault_o;
-	output wire timeout_r_fault_o;
-	output wire protocol_w_fault_o;
-	output wire protocol_r_fault_o;
-	localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
-	function automatic signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] sv2v_cast_B8BED_signed;
-		input reg signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] inp;
-		sv2v_cast_B8BED_signed = inp;
-	endfunction
-	localparam [TIMER_W:0] LIMIT_VAL = sv2v_cast_B8BED_signed(WATCHDOG_LIMIT);
-	localparam [TIMER_W:0] TIMER_ONE = sv2v_cast_B8BED_signed(1);
-	reg w_in_flight;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i)
-			w_in_flight <= 0;
-		else if (wvalid & wready)
-			w_in_flight <= ~wlast;
-	wire w_stall = (w_in_flight & ~wvalid) | (bvalid & ~bready);
-	wire r_stall = rvalid & ~rready;
-	reg [TIMER_W:0] w_timer;
-	reg [TIMER_W:0] r_timer;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i) begin
-			w_timer <= 1'sb0;
-			r_timer <= 1'sb0;
-		end
-		else begin
-			w_timer <= (w_stall && ENABLE_TIMEOUT ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
-			r_timer <= (r_stall && ENABLE_TIMEOUT ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
-		end
-	assign timeout_w_fault_o = w_timer >= LIMIT_VAL;
-	assign timeout_r_fault_o = r_timer >= LIMIT_VAL;
-	localparam AW_W = AXI_ID_WIDTH + 53;
-	localparam W_W = 37;
-	localparam AR_W = AXI_ID_WIDTH + 53;
-	wire [AW_W - 1:0] aw_payload = {awid, awaddr, awlen, awsize, awburst, awlock, awcache, awprot};
-	wire [36:0] w_payload = {wdata, wstrb, wlast};
-	wire [AR_W - 1:0] ar_payload = {arid, araddr, arlen, arsize, arburst, arlock, arcache, arprot};
-	reg awvalid_q;
-	reg wvalid_q;
-	reg arvalid_q;
-	reg awready_q;
-	reg wready_q;
-	reg arready_q;
-	reg [AW_W - 1:0] aw_payload_q;
-	reg [36:0] w_payload_q;
-	reg [AR_W - 1:0] ar_payload_q;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i) begin
-			awvalid_q <= 0;
-			wvalid_q <= 0;
-			arvalid_q <= 0;
-			awready_q <= 0;
-			wready_q <= 0;
-			arready_q <= 0;
-			aw_payload_q <= 0;
-			w_payload_q <= 0;
-			ar_payload_q <= 0;
-		end
-		else begin
-			awvalid_q <= awvalid;
-			wvalid_q <= wvalid;
-			arvalid_q <= arvalid;
-			awready_q <= awready;
-			wready_q <= wready;
-			arready_q <= arready;
-			aw_payload_q <= aw_payload;
-			w_payload_q <= w_payload;
-			ar_payload_q <= ar_payload;
-		end
-	wire aw_dropped = (awvalid_q & ~awready_q) & ~awvalid;
-	wire w_dropped = (wvalid_q & ~wready_q) & ~wvalid;
-	wire ar_dropped = (arvalid_q & ~arready_q) & ~arvalid;
-	wire aw_unstable = ((awvalid_q & ~awready_q) & awvalid) & (aw_payload != aw_payload_q);
-	wire w_unstable = ((wvalid_q & ~wready_q) & wvalid) & (w_payload != w_payload_q);
-	wire ar_unstable = ((arvalid_q & ~arready_q) & arvalid) & (ar_payload != ar_payload_q);
-	wire wlast_timing_fault;
+	output wire fault_timeout_w_o;
+	output wire fault_timeout_r_o;
+	output wire fault_dropped_valid_w_o;
+	output wire fault_dropped_valid_r_o;
+	output wire fault_unstable_w_o;
+	output wire fault_unstable_r_o;
+	output wire fault_4k_cross_w_o;
+	output wire fault_4k_cross_r_o;
+	output wire fault_illegal_size_w_o;
+	output wire fault_illegal_size_r_o;
+	output wire fault_illegal_burst_w_o;
+	output wire fault_illegal_burst_r_o;
+	output wire fault_wlast_timing_o;
+	output wire fault_fifo_overflow_o;
+	wire aw_illegal_size;
+	wire ar_illegal_size;
 	generate
-		if (ENABLE_STRICT_PAYLOAD_CHECK) begin : gen_wlast_check
-			reg [7:0] awlen_fifo [0:15];
-			reg [3:0] awlen_wr_ptr;
-			reg [3:0] awlen_rd_ptr;
-			reg [4:0] awlen_count;
-			always @(posedge clk_i or negedge rstn_i)
-				if (!rstn_i) begin
-					awlen_wr_ptr <= 0;
-					awlen_rd_ptr <= 0;
-					awlen_count <= 0;
-				end
-				else if ((awvalid & awready) && !((wvalid & wready) & wlast)) begin
-					awlen_fifo[awlen_wr_ptr] <= awlen;
-					awlen_wr_ptr <= awlen_wr_ptr + 1;
-					awlen_count <= awlen_count + 1;
-				end
-				else if (!(awvalid & awready) && ((wvalid & wready) & wlast)) begin
-					awlen_rd_ptr <= awlen_rd_ptr + 1;
-					awlen_count <= awlen_count - 1;
-				end
-				else if ((awvalid & awready) && ((wvalid & wready) & wlast)) begin
-					awlen_fifo[awlen_wr_ptr] <= awlen;
-					awlen_wr_ptr <= awlen_wr_ptr + 1;
-					awlen_rd_ptr <= awlen_rd_ptr + 1;
-				end
-			reg [7:0] current_w_beat;
-			always @(posedge clk_i or negedge rstn_i)
-				if (!rstn_i)
-					current_w_beat <= 0;
-				else if (wvalid & wready) begin
-					if (wlast)
-						current_w_beat <= 0;
-					else
-						current_w_beat <= current_w_beat + 1;
-				end
-			assign wlast_timing_fault = ((wvalid & wready) & (awlen_count > 0)) & ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast);
+		if (ENABLE_SIZE_CHECK) begin : gen_size_check
+			assign aw_illegal_size = awvalid & (awsize > 3'd2);
+			assign ar_illegal_size = arvalid & (arsize > 3'd2);
 		end
-		else begin : gen_no_wlast_check
-			assign wlast_timing_fault = 1'b0;
+		else begin : gen_no_size_check
+			assign aw_illegal_size = 1'b0;
+			assign ar_illegal_size = 1'b0;
 		end
 	endgenerate
-	assign protocol_w_fault_o = ENABLE_PROTOCOL_CHECK & ((aw_dropped | w_dropped) | (ENABLE_STRICT_PAYLOAD_CHECK & ((aw_unstable | w_unstable) | wlast_timing_fault)));
-	assign protocol_r_fault_o = ENABLE_PROTOCOL_CHECK & (ar_dropped | (ENABLE_STRICT_PAYLOAD_CHECK & ar_unstable));
+	assign fault_illegal_size_w_o = aw_illegal_size;
+	assign fault_illegal_size_r_o = ar_illegal_size;
+	function automatic [12:0] sv2v_cast_13;
+		input reg [12:0] inp;
+		sv2v_cast_13 = inp;
+	endfunction
+	generate
+		if (ENABLE_4K_CHECK) begin : gen_4k_check
+			wire [1:0] aw_effective_size = (ENABLE_SIZE_CHECK && (awsize > 3'd2) ? 2'd2 : awsize[1:0]);
+			wire [1:0] ar_effective_size = (ENABLE_SIZE_CHECK && (arsize > 3'd2) ? 2'd2 : arsize[1:0]);
+			wire [12:0] aw_burst_bytes = sv2v_cast_13((sv2v_cast_13(awlen) + 13'd1) << aw_effective_size);
+			wire [12:0] ar_burst_bytes = sv2v_cast_13((sv2v_cast_13(arlen) + 13'd1) << ar_effective_size);
+			wire [12:0] aw_offset_sum = {1'b0, awaddr[11:0]} + aw_burst_bytes;
+			wire [12:0] ar_offset_sum = {1'b0, araddr[11:0]} + ar_burst_bytes;
+			assign fault_4k_cross_w_o = awvalid & (aw_offset_sum[12] && (aw_offset_sum[11:0] != 12'd0));
+			assign fault_4k_cross_r_o = arvalid & (ar_offset_sum[12] && (ar_offset_sum[11:0] != 12'd0));
+		end
+		else begin : gen_no_4k_check
+			assign fault_4k_cross_w_o = 1'b0;
+			assign fault_4k_cross_r_o = 1'b0;
+		end
+	endgenerate
+	function automatic [5:0] sv2v_cast_6;
+		input reg [5:0] inp;
+		sv2v_cast_6 = inp;
+	endfunction
+	generate
+		if (ENABLE_BURST_CHECK) begin : gen_burst_check
+			wire aw_burst_reserved = awburst == 2'b11;
+			wire ar_burst_reserved = arburst == 2'b11;
+			wire aw_fixed_illegal_len = (awburst == 2'b00) & (awlen > 8'd15);
+			wire ar_fixed_illegal_len = (arburst == 2'b00) & (arlen > 8'd15);
+			wire aw_is_wrap = awburst == 2'b10;
+			wire ar_is_wrap = arburst == 2'b10;
+			wire aw_wrap_len_ok = (((awlen == 8'd1) | (awlen == 8'd3)) | (awlen == 8'd7)) | (awlen == 8'd15);
+			wire ar_wrap_len_ok = (((arlen == 8'd1) | (arlen == 8'd3)) | (arlen == 8'd7)) | (arlen == 8'd15);
+			wire aw_wrap_illegal_len = aw_is_wrap & ~aw_wrap_len_ok;
+			wire ar_wrap_illegal_len = ar_is_wrap & ~ar_wrap_len_ok;
+			wire [1:0] aw_effective_size = (ENABLE_SIZE_CHECK && (awsize > 3'd2) ? 2'd2 : awsize[1:0]);
+			wire [1:0] ar_effective_size = (ENABLE_SIZE_CHECK && (arsize > 3'd2) ? 2'd2 : arsize[1:0]);
+			wire [5:0] aw_wrap_mask = sv2v_cast_6(((sv2v_cast_6(awlen) + 6'd1) << aw_effective_size) - 6'd1);
+			wire [5:0] ar_wrap_mask = sv2v_cast_6(((sv2v_cast_6(arlen) + 6'd1) << ar_effective_size) - 6'd1);
+			wire aw_wrap_unaligned = (aw_is_wrap & aw_wrap_len_ok) & ((awaddr[5:0] & aw_wrap_mask) != 6'd0);
+			wire ar_wrap_unaligned = (ar_is_wrap & ar_wrap_len_ok) & ((araddr[5:0] & ar_wrap_mask) != 6'd0);
+			assign fault_illegal_burst_w_o = awvalid & (((aw_burst_reserved | aw_fixed_illegal_len) | aw_wrap_illegal_len) | aw_wrap_unaligned);
+			assign fault_illegal_burst_r_o = arvalid & (((ar_burst_reserved | ar_fixed_illegal_len) | ar_wrap_illegal_len) | ar_wrap_unaligned);
+		end
+		else begin : gen_no_burst_check
+			assign fault_illegal_burst_w_o = 1'b0;
+			assign fault_illegal_burst_r_o = 1'b0;
+		end
+		if (ENABLE_TIMEOUT) begin : gen_timeout
+			localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
+			function automatic signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] sv2v_cast_B8BED_signed;
+				input reg signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] inp;
+				sv2v_cast_B8BED_signed = inp;
+			endfunction
+			localparam [TIMER_W:0] LIMIT_VAL = sv2v_cast_B8BED_signed(WATCHDOG_LIMIT);
+			localparam [TIMER_W:0] TIMER_ONE = sv2v_cast_B8BED_signed(1);
+			reg w_in_flight;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i)
+					w_in_flight <= 1'b0;
+				else if (wvalid & wready)
+					w_in_flight <= ~wlast;
+			wire w_stall = (w_in_flight & ~wvalid) | (bvalid & ~bready);
+			wire r_stall = rvalid & ~rready;
+			reg [TIMER_W:0] w_timer;
+			reg [TIMER_W:0] r_timer;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					w_timer <= 1'sb0;
+					r_timer <= 1'sb0;
+				end
+				else begin
+					w_timer <= (w_stall ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+					r_timer <= (r_stall ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+				end
+			assign fault_timeout_w_o = w_timer >= LIMIT_VAL;
+			assign fault_timeout_r_o = r_timer >= LIMIT_VAL;
+		end
+		else begin : gen_no_timeout
+			assign fault_timeout_w_o = 1'b0;
+			assign fault_timeout_r_o = 1'b0;
+		end
+		if (ENABLE_DROPPED_VALID || ENABLE_PAYLOAD_STABILITY) begin : gen_handshake_track
+			reg awvalid_q;
+			reg wvalid_q;
+			reg arvalid_q;
+			reg awready_q;
+			reg wready_q;
+			reg arready_q;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					awvalid_q <= 1'b0;
+					wvalid_q <= 1'b0;
+					arvalid_q <= 1'b0;
+					awready_q <= 1'b0;
+					wready_q <= 1'b0;
+					arready_q <= 1'b0;
+				end
+				else begin
+					awvalid_q <= awvalid;
+					wvalid_q <= wvalid;
+					arvalid_q <= arvalid;
+					awready_q <= awready;
+					wready_q <= wready;
+					arready_q <= arready;
+				end
+			if (ENABLE_DROPPED_VALID) begin : gen_dropped_valid
+				assign fault_dropped_valid_w_o = ((awvalid_q & ~awready_q) & ~awvalid) | ((wvalid_q & ~wready_q) & ~wvalid);
+				assign fault_dropped_valid_r_o = (arvalid_q & ~arready_q) & ~arvalid;
+			end
+			else begin : gen_no_dropped_valid
+				assign fault_dropped_valid_w_o = 1'b0;
+				assign fault_dropped_valid_r_o = 1'b0;
+			end
+			if (ENABLE_PAYLOAD_STABILITY) begin : gen_payload_stability
+				localparam AW_W = AXI_ID_WIDTH + 53;
+				localparam W_W = 37;
+				localparam AR_W = AXI_ID_WIDTH + 53;
+				wire [AW_W - 1:0] aw_payload = {awid, awaddr, awlen, awsize, awburst, awlock, awcache, awprot};
+				wire [36:0] w_payload = {wdata, wstrb, wlast};
+				wire [AR_W - 1:0] ar_payload = {arid, araddr, arlen, arsize, arburst, arlock, arcache, arprot};
+				reg [AW_W - 1:0] aw_payload_q;
+				reg [36:0] w_payload_q;
+				reg [AR_W - 1:0] ar_payload_q;
+				always @(posedge clk_i or negedge rstn_i)
+					if (!rstn_i) begin
+						aw_payload_q <= 1'sb0;
+						w_payload_q <= 1'sb0;
+						ar_payload_q <= 1'sb0;
+					end
+					else begin
+						aw_payload_q <= aw_payload;
+						w_payload_q <= w_payload;
+						ar_payload_q <= ar_payload;
+					end
+				wire aw_unstable = ((awvalid_q & ~awready_q) & awvalid) & (aw_payload != aw_payload_q);
+				wire w_unstable = ((wvalid_q & ~wready_q) & wvalid) & (w_payload != w_payload_q);
+				wire ar_unstable = ((arvalid_q & ~arready_q) & arvalid) & (ar_payload != ar_payload_q);
+				assign fault_unstable_w_o = aw_unstable | w_unstable;
+				assign fault_unstable_r_o = ar_unstable;
+			end
+			else begin : gen_no_payload_stability
+				assign fault_unstable_w_o = 1'b0;
+				assign fault_unstable_r_o = 1'b0;
+			end
+		end
+		else begin : gen_no_handshake_track
+			assign fault_dropped_valid_w_o = 1'b0;
+			assign fault_dropped_valid_r_o = 1'b0;
+			assign fault_unstable_w_o = 1'b0;
+			assign fault_unstable_r_o = 1'b0;
+		end
+		if (ENABLE_WLAST_CHECK || ENABLE_FIFO_OVERFLOW) begin : gen_burst_tracking
+			localparam signed [31:0] FIFO_DEPTH = (MAX_OUTSTANDING_WRITES < 1 ? 1 : MAX_OUTSTANDING_WRITES);
+			localparam signed [31:0] PTR_W = (FIFO_DEPTH > 1 ? $clog2(FIFO_DEPTH) : 1);
+			localparam signed [31:0] CNT_W = (FIFO_DEPTH > 1 ? $clog2(FIFO_DEPTH) + 1 : 2);
+			reg [7:0] awlen_fifo [0:FIFO_DEPTH - 1];
+			reg [PTR_W - 1:0] awlen_wr_ptr;
+			reg [PTR_W - 1:0] awlen_rd_ptr;
+			reg [CNT_W - 1:0] awlen_count;
+			wire aw_push = awvalid & awready;
+			wire w_pop = (wvalid & wready) & wlast;
+			function automatic signed [CNT_W - 1:0] sv2v_cast_7B3D1_signed;
+				input reg signed [CNT_W - 1:0] inp;
+				sv2v_cast_7B3D1_signed = inp;
+			endfunction
+			wire fifo_full = awlen_count == sv2v_cast_7B3D1_signed(FIFO_DEPTH);
+			if (ENABLE_FIFO_OVERFLOW) begin : gen_fifo_overflow
+				assign fault_fifo_overflow_o = (awvalid & fifo_full) & ~w_pop;
+			end
+			else begin : gen_no_fifo_overflow
+				assign fault_fifo_overflow_o = 1'b0;
+			end
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					awlen_wr_ptr <= 1'sb0;
+					awlen_rd_ptr <= 1'sb0;
+					awlen_count <= 1'sb0;
+				end
+				else
+					case ({aw_push, w_pop})
+						2'b10:
+							if (!fifo_full) begin
+								awlen_fifo[awlen_wr_ptr] <= awlen;
+								if (FIFO_DEPTH > 1) begin : sv2v_autoblock_1
+									reg signed [PTR_W - 1:0] sv2v_tmp_cast;
+									sv2v_tmp_cast = FIFO_DEPTH - 1;
+									awlen_wr_ptr <= (awlen_wr_ptr == sv2v_tmp_cast ? {PTR_W {1'sb0}} : awlen_wr_ptr + 1'b1);
+								end
+								awlen_count <= awlen_count + 1'b1;
+							end
+						2'b01:
+							if (awlen_count > 0) begin
+								if (FIFO_DEPTH > 1) begin : sv2v_autoblock_2
+									reg signed [PTR_W - 1:0] sv2v_tmp_cast;
+									sv2v_tmp_cast = FIFO_DEPTH - 1;
+									awlen_rd_ptr <= (awlen_rd_ptr == sv2v_tmp_cast ? {PTR_W {1'sb0}} : awlen_rd_ptr + 1'b1);
+								end
+								awlen_count <= awlen_count - 1'b1;
+							end
+						2'b11: begin
+							awlen_fifo[awlen_wr_ptr] <= awlen;
+							if (FIFO_DEPTH > 1) begin
+								begin : sv2v_autoblock_3
+									reg signed [PTR_W - 1:0] sv2v_tmp_cast;
+									sv2v_tmp_cast = FIFO_DEPTH - 1;
+									awlen_wr_ptr <= (awlen_wr_ptr == sv2v_tmp_cast ? {PTR_W {1'sb0}} : awlen_wr_ptr + 1'b1);
+								end
+								begin : sv2v_autoblock_4
+									reg signed [PTR_W - 1:0] sv2v_tmp_cast_1;
+									sv2v_tmp_cast_1 = FIFO_DEPTH - 1;
+									awlen_rd_ptr <= (awlen_rd_ptr == sv2v_tmp_cast_1 ? {PTR_W {1'sb0}} : awlen_rd_ptr + 1'b1);
+								end
+							end
+						end
+						default:
+							;
+					endcase
+			if (ENABLE_WLAST_CHECK) begin : gen_wlast_check
+				reg [7:0] current_w_beat;
+				always @(posedge clk_i or negedge rstn_i)
+					if (!rstn_i)
+						current_w_beat <= 8'd0;
+					else if (wvalid & wready) begin
+						if (wlast)
+							current_w_beat <= 8'd0;
+						else
+							current_w_beat <= current_w_beat + 1'b1;
+					end
+				assign fault_wlast_timing_o = wvalid & ((awlen_count == {CNT_W {1'sb0}}) | ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast));
+			end
+			else begin : gen_no_wlast_check
+				assign fault_wlast_timing_o = 1'b0;
+			end
+		end
+		else begin : gen_no_burst_tracking
+			assign fault_wlast_timing_o = 1'b0;
+			assign fault_fifo_overflow_o = 1'b0;
+		end
+	endgenerate
 endmodule

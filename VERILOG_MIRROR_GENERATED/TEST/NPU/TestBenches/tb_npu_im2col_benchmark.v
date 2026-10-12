@@ -102,8 +102,6 @@ module tb_npu_im2col_benchmark;
 		.swap_weights(swap_weights),
 		.quant_shift_in(quant_shift_in),
 		.quant_shift_en(quant_shift_en),
-		.stochastic_round_en(stochastic_round_en),
-		.lfsr_data_out(lfsr_data_out),
 		.psum_skew_en(psum_skew_en),
 		.compute_bank_swap(compute_bank_swap),
 		.psum_A_addr(psum_A_addr),
@@ -174,7 +172,7 @@ module tb_npu_im2col_benchmark;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:204:13 - tb_npu_im2col_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:202:13 - tb_npu_im2col_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -189,7 +187,7 @@ module tb_npu_im2col_benchmark;
 				$display(" [FATAL ERROR] Required memory file '%s' was NOT found!", filename);
 				$display(" Run 'python3 gen_npu_im2col_benchmark.py' and ensure output files are in xsim path.");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:216:13 - tb_npu_im2col_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:214:13 - tb_npu_im2col_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -203,7 +201,7 @@ module tb_npu_im2col_benchmark;
 			min_required = 1;
 			if (nonzero_count < min_required) begin
 				$display("\n[FATAL ERROR] Test vector '%s' is empty or all-zero (%0d non-zero elements, min required: %0d)!", vec_name, nonzero_count, min_required);
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:229:13 - tb_npu_im2col_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-vector guard triggered: preventing false-positive pass.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/NPU/TestBenches/tb_npu_im2col_benchmark.sv:227:13 - tb_npu_im2col_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-vector guard triggered: preventing false-positive pass.");
 				$finish(1);
 			end
 		end

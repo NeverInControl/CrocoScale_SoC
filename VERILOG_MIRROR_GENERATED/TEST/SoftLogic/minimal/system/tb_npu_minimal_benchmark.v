@@ -392,8 +392,6 @@ module tb_npu_minimal_benchmark;
 		.swap_weights(npu_swap_weights),
 		.quant_shift_in(npu_quant_shift_in),
 		.quant_shift_en(npu_quant_shift_en),
-		.stochastic_round_en(1'b0),
-		.lfsr_data_out(),
 		.psum_A_addr(npu_psum_A_addr),
 		.psum_A_we(npu_psum_A_we),
 		.psum_A_wdata(npu_psum_A_wdata),
@@ -653,7 +651,7 @@ module tb_npu_minimal_benchmark;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:712:13 - tb_npu_minimal_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:710:13 - tb_npu_minimal_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -665,7 +663,7 @@ module tb_npu_minimal_benchmark;
 			fd = $fopen(filename, "r");
 			if (fd == 0) begin
 				$display("\n[FATAL ERROR] Required memory file '%s' was NOT found!", filename);
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:721:13 - tb_npu_minimal_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:719:13 - tb_npu_minimal_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -679,7 +677,7 @@ module tb_npu_minimal_benchmark;
 			min_required = 1;
 			if (nonzero_count < min_required) begin
 				$display("\n[FATAL ERROR] Vector '%s' contains NO non-zero elements (%0d found, min %0d required)!", vec_name, nonzero_count, min_required);
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:734:13 - tb_npu_minimal_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:732:13 - tb_npu_minimal_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
 				$finish(1);
 			end
 		end
@@ -736,14 +734,14 @@ module tb_npu_minimal_benchmark;
 	function automatic signed [31:0] get_hw_psum_mem0;
 		input reg signed [31:0] ch;
 		case (ch)
-			0: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[0].psum_sram_inst.mem[0];
-			1: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[1].psum_sram_inst.mem[0];
-			2: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[2].psum_sram_inst.mem[0];
-			3: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[3].psum_sram_inst.mem[0];
-			4: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[4].psum_sram_inst.mem[0];
-			5: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[5].psum_sram_inst.mem[0];
-			6: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[6].psum_sram_inst.mem[0];
-			7: get_hw_psum_mem0 = npu_wrapper_inst.gen_psum_srams[7].psum_sram_inst.mem[0];
+			0: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[0].container_inst.bank_A_sram.mem[0];
+			1: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[1].container_inst.bank_A_sram.mem[0];
+			2: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[2].container_inst.bank_A_sram.mem[0];
+			3: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[3].container_inst.bank_A_sram.mem[0];
+			4: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[4].container_inst.bank_A_sram.mem[0];
+			5: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[5].container_inst.bank_A_sram.mem[0];
+			6: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[6].container_inst.bank_A_sram.mem[0];
+			7: get_hw_psum_mem0 = npu_wrapper_inst.psum_requant_stage.gen_containers[7].container_inst.bank_A_sram.mem[0];
 			default: get_hw_psum_mem0 = 32'sd0;
 		endcase
 	endfunction
@@ -1080,7 +1078,7 @@ module tb_npu_minimal_benchmark;
 			$display(">>> SUCCESS: Minimal 36-Block Benchmark PASSED 100%%! <<<");
 		else begin
 			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:1118:13 - tb_npu_minimal_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Minimal benchmark verification failed!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:1116:13 - tb_npu_minimal_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Minimal benchmark verification failed!");
 			$finish(1);
 		end
 		$finish;

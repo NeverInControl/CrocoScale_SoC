@@ -473,7 +473,6 @@ module tb_npu_full_sys_3x3_benchmark;
 		.swap_weights(npu_swap_weights),
 		.quant_shift_in(npu_quant_shift_in),
 		.quant_shift_en(npu_quant_shift_en),
-		.stochastic_round_en(1'b0),
 		.psum_A_addr(npu_psum_A_addr),
 		.psum_A_we(npu_psum_A_we),
 		.psum_A_wdata(npu_psum_A_wdata),
@@ -613,7 +612,7 @@ module tb_npu_full_sys_3x3_benchmark;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:648:13 - tb_npu_full_sys_3x3_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:647:13 - tb_npu_full_sys_3x3_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -628,7 +627,7 @@ module tb_npu_full_sys_3x3_benchmark;
 				$display(" [FATAL ERROR] Required memory file '%s' was NOT found in any search path!", filename);
 				$display(" Please ensure files exist in TEST/GoldenReference/ or pass +MEM_DIR=<path>.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:660:13 - tb_npu_full_sys_3x3_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:659:13 - tb_npu_full_sys_3x3_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -646,7 +645,7 @@ module tb_npu_full_sys_3x3_benchmark;
 				$display(" Memory was either empty, uninitialized, or filled with all zeroes!");
 				$display(" Simulation aborted to prevent FALSE POSITIVE pass.");
 				$display("=========================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:677:13 - tb_npu_full_sys_3x3_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:676:13 - tb_npu_full_sys_3x3_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
 				$finish(1);
 			end
 		end
@@ -978,7 +977,7 @@ module tb_npu_full_sys_3x3_benchmark;
 			$display(">>> SUCCESS: Full 36-Block Benchmark with MaxPool2D PASSED 100%%! <<<");
 		else begin
 			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:985:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv:984:13 - tb_npu_full_sys_3x3_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Full benchmark verification failed!");
 			$finish(1);
 		end
 		$finish;

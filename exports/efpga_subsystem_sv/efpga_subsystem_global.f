@@ -5,8 +5,8 @@
 # =============================================================================
 
 RTL/eFPGA_Subsystem/FABulous/Fabric/models_pack.v
-RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/LUT4c_frame_config_dffesr.v
-RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/MUX8LUT_frame_config_mux.v
+RTL/eFPGA_Subsystem/FABulous/Tile/FLUT51PSDM/common/FLUT51PSDM_architecture.v
+RTL/eFPGA_Subsystem/FABulous/Tile/FLUT51PSDM/common/MUX8LUT_frame_config_mux.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_BEL.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXI_M_IO_W/AXI_M_BEL.v
 RTL/eFPGA_Subsystem/FABulous/Tile/EXT_PMOD/EXT_PMOD_BEL.v
@@ -115,8 +115,8 @@ RTL/eFPGA_Subsystem/FABulous/Tile/AXI_M_IO_W/AXI_M_IO_W_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXI_M_IO_W/AXI_M_IO_W_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/EXT_PMOD/EXT_PMOD_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/EXT_PMOD/EXT_PMOD_switch_matrix.v
-RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/LUT4AB_ConfigMem.v
-RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/LUT4AB_switch_matrix.v
+RTL/eFPGA_Subsystem/FABulous/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM_ConfigMem.v
+RTL/eFPGA_Subsystem/FABulous/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACCUM_N/NPU_ACCUM_N_ConfigMem.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACCUM_N/NPU_ACCUM_N_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACCUM_S/NPU_ACCUM_S_ConfigMem.v
@@ -132,7 +132,7 @@ RTL/eFPGA_Subsystem/FABulous/Tile/S_term_RAM_IO/S_term_RAM_IO_switch_matrix.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXIL_S_IO_W/AXIL_S_IO_W.v
 RTL/eFPGA_Subsystem/FABulous/Tile/AXI_M_IO_W/AXI_M_IO_W.v
 RTL/eFPGA_Subsystem/FABulous/Tile/EXT_PMOD/EXT_PMOD.v
-RTL/eFPGA_Subsystem/FABulous/Tile/LUT4AB/LUT4AB.v
+RTL/eFPGA_Subsystem/FABulous/Tile/FLUT51PSDM/tiles/b64mix_a48x16/FLUT51PSDM.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACCUM_N/NPU_ACCUM_N.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_ACCUM_S/NPU_ACCUM_S.v
 RTL/eFPGA_Subsystem/FABulous/Tile/NPU_CTRL_CFG/NPU_CTRL_CFG.v
@@ -148,14 +148,17 @@ RTL/eFPGA_Subsystem/FABulous/Fabric/Frame_Select.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_Config.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_top.v
-RTL/eFPGA_Subsystem/NPU_complex/sram/sram_bank.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_prng.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer_lane.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/requantizer/npu_requantizer.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/pe.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/npu_crossbar.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/systolic_array/systolic_array.sv
-RTL/eFPGA_Subsystem/NPU_complex/NPU_core/NPU_TOP/npu_top.sv
+RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.sv
+RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.sv
+RTL/eFPGA_Subsystem/NPU_complex/act_buffer/act_buffer_TOP/act_buffer_top.sv
+RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/pe.sv
+RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/systolic_array.sv
+RTL/eFPGA_Subsystem/NPU_complex/compute_core/crossbar/npu_crossbar.sv
+RTL/eFPGA_Subsystem/NPU_complex/compute_core/quant_config/quant_shift_chain.sv
+RTL/eFPGA_Subsystem/NPU_complex/compute_core/compute_core_TOP/compute_core_top.sv
+RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/requantizer/npu_requantizer_lane.sv
+RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/psum_requant_container.sv
+RTL/eFPGA_Subsystem/NPU_complex/psum_requant/psum_requant_TOP/psum_requant_top.sv
 RTL/eFPGA_Subsystem/NPU_complex/NPU_complex_TOP/npu_wrapper.sv
 RTL/eFPGA_Subsystem/AXI_Connector/pmp_math.sv
 RTL/eFPGA_Subsystem/AXI_Connector/axil_watchdog_slave_monitor.sv

@@ -22,6 +22,8 @@ module NPU_SLICE_DATA_SRAM_BEL #(
     (* FABulous, EXTERNAL *) output reg        NPU_WEIGHT_SHIFT_EN,
     (* FABulous, EXTERNAL *) output reg  [3:0] NPU_XBAR_SEL,
     (* FABulous, EXTERNAL *) input  wire [7:0] NPU_OUT_ACT,
+    (* FABulous, EXTERNAL *) output wire       FAB_USER_CLK,
+
 
     // =========================================================================
     // Fabric Facing Pins (Switch Matrix Routing)
@@ -35,6 +37,7 @@ module NPU_SLICE_DATA_SRAM_BEL #(
     input  wire [3:0] FAB_XBAR_SEL,
     output reg  [7:0] FAB_OUT_ACT,
 
+
     // =========================================================================
     // Global User Clock (Dedicated Fabric Net)
     // =========================================================================
@@ -45,6 +48,9 @@ module NPU_SLICE_DATA_SRAM_BEL #(
     // =========================================================================
     (* FABulous, GLOBAL *) input wire [NoConfigBits-1:0] ConfigBits
 );
+
+    // Route the fabric user clock to an external pin.
+    assign FAB_USER_CLK = UserCLK;
 
     // -------------------------------------------------------------------------
     // Bit 0:   FORCE_ZERO_XBAR     -> Clamps [3] to 1'b1 (crossbar MSB=1 forces zero)

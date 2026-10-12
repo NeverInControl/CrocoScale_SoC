@@ -1,11 +1,11 @@
 module NPU_ACCUM_S
     #(
 `ifdef EMULATION
-        parameter [639:0] Tile_X0Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X1Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X2Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X3Y0_Emulate_Bitstream=640'b0,
-        parameter [639:0] Tile_X4Y0_Emulate_Bitstream=640'b0,
+        parameter [1503:0] Tile_X0Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X1Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X2Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X3Y0_Emulate_Bitstream=1504'b0,
+        parameter [1503:0] Tile_X4Y0_Emulate_Bitstream=1504'b0,
 `endif
         parameter MaxFramesPerCol=20,
         parameter FrameBitsPerRow=32

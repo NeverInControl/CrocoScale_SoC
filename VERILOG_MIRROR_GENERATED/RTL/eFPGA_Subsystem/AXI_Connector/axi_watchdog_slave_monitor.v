@@ -18,14 +18,16 @@ module axi_watchdog_slave_monitor (
 	rid,
 	rdata,
 	rresp,
-	timeout_w_fault_o,
-	timeout_r_fault_o,
-	protocol_w_fault_o,
-	protocol_r_fault_o
+	fault_timeout_w_o,
+	fault_timeout_r_o,
+	fault_dropped_valid_w_o,
+	fault_dropped_valid_r_o,
+	fault_unstable_w_o,
+	fault_unstable_r_o
 );
 	parameter [0:0] ENABLE_TIMEOUT = 1'b1;
-	parameter [0:0] ENABLE_PROTOCOL_CHECK = 1'b1;
-	parameter [0:0] ENABLE_STRICT_PAYLOAD_CHECK = 1'b1;
+	parameter [0:0] ENABLE_DROPPED_VALID = 1'b1;
+	parameter [0:0] ENABLE_PAYLOAD_STABILITY = 1'b0;
 	parameter signed [31:0] WATCHDOG_LIMIT = 512;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	input wire clk_i;
@@ -47,88 +49,130 @@ module axi_watchdog_slave_monitor (
 	input wire [AXI_ID_WIDTH - 1:0] rid;
 	input wire [31:0] rdata;
 	input wire [1:0] rresp;
-	output wire timeout_w_fault_o;
-	output wire timeout_r_fault_o;
-	output wire protocol_w_fault_o;
-	output wire protocol_r_fault_o;
-	localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
-	function automatic signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] sv2v_cast_B8BED_signed;
-		input reg signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] inp;
-		sv2v_cast_B8BED_signed = inp;
-	endfunction
-	localparam [TIMER_W:0] LIMIT_VAL = sv2v_cast_B8BED_signed(WATCHDOG_LIMIT);
-	localparam [TIMER_W:0] TIMER_ONE = sv2v_cast_B8BED_signed(1);
-	reg [7:0] b_owed;
-	reg [7:0] r_owed;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i) begin
-			b_owed <= 1'sb0;
-			r_owed <= 1'sb0;
+	output wire fault_timeout_w_o;
+	output wire fault_timeout_r_o;
+	output wire fault_dropped_valid_w_o;
+	output wire fault_dropped_valid_r_o;
+	output wire fault_unstable_w_o;
+	output wire fault_unstable_r_o;
+	generate
+		if (ENABLE_TIMEOUT) begin : gen_timeout
+			localparam TIMER_W = $clog2(WATCHDOG_LIMIT + 1);
+			function automatic signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] sv2v_cast_B8BED_signed;
+				input reg signed [((TIMER_W + 0) >= 0 ? TIMER_W + 1 : 1 - (TIMER_W + 0)) - 1:0] inp;
+				sv2v_cast_B8BED_signed = inp;
+			endfunction
+			localparam [TIMER_W:0] LIMIT_VAL = sv2v_cast_B8BED_signed(WATCHDOG_LIMIT);
+			localparam [TIMER_W:0] TIMER_ONE = sv2v_cast_B8BED_signed(1);
+			wire aw_fire = awvalid & awready;
+			wire w_burst_fire = (wvalid & wready) & wlast;
+			wire b_fire = bvalid & bready;
+			reg signed [7:0] aw_w_delta;
+			wire aw_ahead = aw_w_delta > 8'sd0;
+			wire w_ahead = aw_w_delta < 8'sd0;
+			wire wr_tx_completed = ((aw_fire & w_burst_fire) | (aw_fire & w_ahead)) | (w_burst_fire & aw_ahead);
+			reg [7:0] b_owed;
+			reg [7:0] r_owed;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					aw_w_delta <= 8'sd0;
+					b_owed <= 8'd0;
+					r_owed <= 8'd0;
+				end
+				else begin
+					aw_w_delta <= (aw_w_delta + (aw_fire ? 8'sd1 : 8'sd0)) - (w_burst_fire ? 8'sd1 : 8'sd0);
+					case ({wr_tx_completed, b_fire})
+						2'b10: b_owed <= b_owed + 8'd1;
+						2'b01:
+							if (b_owed > 8'd0)
+								b_owed <= b_owed - 8'd1;
+						default:
+							;
+					endcase
+					case ({arvalid & arready, (rvalid & rready) & rlast})
+						2'b10: r_owed <= r_owed + 8'd1;
+						2'b01:
+							if (r_owed > 8'd0)
+								r_owed <= r_owed - 8'd1;
+						default:
+							;
+					endcase
+				end
+			wire w_stall = ((awvalid & ~awready) | (wvalid & ~wready)) | ((b_owed > 8'd0) & ~bvalid);
+			wire r_stall = (arvalid & ~arready) | ((r_owed > 8'd0) & ~rvalid);
+			reg [TIMER_W:0] w_timer;
+			reg [TIMER_W:0] r_timer;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					w_timer <= 1'sb0;
+					r_timer <= 1'sb0;
+				end
+				else begin
+					w_timer <= (w_stall ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+					r_timer <= (r_stall ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+				end
+			assign fault_timeout_w_o = w_timer >= LIMIT_VAL;
+			assign fault_timeout_r_o = r_timer >= LIMIT_VAL;
 		end
-		else begin
-			case ({awvalid & awready, bvalid & bready})
-				2'b10: b_owed <= b_owed + 8'd1;
-				2'b01:
-					if (b_owed > 8'd0)
-						b_owed <= b_owed - 8'd1;
-				default:
-					;
-			endcase
-			case ({arvalid & arready, (rvalid & rready) & rlast})
-				2'b10: r_owed <= r_owed + 8'd1;
-				2'b01:
-					if (r_owed > 8'd0)
-						r_owed <= r_owed - 8'd1;
-				default:
-					;
-			endcase
+		else begin : gen_no_timeout
+			assign fault_timeout_w_o = 1'b0;
+			assign fault_timeout_r_o = 1'b0;
 		end
-	wire w_stall = ((awvalid & ~awready) | (wvalid & ~wready)) | ((b_owed > 8'd0) & ~bvalid);
-	wire r_stall = (arvalid & ~arready) | ((r_owed > 8'd0) & ~rvalid);
-	reg [TIMER_W:0] w_timer;
-	reg [TIMER_W:0] r_timer;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i) begin
-			w_timer <= 1'sb0;
-			r_timer <= 1'sb0;
+		if (ENABLE_DROPPED_VALID || ENABLE_PAYLOAD_STABILITY) begin : gen_handshake_track
+			reg bvalid_q;
+			reg rvalid_q;
+			reg bready_q;
+			reg rready_q;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i) begin
+					bvalid_q <= 1'b0;
+					rvalid_q <= 1'b0;
+					bready_q <= 1'b0;
+					rready_q <= 1'b0;
+				end
+				else begin
+					bvalid_q <= bvalid;
+					rvalid_q <= rvalid;
+					bready_q <= bready;
+					rready_q <= rready;
+				end
+			if (ENABLE_DROPPED_VALID) begin : gen_dropped_valid
+				assign fault_dropped_valid_w_o = (bvalid_q & ~bready_q) & ~bvalid;
+				assign fault_dropped_valid_r_o = (rvalid_q & ~rready_q) & ~rvalid;
+			end
+			else begin : gen_no_dropped_valid
+				assign fault_dropped_valid_w_o = 1'b0;
+				assign fault_dropped_valid_r_o = 1'b0;
+			end
+			if (ENABLE_PAYLOAD_STABILITY) begin : gen_payload_stability
+				localparam B_W = AXI_ID_WIDTH + 2;
+				localparam R_W = AXI_ID_WIDTH + 35;
+				wire [B_W - 1:0] b_payload = {bid, bresp};
+				wire [R_W - 1:0] r_payload = {rid, rdata, rresp, rlast};
+				reg [B_W - 1:0] b_payload_q;
+				reg [R_W - 1:0] r_payload_q;
+				always @(posedge clk_i or negedge rstn_i)
+					if (!rstn_i) begin
+						b_payload_q <= 1'sb0;
+						r_payload_q <= 1'sb0;
+					end
+					else begin
+						b_payload_q <= b_payload;
+						r_payload_q <= r_payload;
+					end
+				assign fault_unstable_w_o = ((bvalid_q & ~bready_q) & bvalid) & (b_payload != b_payload_q);
+				assign fault_unstable_r_o = ((rvalid_q & ~rready_q) & rvalid) & (r_payload != r_payload_q);
+			end
+			else begin : gen_no_payload_stability
+				assign fault_unstable_w_o = 1'b0;
+				assign fault_unstable_r_o = 1'b0;
+			end
 		end
-		else begin
-			w_timer <= (w_stall && ENABLE_TIMEOUT ? (w_timer >= LIMIT_VAL ? w_timer : w_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
-			r_timer <= (r_stall && ENABLE_TIMEOUT ? (r_timer >= LIMIT_VAL ? r_timer : r_timer + TIMER_ONE) : {(TIMER_W >= 0 ? TIMER_W + 1 : 1 - TIMER_W) {1'sb0}});
+		else begin : gen_no_handshake_track
+			assign fault_dropped_valid_w_o = 1'b0;
+			assign fault_dropped_valid_r_o = 1'b0;
+			assign fault_unstable_w_o = 1'b0;
+			assign fault_unstable_r_o = 1'b0;
 		end
-	assign timeout_w_fault_o = w_timer >= LIMIT_VAL;
-	assign timeout_r_fault_o = r_timer >= LIMIT_VAL;
-	localparam B_W = AXI_ID_WIDTH + 2;
-	localparam R_W = AXI_ID_WIDTH + 35;
-	wire [B_W - 1:0] b_payload = {bid, bresp};
-	wire [R_W - 1:0] r_payload = {rid, rdata, rresp, rlast};
-	reg bvalid_q;
-	reg rvalid_q;
-	reg bready_q;
-	reg rready_q;
-	reg [B_W - 1:0] b_payload_q;
-	reg [R_W - 1:0] r_payload_q;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i) begin
-			bvalid_q <= 0;
-			rvalid_q <= 0;
-			bready_q <= 0;
-			rready_q <= 0;
-			b_payload_q <= 0;
-			r_payload_q <= 0;
-		end
-		else begin
-			bvalid_q <= bvalid;
-			rvalid_q <= rvalid;
-			bready_q <= bready;
-			rready_q <= rready;
-			b_payload_q <= b_payload;
-			r_payload_q <= r_payload;
-		end
-	wire b_dropped = (bvalid_q & ~bready_q) & ~bvalid;
-	wire r_dropped = (rvalid_q & ~rready_q) & ~rvalid;
-	wire b_unstable = ((bvalid_q & ~bready_q) & bvalid) & (b_payload != b_payload_q);
-	wire r_unstable = ((rvalid_q & ~rready_q) & rvalid) & (r_payload != r_payload_q);
-	assign protocol_w_fault_o = ENABLE_PROTOCOL_CHECK & (b_dropped | (ENABLE_STRICT_PAYLOAD_CHECK & b_unstable));
-	assign protocol_r_fault_o = ENABLE_PROTOCOL_CHECK & (r_dropped | (ENABLE_STRICT_PAYLOAD_CHECK & r_unstable));
+	endgenerate
 endmodule
