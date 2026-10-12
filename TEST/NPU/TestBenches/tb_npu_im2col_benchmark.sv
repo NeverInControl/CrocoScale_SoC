@@ -121,8 +121,6 @@ module tb_npu_im2col_benchmark;
         .swap_weights       (swap_weights),
         .quant_shift_in     (quant_shift_in),
         .quant_shift_en     (quant_shift_en),
-        .stochastic_round_en(stochastic_round_en),
-        .lfsr_data_out      (lfsr_data_out),
         .psum_skew_en       (psum_skew_en),
         .compute_bank_swap  (compute_bank_swap),
         .psum_A_addr        (psum_A_addr),

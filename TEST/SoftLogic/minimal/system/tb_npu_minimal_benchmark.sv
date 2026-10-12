@@ -467,8 +467,6 @@ module tb_npu_minimal_benchmark;
 
         .quant_shift_in     (npu_quant_shift_in),
         .quant_shift_en     (npu_quant_shift_en),
-        .stochastic_round_en(1'b0),
-        .lfsr_data_out      (),
 
         .psum_A_addr        (npu_psum_A_addr),
         .psum_A_we          (npu_psum_A_we),
