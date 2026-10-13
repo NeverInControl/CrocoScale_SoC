@@ -1,5 +1,21 @@
 `timescale 1ns / 1ps
 
+/* ===============================================================================================
+ * File: RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_master_monitor.sv
+ * Module: axi_watchdog_master_monitor
+ * Project: CrocoScale SoC — Fabric AXI4 Master Protocol & Security Monitor
+ *
+ * Architectural Note on Outstanding Write Tracking & Backpressure:
+ *   - Outstanding write tracking in awlen_fifo strictly serves WLAST protocol
+ *     verification (ENABLE_WLAST_CHECK).
+ *   - In compliance with the AXI4 specification, a master asserting AWVALID when
+ *     downstream buffers are occupied is standard request behavior and is NOT a
+ *     protocol violation. The downstream interconnect / slave is responsible for
+ *     holding AWREADY = 0 (backpressure) until queue slots become available.
+ *   - MAX_OUTSTANDING_WRITES must remain synchronized with the maximum transaction
+ *     acceptance depth of the downstream slave (e.g. crossbar write routing limit).
+ * =============================================================================================== */
+
 module axi_watchdog_master_monitor #(
     parameter bit ENABLE_TIMEOUT           = 1'b1,
     parameter bit ENABLE_DROPPED_VALID     = 1'b1,
@@ -8,7 +24,6 @@ module axi_watchdog_master_monitor #(
     parameter bit ENABLE_SIZE_CHECK        = 1'b1,
     parameter bit ENABLE_BURST_CHECK       = 1'b1,
     parameter bit ENABLE_WLAST_CHECK       = 1'b1,
-    parameter bit ENABLE_FIFO_OVERFLOW     = 1'b1,
     parameter int MAX_OUTSTANDING_WRITES   = 1,
     parameter int WATCHDOG_LIMIT           = 512,
     parameter int AXI_ID_WIDTH             = 8
@@ -43,8 +58,7 @@ module axi_watchdog_master_monitor #(
     output wire fault_illegal_size_r_o,
     output wire fault_illegal_burst_w_o,
     output wire fault_illegal_burst_r_o,
-    output wire fault_wlast_timing_o,
-    output wire fault_fifo_overflow_o
+    output wire fault_wlast_timing_o
 );
 
     // ===================================================================
@@ -221,11 +235,8 @@ module axi_watchdog_master_monitor #(
         end
     endgenerate
 
-    // ===================================================================
-    // Burst Beat Count, WLAST Tracking & Outstanding Write Queue
-    // ===================================================================
     generate
-        if (ENABLE_WLAST_CHECK || ENABLE_FIFO_OVERFLOW) begin : gen_burst_tracking
+        if (ENABLE_WLAST_CHECK) begin : gen_burst_tracking
             localparam int FIFO_DEPTH = (MAX_OUTSTANDING_WRITES < 1) ? 1 : MAX_OUTSTANDING_WRITES;
             localparam int PTR_W      = (FIFO_DEPTH > 1) ? $clog2(FIFO_DEPTH) : 1;
             localparam int CNT_W      = (FIFO_DEPTH > 1) ? ($clog2(FIFO_DEPTH) + 1) : 2;
@@ -237,12 +248,6 @@ module axi_watchdog_master_monitor #(
             wire aw_push = awvalid & awready;
             wire w_pop   = wvalid & wready & wlast;
             wire fifo_full = (awlen_count == CNT_W'(FIFO_DEPTH));
-
-            if (ENABLE_FIFO_OVERFLOW) begin : gen_fifo_overflow
-                assign fault_fifo_overflow_o = awvalid & fifo_full & ~w_pop;
-            end else begin : gen_no_fifo_overflow
-                assign fault_fifo_overflow_o = 1'b0;
-            end
 
             always_ff @(posedge clk_i or negedge rstn_i) begin
                 if (!rstn_i) begin
@@ -280,26 +285,21 @@ module axi_watchdog_master_monitor #(
                 end
             end
 
-            if (ENABLE_WLAST_CHECK) begin : gen_wlast_check
-                reg [7:0] current_w_beat;
-                always_ff @(posedge clk_i or negedge rstn_i) begin
-                    if (!rstn_i) current_w_beat <= 8'd0;
-                    else if (wvalid & wready) begin
-                        if (wlast) current_w_beat <= 8'd0;
-                        else current_w_beat <= current_w_beat + 1'b1;
-                    end
+            reg [7:0] current_w_beat;
+            always_ff @(posedge clk_i or negedge rstn_i) begin
+                if (!rstn_i) current_w_beat <= 8'd0;
+                else if (wvalid & wready) begin
+                    if (wlast) current_w_beat <= 8'd0;
+                    else current_w_beat <= current_w_beat + 1'b1;
                 end
-
-                assign fault_wlast_timing_o = wvalid & (
-                    (awlen_count == '0) |
-                    ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast)
-                );
-            end else begin : gen_no_wlast_check
-                assign fault_wlast_timing_o = 1'b0;
             end
+
+            assign fault_wlast_timing_o = wvalid & (
+                (awlen_count == '0) |
+                ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast)
+            );
         end else begin : gen_no_burst_tracking
-            assign fault_wlast_timing_o  = 1'b0;
-            assign fault_fifo_overflow_o = 1'b0;
+            assign fault_wlast_timing_o = 1'b0;
         end
     endgenerate
 

@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `efpga_subsystem`
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `9b378cd`
+* **Commit**: `e20cd36`
 * **Format**: `v`
 * **RTL Modules**: 168 files
 

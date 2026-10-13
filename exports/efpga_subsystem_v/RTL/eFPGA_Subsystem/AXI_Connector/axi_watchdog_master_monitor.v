@@ -43,8 +43,7 @@ module axi_watchdog_master_monitor (
 	fault_illegal_size_r_o,
 	fault_illegal_burst_w_o,
 	fault_illegal_burst_r_o,
-	fault_wlast_timing_o,
-	fault_fifo_overflow_o
+	fault_wlast_timing_o
 );
 	parameter [0:0] ENABLE_TIMEOUT = 1'b1;
 	parameter [0:0] ENABLE_DROPPED_VALID = 1'b1;
@@ -53,7 +52,6 @@ module axi_watchdog_master_monitor (
 	parameter [0:0] ENABLE_SIZE_CHECK = 1'b1;
 	parameter [0:0] ENABLE_BURST_CHECK = 1'b1;
 	parameter [0:0] ENABLE_WLAST_CHECK = 1'b1;
-	parameter [0:0] ENABLE_FIFO_OVERFLOW = 1'b1;
 	parameter signed [31:0] MAX_OUTSTANDING_WRITES = 1;
 	parameter signed [31:0] WATCHDOG_LIMIT = 512;
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
@@ -102,7 +100,6 @@ module axi_watchdog_master_monitor (
 	output wire fault_illegal_burst_w_o;
 	output wire fault_illegal_burst_r_o;
 	output wire fault_wlast_timing_o;
-	output wire fault_fifo_overflow_o;
 	wire aw_illegal_size;
 	wire ar_illegal_size;
 	generate
@@ -270,7 +267,7 @@ module axi_watchdog_master_monitor (
 			assign fault_unstable_w_o = 1'b0;
 			assign fault_unstable_r_o = 1'b0;
 		end
-		if (ENABLE_WLAST_CHECK || ENABLE_FIFO_OVERFLOW) begin : gen_burst_tracking
+		if (ENABLE_WLAST_CHECK) begin : gen_burst_tracking
 			localparam signed [31:0] FIFO_DEPTH = (MAX_OUTSTANDING_WRITES < 1 ? 1 : MAX_OUTSTANDING_WRITES);
 			localparam signed [31:0] PTR_W = (FIFO_DEPTH > 1 ? $clog2(FIFO_DEPTH) : 1);
 			localparam signed [31:0] CNT_W = (FIFO_DEPTH > 1 ? $clog2(FIFO_DEPTH) + 1 : 2);
@@ -285,12 +282,6 @@ module axi_watchdog_master_monitor (
 				sv2v_cast_7B3D1_signed = inp;
 			endfunction
 			wire fifo_full = awlen_count == sv2v_cast_7B3D1_signed(FIFO_DEPTH);
-			if (ENABLE_FIFO_OVERFLOW) begin : gen_fifo_overflow
-				assign fault_fifo_overflow_o = (awvalid & fifo_full) & ~w_pop;
-			end
-			else begin : gen_no_fifo_overflow
-				assign fault_fifo_overflow_o = 1'b0;
-			end
 			always @(posedge clk_i or negedge rstn_i)
 				if (!rstn_i) begin
 					awlen_wr_ptr <= 1'sb0;
@@ -336,26 +327,20 @@ module axi_watchdog_master_monitor (
 						default:
 							;
 					endcase
-			if (ENABLE_WLAST_CHECK) begin : gen_wlast_check
-				reg [7:0] current_w_beat;
-				always @(posedge clk_i or negedge rstn_i)
-					if (!rstn_i)
+			reg [7:0] current_w_beat;
+			always @(posedge clk_i or negedge rstn_i)
+				if (!rstn_i)
+					current_w_beat <= 8'd0;
+				else if (wvalid & wready) begin
+					if (wlast)
 						current_w_beat <= 8'd0;
-					else if (wvalid & wready) begin
-						if (wlast)
-							current_w_beat <= 8'd0;
-						else
-							current_w_beat <= current_w_beat + 1'b1;
-					end
-				assign fault_wlast_timing_o = wvalid & ((awlen_count == {CNT_W {1'sb0}}) | ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast));
-			end
-			else begin : gen_no_wlast_check
-				assign fault_wlast_timing_o = 1'b0;
-			end
+					else
+						current_w_beat <= current_w_beat + 1'b1;
+				end
+			assign fault_wlast_timing_o = wvalid & ((awlen_count == {CNT_W {1'sb0}}) | ((current_w_beat == awlen_fifo[awlen_rd_ptr]) != wlast));
 		end
 		else begin : gen_no_burst_tracking
 			assign fault_wlast_timing_o = 1'b0;
-			assign fault_fifo_overflow_o = 1'b0;
 		end
 	endgenerate
 endmodule

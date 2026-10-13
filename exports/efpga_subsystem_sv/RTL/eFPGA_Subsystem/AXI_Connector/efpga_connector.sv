@@ -466,7 +466,6 @@ module efpga_connector #(
                 wire dm_fault_size_w, dm_fault_size_r;
                 wire dm_fault_burst_w, dm_fault_burst_r;
                 wire dm_fault_wlast;
-                wire dm_fault_fifo_ovf;
 
                 axi_watchdog_master_monitor #(
                     .ENABLE_TIMEOUT          (1'b1),
@@ -476,7 +475,6 @@ module efpga_connector #(
                     .ENABLE_SIZE_CHECK       (1'b1),
                     .ENABLE_BURST_CHECK      (1'b1),
                     .ENABLE_WLAST_CHECK      (1'b1),
-                    .ENABLE_FIFO_OVERFLOW    (1'b1),
                     .MAX_OUTSTANDING_WRITES  (1),
                     .WATCHDOG_LIMIT          (512),
                     .AXI_ID_WIDTH            (AXI_ID_WIDTH)
@@ -499,13 +497,12 @@ module efpga_connector #(
                     .fault_illegal_size_r_o  (dm_fault_size_r),
                     .fault_illegal_burst_w_o (dm_fault_burst_w),
                     .fault_illegal_burst_r_o (dm_fault_burst_r),
-                    .fault_wlast_timing_o    (dm_fault_wlast),
-                    .fault_fifo_overflow_o   (dm_fault_fifo_ovf)
+                    .fault_wlast_timing_o    (dm_fault_wlast)
                 );
                 assign wdog_dm_to_w[i] = dm_fault_to_w;
                 assign wdog_dm_to_r[i] = dm_fault_to_r;
                 assign wdog_dm_pr_w[i] = dm_fault_drop_w | dm_fault_unst_w | dm_fault_4k_w | 
-                                         dm_fault_size_w | dm_fault_burst_w | dm_fault_wlast | dm_fault_fifo_ovf;
+                                         dm_fault_size_w | dm_fault_burst_w | dm_fault_wlast;
                 assign wdog_dm_pr_r[i] = dm_fault_drop_r | dm_fault_unst_r | dm_fault_4k_r | 
                                          dm_fault_size_r | dm_fault_burst_r;
             end else begin : gen_no_wdog_dm
