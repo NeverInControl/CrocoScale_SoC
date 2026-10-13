@@ -1,3 +1,4 @@
 [submodule "FABulousProject/CrocoScale_Fabric"]
 	path = FABulousProject/CrocoScale_Fabric
 	url = https://github.com/NeverInControl/CrocoScale_Fabric
+	branch = OWAS130
