@@ -6,8 +6,8 @@ module pe #(
     parameter int PSUM_WIDTH       = 32
 )(
     input  wire                                clk_i,
+    input  wire                                clk_compute,
     input  wire                                rst_n,
-    input  wire                                array_en,
     
     // Explicitly Signed Compute Data Stream
     input  wire signed [ACTIVATION_WIDTH-1:0]  act_in,
@@ -38,17 +38,18 @@ module pe #(
     always_ff @(posedge clk_i or negedge rst_n) begin
         if (!rst_n) begin
             active_weight <= '0;
-            act_out       <= '0;
-            psum_out      <= '0;
+        end else if (swap_weights) begin
+            active_weight <= shadow_weight;
+        end
+    end
+
+    always_ff @(posedge clk_compute or negedge rst_n) begin
+        if (!rst_n) begin
+            act_out  <= '0;
+            psum_out <= '0;
         end else begin
-            if (swap_weights) begin
-                active_weight <= shadow_weight;
-            end
-            
-            if (array_en) begin
-                act_out  <= act_in;
-                psum_out <= psum_in + (act_in * active_weight);
-            end
+            act_out  <= act_in;
+            psum_out <= psum_in + (act_in * active_weight);
         end
     end
 
