@@ -252,7 +252,19 @@ module fabulous_top_wrapper;
     );
 
     (* keep, BEL = "X0Y10.A" *)
-    AXI_M_BEL croco_X0Y10_A (
+    // These static AXI sidebands are supplied by the peripheral BEL.
+    // Burst lengths and WLAST remain connected to the controller.
+    AXI_M_BEL #(
+        .TIE_OFF_AWSIZE(1'b1),
+        .TIE_OFF_AWBURST(1'b1),
+        .TIE_OFF_AWLOCK(1'b1),
+        .TIE_OFF_AWCACHE(1'b1),
+        .TIE_OFF_WSTRB(1'b1),
+        .TIE_OFF_ARSIZE(1'b1),
+        .TIE_OFF_ARBURST(1'b1),
+        .TIE_OFF_ARLOCK(1'b1),
+        .TIE_OFF_ARCACHE(1'b1)
+    ) croco_X0Y10_A (
         .FAB_AWADDR0(m_axi_awaddr[0]),
         .FAB_AWADDR1(m_axi_awaddr[1]),
         .FAB_AWADDR2(m_axi_awaddr[2]),
@@ -419,6 +431,7 @@ module fabulous_top_wrapper;
     NPU_CTRL_CFG_BEL croco_X4Y0_A (
         .FAB_ARRAY_EN(npu_array_en),
         .FAB_PSUM_SYSTOLIC_EN(npu_psum_systolic_en),
+        .FAB_PSUM_SKEW_EN(npu_psum_systolic_en),
         .FAB_PSUM_LUT_EN(npu_psum_lut_en),
         .FAB_COMPUTE_BANK_SWAP(npu_compute_bank_swap),
         .FAB_SWAP_WEIGHTS(npu_swap_weights),
