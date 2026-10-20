@@ -8,17 +8,32 @@ All project automation, code generation, verification, and IP export scripts are
 
 CrocoScale SoC serves not only as a tapeout-ready Edge AI SoC, but fundamentally as a **test vehicle and modular IP library consortium**. Core subsystems (such as the eFPGA Subsystem, NPU Complex, and Soft-Logic Sequencers) are designed for frequent extraction and integration into external partner projects, research chips, or third-party SoCs.
 
-### The 2-Step Export Sequence (Best Practice)
+### One-Command Full Export (`./scripts/export_all.sh`)
 
-Exporting pure, formally verified IEEE 1364-2001 Verilog requires running the Verilog mirror generator first, followed by the subsystem exporter:
+To regenerate the Verilog-2001 mirror and package both downstream export targets in one step:
+
+```bash
+source ~/custom_functions/custom_functions.sh && pyenv Yosys
+./scripts/export_all.sh
+```
+
+This runs:
+1. `./scripts/generate_verilog_mirror.sh` (transpilation + formal SAT equivalence proofs).
+2. `exports/efpga_subsystem_v/` (Icarus Simulation Verilog: `--format v --include-tb --include-hal`).
+3. `exports/efpga_subsystem_sv/` (Macro-Backend SystemVerilog: `--format sv --include-tb --include-lib --include-macros`).
+
+### Manual 2-Step Export Sequence
+
+Exporting pure, formally verified IEEE 1364-2001 Verilog manually:
 
 ```bash
 # Step 1: Transpile SystemVerilog to Verilog-2001 and run formal SAT proofs
 source ~/custom_functions/custom_functions.sh && pyenv Yosys
 ./scripts/generate_verilog_mirror.sh
 
-# Step 2: Package standalone subsystem into exports/<target>/
-python3 scripts/export_subsystem.py --target efpga_subsystem
+# Step 2: Package standalone subsystem into exports/<target>_<format>/
+python3 scripts/export_subsystem.py --target efpga_subsystem --format v --include-tb --include-hal
+python3 scripts/export_subsystem.py --target efpga_subsystem --format sv --include-tb --include-lib --include-macros
 ```
 
 > **Why Step 1 is required before Step 2:**

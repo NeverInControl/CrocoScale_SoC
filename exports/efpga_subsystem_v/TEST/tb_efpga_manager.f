@@ -1,5 +1,5 @@
 # Standalone Testbench Filelist for tb_efpga_manager
-# Paths relative to package root (nested flist relative to TEST/)
+# Run from package root (e.g. iverilog -g2012 -f TEST/tb_efpga_manager.f)
 -f ../efpga_subsystem_global.f
 
-TEST/tb_efpga_manager.sv
+TEST/tb_efpga_manager.v

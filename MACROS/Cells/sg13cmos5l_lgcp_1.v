@@ -6,6 +6,7 @@
  * Cell: sg13cmos5l_lgcp_1
  * =============================================================================================== */
 
+(* blackbox *)
 module sg13cmos5l_lgcp_1 (
     input  wire CLK,
     input  wire GATE,

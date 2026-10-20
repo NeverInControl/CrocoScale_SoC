@@ -13,3 +13,4 @@ RTL/eFPGA_Subsystem/AXI_Connector/efpga_manager.sv
 
 # Top Wrapper
 RTL/eFPGA_Subsystem/eFPGA_Subsystem_TOP/efpga_subsystem_top.sv
+

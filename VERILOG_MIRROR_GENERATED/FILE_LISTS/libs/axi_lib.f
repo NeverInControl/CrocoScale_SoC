@@ -52,3 +52,4 @@ RTL/AXI_LIB/axi_vfifo_raw.v
 RTL/AXI_LIB/axi_vfifo_raw_rd.v
 RTL/AXI_LIB/axi_vfifo_raw_wr.v
 RTL/AXI_LIB/priority_encoder.v
+

@@ -6,6 +6,7 @@
  * =============================================================================================== */
 
 /* 512x8 SRAM Macro (Activation Memory) */
+(* blackbox *)
 module RM_IHPSG13_1P_512x8_c3_bm_bist (
     input  wire        A_CLK,
     input  wire        A_MEN,
@@ -41,6 +42,7 @@ module RM_IHPSG13_1P_512x8_c3_bm_bist (
 endmodule
 
 /* 256x32 SRAM Macro (Partial Sum Memory) */
+(* blackbox *)
 module RM_IHPSG13_1P_256x32_c2_bm_bist (
     input  wire        A_CLK,
     input  wire        A_MEN,

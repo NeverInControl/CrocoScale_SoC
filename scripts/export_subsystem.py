@@ -100,35 +100,75 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fm
     raise FileNotFoundError(f"No filelist found for target '{target}' in FILE_LISTS/. Tried: {[str(c) for c in candidates]}")
 
 
+def collect_included_flists(flist_path: Path, repo_root: Path, visited: set = None) -> set:
+    """Recursively collects normalized filelist names (e.g. 'npu_asic.f' -> 'npu.f') included by flist_path."""
+    if visited is None:
+        visited = set()
+    real_path = flist_path.resolve()
+    if real_path in visited or not flist_path.exists():
+        return set()
+    visited.add(real_path)
+
+    stem = flist_path.stem
+    for sfx in ("_asic", "_vivado"):
+        if stem.endswith(sfx):
+            stem = stem[:-len(sfx)]
+    names = {flist_path.name, f"{stem}.f"}
+
+    with open(flist_path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            clean = line.strip().rstrip("\r\n")
+            if not clean or clean.startswith(("#", "//")):
+                continue
+            parts = clean.split()
+            if parts[0] in ("-f", "-c") and len(parts) >= 2:
+                sub_name = parts[1]
+                sub_path = (flist_path.parent / sub_name).resolve()
+                if not sub_path.exists():
+                    sub_path = (repo_root / "FILE_LISTS" / sub_name).resolve()
+                if not sub_path.exists():
+                    sub_path = (repo_root / sub_name).resolve()
+                names |= collect_included_flists(sub_path, repo_root, visited)
+    return names
+
+
 def discover_associated_testbenches(target_name: str, target_flist: Path, repo_root: Path, raw_rtl_files: list) -> list:
     """
-    Dynamically discovers testbench filelists in FILE_LISTS/tb/ that reference
-    this target filelist (-f ../<target>.f) or reference any of its RTL files.
+    Dynamically discovers testbench filelists in FILE_LISTS/tb/ whose dependencies
+    are satisfied by the target filelist tree and its RTL files.
     """
     tb_dir = repo_root / "FILE_LISTS" / "tb"
     if not tb_dir.exists():
         return []
 
-    target_flist_name = target_flist.name
+    included_flists = collect_included_flists(target_flist, repo_root)
     rtl_basenames = {Path(f).name for f in raw_rtl_files}
     matched_tb_flists = []
 
-    for tb_flist in tb_dir.glob("*.f"):
+    for tb_flist in sorted(tb_dir.glob("*.f")):
         with open(tb_flist, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
+            lines = [ln.strip().rstrip("\r\n") for ln in f if ln.strip() and not ln.strip().startswith(("#", "//"))]
 
-        # Check if the TB filelist includes our target via -f
-        if f"-f ../{target_flist_name}" in content or f"-f {target_flist_name}" in content:
-            matched_tb_flists.append(tb_flist)
+        sub_flists = []
+        rtl_refs = []
+        tb_refs = []
+        for ln in lines:
+            parts = ln.split()
+            if parts[0] in ("-f", "-c") and len(parts) >= 2:
+                sub_flists.append(Path(parts[1]).name)
+            elif Path(ln).name.startswith("tb_"):
+                tb_refs.append(ln)
+            else:
+                rtl_refs.append(Path(ln).name)
+
+        if not tb_refs:
             continue
 
-        # Check if the TB filelist directly references primary RTL files of this target
-        for line in content.splitlines():
-            line_clean = line.strip()
-            if line_clean and not line_clean.startswith(("#", "-f", "-c")):
-                if Path(line_clean).name in rtl_basenames:
-                    matched_tb_flists.append(tb_flist)
-                    break
+        # Check if all -f dependencies and direct RTL references are covered by our target
+        flists_covered = all(sf in included_flists for sf in sub_flists)
+        rtl_covered = all(rf in rtl_basenames for rf in rtl_refs)
+        if flists_covered and rtl_covered and (sub_flists or rtl_refs):
+            matched_tb_flists.append(tb_flist)
 
     return matched_tb_flists
 
@@ -204,20 +244,20 @@ def resolve_source_file(rel_path: str, fmt: str, repo_root: Path) -> Path:
         rel_v = rel_path[:-3] + ".v" if rel_path.endswith(".sv") else rel_path
         cand = mirror_root / rel_v
         try:
-            if cand.exists():
+            if cand.exists() and cand.stat().st_size > 0:
                 return cand
         except OSError:
             pass
         cand_direct = mirror_root / rel_path
         try:
-            if cand_direct.exists():
+            if cand_direct.exists() and cand_direct.stat().st_size > 0:
                 return cand_direct
         except OSError:
             pass
-        # Fallback to repo root if mirror file does not exist or cannot be accessed
+        # Fallback to repo root if mirror file does not exist or is empty
         cand_src = repo_root / rel_v
         try:
-            if cand_src.exists():
+            if cand_src.exists() and cand_src.stat().st_size > 0:
                 return cand_src
         except OSError:
             pass
@@ -301,6 +341,8 @@ def export_subsystem(
     fmt: str = "v",
     include_tb: bool = False,
     include_hal: bool = False,
+    include_lib: bool = False,
+    include_macros: bool = False,
     clean: bool = True,
     repo_root: Path = REPO_ROOT,
 ):
@@ -318,7 +360,6 @@ def export_subsystem(
 
     # Discover associated testbenches, verification vectors, and HAL drivers
     associated_tb_flists = discover_associated_testbenches(target, flist_path, repo_root, raw_files)
-    associated_test_dirs = discover_test_directories(target, repo_root)
     associated_hal_files = discover_associated_hal(target, repo_root, raw_files)
 
     print(f"[INFO] Auto-detected {len(associated_tb_flists)} testbench filelists.")
@@ -344,8 +385,35 @@ def export_subsystem(
     rtl_out_dir = output_dir / "RTL"
     rtl_out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Optionally bundle external AXI library (RTL/AXI_LIB) for backend macro synthesis
+    copied_lib_entries = []
+    if include_lib:
+        axi_lib_src = repo_root / "RTL" / "AXI_LIB"
+        axi_lib_dst = rtl_out_dir / "AXI_LIB"
+        if axi_lib_src.exists():
+            axi_lib_dst.mkdir(parents=True, exist_ok=True)
+            for v_file in sorted(axi_lib_src.glob("*.v")):
+                shutil.copy2(v_file, axi_lib_dst / v_file.name)
+            # Determine which AXI_LIB modules are needed in the flat synthesis filelist
+            if target == "soc":
+                for v_file in sorted(axi_lib_src.glob("*.v")):
+                    copied_lib_entries.append((axi_lib_dst / v_file.name).relative_to(output_dir).as_posix())
+            else:
+                req_axi_mods = [
+                    "axil_register_wr.v",
+                    "axil_register_rd.v",
+                    "axil_register.v",
+                    "axi_register_wr.v",
+                    "axi_register_rd.v",
+                    "axi_register.v",
+                ]
+                for mod_name in req_axi_mods:
+                    if (axi_lib_dst / mod_name).exists():
+                        copied_lib_entries.append((axi_lib_dst / mod_name).relative_to(output_dir).as_posix())
+            print(f"[INFO] Bundled RTL/AXI_LIB ({len(list(axi_lib_dst.glob('*.v')))} files; {len(copied_lib_entries)} in global filelist).")
+
     # Copy RTL source modules preserving directory hierarchy
-    copied_rtl_entries = []
+    copied_rtl_entries = list(copied_lib_entries)
     formats_to_export = ["sv", "v"] if fmt == "both" else [fmt]
 
     for f_fmt in formats_to_export:
@@ -386,6 +454,28 @@ def export_subsystem(
                             dst_phys = dst_file.parent / phys_f.name
                             if not dst_phys.exists():
                                 shutil.copy2(phys_f, dst_phys)
+
+        # Optionally copy the complete MACROS/ directory tree (blackboxes, cell/SRAM behavioral models, collaterals)
+        if include_macros:
+            macros_src_root = repo_root / "MACROS"
+            macros_dst_root = output_dir / "MACROS" if fmt != "both" else output_dir / "MACROS" / f_fmt
+            if macros_src_root.exists():
+                macro_file_count = 0
+                for mf_src in sorted(macros_src_root.rglob("*")):
+                    if mf_src.is_file():
+                        rel_m = mf_src.relative_to(macros_src_root)
+                        if f_fmt == "v" and mf_src.suffix == ".sv":
+                            resolved_m = resolve_source_file(f"MACROS/{rel_m.as_posix()}", "v", repo_root)
+                            dst_m = macros_dst_root / rel_m.with_suffix(resolved_m.suffix)
+                            dst_m.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(resolved_m, dst_m)
+                        else:
+                            dst_m = macros_dst_root / rel_m
+                            dst_m.parent.mkdir(parents=True, exist_ok=True)
+                            if not dst_m.exists():
+                                shutil.copy2(mf_src, dst_m)
+                        macro_file_count += 1
+                print(f"[INFO] Bundled complete MACROS/ directory ({macro_file_count} files).")
 
         # For full SoC SystemVerilog export, copy the NeoRV32 VHDL CPU complex 1-to-1
         copied_vhdl_entries = []
@@ -430,11 +520,12 @@ def export_subsystem(
     global_flist_path = output_dir / global_flist_name
     print(f"[INFO] Writing standalone flat filelist: {global_flist_path}")
 
+    lib_note = "Includes AXI_LIB" if include_lib else "External AXI_LIB decoupled"
     with open(global_flist_path, "w", encoding="utf-8", newline="\n") as gf:
         gf.write("# =============================================================================\n")
         gf.write(f"# CrocoScale SoC — Standalone IP Export: {target}\n")
         gf.write(f"# Auto-generated by scripts/export_subsystem.py\n")
-        gf.write(f"# Format: {fmt} | Zero external library dependencies\n")
+        gf.write(f"# Format: {fmt} | {lib_note}\n")
         gf.write("# =============================================================================\n\n")
         for f in copied_rtl_entries:
             gf.write(f"{f}\n")
@@ -445,33 +536,44 @@ def export_subsystem(
     if include_tb:
         test_out_dir = output_dir / "TEST"
         test_out_dir.mkdir(parents=True, exist_ok=True)
-        mem_out_dir = test_out_dir / "mem"
-        mem_out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy .mem vectors from detected test dirs
-        for td in associated_test_dirs:
-            for mem_file in td.rglob("*.mem"):
-                shutil.copy2(mem_file, mem_out_dir / mem_file.name)
-                copied_mem_count += 1
-            for tb_file in td.rglob("tb_*.sv"):
-                dst_tb = test_out_dir / tb_file.name
-                shutil.copy2(tb_file, dst_tb)
-                copied_tb_count += 1
+        # Copy testbenches referenced by associated_tb_flists and rebase their .f filelists
+        needs_golden_mem = False
+        copied_tb_names = set()
+        tb_fmt = "v" if fmt == "v" else "sv"
 
-        # Rebase and copy detected testbench filelists
         for tb_flist_path in associated_tb_flists:
             dst_tb_flist = test_out_dir / tb_flist_path.name
             with open(tb_flist_path, "r", encoding="utf-8") as sf, open(dst_tb_flist, "w", encoding="utf-8", newline="\n") as df:
                 df.write(f"# Standalone Testbench Filelist for {tb_flist_path.stem}\n")
-                df.write(f"# Paths relative to package root (nested flist relative to TEST/)\n")
+                df.write(f"# Run from package root (e.g. iverilog -g2012 -f TEST/{tb_flist_path.name})\n")
                 df.write(f"-f ../{global_flist_name}\n\n")
                 for line in sf:
                     clean = line.strip().rstrip("\r\n")
                     if clean.startswith(("-f", "-c", "#")) or not clean:
                         continue
-                    name = Path(clean).name
-                    if name.startswith("tb_"):
-                        df.write(f"TEST/{name}\n")
+                    norm_line = clean.replace("\\", "/").strip("/")
+                    if Path(norm_line).name.startswith("tb_"):
+                        if "NPU" in norm_line or "SoftLogic" in norm_line:
+                            needs_golden_mem = True
+                        src_tb = resolve_source_file(norm_line, tb_fmt, repo_root)
+                        if src_tb.exists():
+                            dst_tb = test_out_dir / src_tb.name
+                            if dst_tb.name not in copied_tb_names:
+                                shutil.copy2(src_tb, dst_tb)
+                                copied_tb_names.add(dst_tb.name)
+                                copied_tb_count += 1
+                            df.write(f"TEST/{dst_tb.name}\n")
+
+        # Copy GoldenReference .mem vectors if NPU/SoftLogic testbenches are included
+        if needs_golden_mem:
+            gold_src_dir = repo_root / "TEST" / "GoldenReference"
+            gold_out_dir = test_out_dir / "GoldenReference"
+            if gold_src_dir.exists():
+                gold_out_dir.mkdir(parents=True, exist_ok=True)
+                for mem_file in sorted(gold_src_dir.glob("*.mem")):
+                    shutil.copy2(mem_file, gold_out_dir / mem_file.name)
+                    copied_mem_count += 1
 
         print(f"[INFO] Bundled TEST/: {copied_tb_count} testbenches and {copied_mem_count} .mem vectors.")
 
@@ -496,18 +598,24 @@ def export_subsystem(
         mf.write(f"* **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)\n")
         mf.write(f"* **Commit**: `{git_sha}`\n")
         mf.write(f"* **Format**: `{fmt}`\n")
-        mf.write(f"* **RTL Modules**: {len(raw_files)} files\n\n")
+        mf.write(f"* **RTL Modules**: {len(copied_rtl_entries)} files in `{global_flist_name}`\n\n")
         mf.write("## Package Layout\n\n")
         mf.write(f"* `{global_flist_name}`: Flat, standalone filelist (all paths relative to package root).\n")
-        mf.write(f"* `RTL/`: Synthesizable module sources.\n")
+        mf.write(f"* `RTL/`: Synthesizable module sources{' (including `RTL/AXI_LIB/`)' if include_lib else ''}.\n")
+        if include_macros or any(e.startswith("MACROS/") for e in copied_rtl_entries):
+            mf.write(f"* `MACROS/`: Foundry hard macro wrappers, blackbox models, and cell collaterals.\n")
         if include_tb:
-            mf.write(f"* `TEST/`: Verification testbenches ({copied_tb_count} files) and vectors ({copied_mem_count} `.mem` files).\n")
+            mf.write(f"* `TEST/`: Verification testbenches ({copied_tb_count} files) and golden vectors ({copied_mem_count} `.mem` files).\n")
         if include_hal and copied_hal_count > 0:
             mf.write(f"* `HAL/`: C hardware abstraction layer drivers ({copied_hal_count} files).\n")
         mf.write("\n## Simulation / Synthesis Quickstart\n\n")
         mf.write("```bash\n")
-        mf.write("# Pass external AXI library via -y <path/to/axi_lib>:\n")
-        mf.write(f"iverilog -g2012 -y <path/to/axi_lib> -f {global_flist_name} -o sim.vvp\n")
+        if include_lib:
+            mf.write("# Standalone compilation (AXI_LIB included in package):\n")
+            mf.write(f"iverilog -g2012 -f {global_flist_name} -o sim.vvp\n")
+        else:
+            mf.write("# Pass external AXI library via -y <path/to/axi_lib>:\n")
+            mf.write(f"iverilog -g2012 -y <path/to/axi_lib> -f {global_flist_name} -o sim.vvp\n")
         mf.write("```\n")
 
     print(f"[INFO] Generated manifest: {manifest_path}")
@@ -558,6 +666,18 @@ def main():
         help="Include HAL/ directory with C driver files (default: False).",
     )
     parser.add_argument(
+        "--include-lib",
+        action="store_true",
+        default=False,
+        help="Include RTL/AXI_LIB directory and register slice modules for standalone macro synthesis (default: False).",
+    )
+    parser.add_argument(
+        "--include-macros",
+        action="store_true",
+        default=False,
+        help="Include complete MACROS/ directory with all hard macro blackboxes and models (default: False).",
+    )
+    parser.add_argument(
         "--config",
         type=Path,
         default=None,
@@ -586,6 +706,8 @@ def main():
         fmt=args.format,
         include_tb=args.include_tb,
         include_hal=args.include_hal,
+        include_lib=args.include_lib,
+        include_macros=args.include_macros,
         clean=not args.no_clean,
     )
 

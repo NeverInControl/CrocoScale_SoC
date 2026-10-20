@@ -147,7 +147,7 @@ module eFPGA_top #(
     assign AXI_M_SOC_WVALID      = 1'b0;
 
     assign DEBUG_IN              = 32'h0;
-    assign FAB_USER_CLK          = 8'h0;
+    assign FAB_USER_CLK          = {8{CLK}};
     assign USR_IRQ               = 4'h0;
 
     assign NPU_ACT_ADDR          = 72'h0;
