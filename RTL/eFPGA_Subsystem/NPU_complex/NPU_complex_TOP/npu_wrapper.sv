@@ -10,11 +10,7 @@ module npu_wrapper #(
     parameter int PSUM_WIDTH       = 32,
     parameter int SCALE_WIDTH      = 16,
     parameter int WEIGHT_SPLIT     = 8,
-`ifdef VIVADO
-    parameter int USE_LADDER_CLOCKS = 0,
-`else
     parameter int USE_LADDER_CLOCKS = 1,
-`endif
 
     localparam int PSUM_WORDS       = TILE_SIZE * TILE_SIZE,
     localparam int ACT_WORDS        = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD,
@@ -88,13 +84,16 @@ module npu_wrapper #(
     wire                                                  act_forwarded_core_clk;
     wire                                                  npu_clk_core;
 
-`ifdef VIVADO
-    assign effective_act_clk = {NUM_ACT_BANKS{clk_i}};
-    assign npu_clk_core      = clk_i;
-`else
-    assign effective_act_clk = (USE_LADDER_CLOCKS != 0) ? act_clk_i : {NUM_ACT_BANKS{clk_i}};
-    assign npu_clk_core      = (USE_LADDER_CLOCKS != 0) ? act_forwarded_core_clk : clk_i;
-`endif
+    npu_clk_ctrl #(
+        .NUM_ACT_BANKS    (NUM_ACT_BANKS),
+        .USE_LADDER_CLOCKS(USE_LADDER_CLOCKS)
+    ) npu_clk_ctrl_inst (
+        .clk_i                 (clk_i),
+        .act_clk_i             (act_clk_i),
+        .act_forwarded_core_clk(act_forwarded_core_clk),
+        .effective_act_clk     (effective_act_clk),
+        .npu_clk_core          (npu_clk_core)
+    );
 
     act_buffer_top #(
         .NUM_ACT_BANKS   (NUM_ACT_BANKS),

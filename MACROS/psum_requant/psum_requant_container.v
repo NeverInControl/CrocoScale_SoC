@@ -5,6 +5,7 @@
  * Drop-in replacement for RTL psum_requant_container.sv
  * =============================================================================================== */
 
+(* blackbox *)
 module psum_requant_container #(
     parameter integer PSUM_WIDTH       = 32,
     parameter integer PSUM_WORDS       = 256,

@@ -5,6 +5,7 @@
  * Drop-in replacement for RTL act_bank_container.sv
  * =============================================================================================== */
 
+(* blackbox *)
 module act_bank_container #(
     parameter integer ACTIVATION_WIDTH = 8,
     parameter integer ACT_WORDS        = 512,

@@ -4,8 +4,8 @@ module crocoscale_soc (
 	gpio_o,
 	uart0_txd_o,
 	uart0_rxd_i,
-	efpga_cfg_sclk_i,
-	efpga_cfg_sdata_i
+	ja,
+	jb
 );
 	parameter signed [31:0] NUM_SLOTS = 1;
 	parameter signed [31:0] MEM_SIZE = 131072;
@@ -16,26 +16,20 @@ module crocoscale_soc (
 	output wire [7:0] gpio_o;
 	output wire uart0_txd_o;
 	input wire uart0_rxd_i;
-	input reg efpga_cfg_sclk_i;
-	input reg efpga_cfg_sdata_i;
+	inout wire [7:0] ja;
+	inout wire [7:0] jb;
 	wire [7:0] con_gpio_out;
 	assign gpio_o = con_gpio_out;
-	wire clk_10mhz = clk_i;
-	reg rst_sync_0;
-	reg rst_sync_1;
-	always @(posedge clk_10mhz or negedge rstn_i)
-		if (!rstn_i) begin
-			rst_sync_0 <= 1'b0;
-			rst_sync_1 <= 1'b0;
-		end
-		else begin
-			rst_sync_0 <= 1'b1;
-			rst_sync_1 <= rst_sync_0;
-		end
+	wire clk_10mhz;
 	wire sys_rstn;
 	wire sys_rst;
-	assign sys_rstn = rst_sync_1;
-	assign sys_rst = ~sys_rstn;
+	soc_clk_rst_gen u_soc_clk_rst_gen(
+		.clk_i(clk_i),
+		.rstn_i(rstn_i),
+		.sys_clk_o(clk_10mhz),
+		.sys_rstn_o(sys_rstn),
+		.sys_rst_o(sys_rst)
+	);
 	localparam signed [31:0] S_COUNT = 1 + NUM_SLOTS;
 	localparam signed [31:0] M_COUNT = 2 + NUM_SLOTS;
 	localparam signed [31:0] M_ID_WIDTH = AXI_ID_WIDTH + $clog2(S_COUNT);
@@ -514,11 +508,18 @@ module crocoscale_soc (
 	wire [7:0] pmod_io_i;
 	wire [7:0] pmod_io_o;
 	wire [7:0] pmod_io_oe_o;
-	assign pmod_io_i = 8'd0;
+	genvar _gv_i_2;
+	generate
+		for (_gv_i_2 = 0; _gv_i_2 < 8; _gv_i_2 = _gv_i_2 + 1) begin : gen_pmod_ja
+			localparam i = _gv_i_2;
+			assign ja[i] = (pmod_io_oe_o[i] ? pmod_io_o[i] : 1'bz);
+			assign pmod_io_i[i] = ja[i];
+		end
+	endgenerate
 	wire efpga_cfg_sclk;
 	wire efpga_cfg_sdata;
-	assign efpga_cfg_sclk = efpga_cfg_sclk_i;
-	assign efpga_cfg_sdata = efpga_cfg_sdata_i;
+	assign efpga_cfg_sclk = jb[0];
+	assign efpga_cfg_sdata = jb[1];
 	efpga_subsystem_top #(
 		.NUM_SLOTS(NUM_SLOTS),
 		.AXI_ID_WIDTH(AXI_ID_WIDTH),

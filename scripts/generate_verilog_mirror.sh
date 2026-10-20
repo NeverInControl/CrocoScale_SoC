@@ -7,12 +7,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SRC_RTL="${REPO_ROOT}/RTL"
 SRC_MACROS="${REPO_ROOT}/MACROS"
+SRC_VIVADO="${REPO_ROOT}/VIVADO"
 SRC_SOFT_LOGIC="${REPO_ROOT}/SOFT_LOGIC"
 SRC_TEST="${REPO_ROOT}/TEST"
 SRC_FLISTS="${REPO_ROOT}/FILE_LISTS"
 OUT_DIR="${REPO_ROOT}/VERILOG_MIRROR_GENERATED"
 OUT_RTL="${OUT_DIR}/RTL"
 OUT_MACROS="${OUT_DIR}/MACROS"
+OUT_VIVADO="${OUT_DIR}/VIVADO"
 OUT_SOFT_LOGIC="${OUT_DIR}/SOFT_LOGIC"
 OUT_TEST="${OUT_DIR}/TEST"
 OUT_FLISTS="${OUT_DIR}/FILE_LISTS"
@@ -178,7 +180,7 @@ fi
 if [[ -z "${TARGET_SUBDIR}" ]]; then
     # Full Tree Mode: Clean and prepare output directory structure
     rm -rf "${OUT_DIR}"
-    mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
+    mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_VIVADO}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
     ln -sfn "${REPO_ROOT}/FABulousProject" "${OUT_DIR}/FABulousProject"
 
     # Document auto-generated nature of the mirror directory
@@ -234,7 +236,7 @@ EOF
             fi
         done
 
-        find "${SRC_MACROS}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.md" \) | while read -r src_file; do
+        find "${SRC_MACROS}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.gds" -o -name "*.lef" -o -name "*.lib" -o -name "*.def" -o -name "*.spef" -o -name "*.md" \) | while read -r src_file; do
             rel_path="${src_file#"${SRC_MACROS}/"}"
             mkdir -p "$(dirname "${OUT_MACROS}/${rel_path}")"
             cp -p "${src_file}" "${OUT_MACROS}/${rel_path}"
@@ -249,6 +251,32 @@ EOF
             echo "Transpiled Macro: ${rel_path} -> $(basename "${out_v}")"
         done
         echo "MACROS SystemVerilog transpilation complete."
+    fi
+
+    # Recreate VIVADO directory hierarchy in output mirror
+    if [[ -d "${SRC_VIVADO}" ]]; then
+        find "${SRC_VIVADO}" -type d | while read -r dir; do
+            rel_dir="${dir#"${SRC_VIVADO}"}"
+            if [[ -n "${rel_dir}" ]]; then
+                mkdir -p "${OUT_VIVADO}${rel_dir}"
+            fi
+        done
+
+        find "${SRC_VIVADO}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.md" \) | while read -r src_file; do
+            rel_path="${src_file#"${SRC_VIVADO}/"}"
+            mkdir -p "$(dirname "${OUT_VIVADO}/${rel_path}")"
+            cp -p "${src_file}" "${OUT_VIVADO}/${rel_path}"
+        done
+
+        echo "Transpiling VIVADO SystemVerilog sources via sv2v (${SV2V_BIN})..."
+        find "${SRC_VIVADO}" -type f -name "*.sv" | while read -r sv_file; do
+            rel_path="${sv_file#"${SRC_VIVADO}/"}"
+            out_v="${OUT_VIVADO}/${rel_path%.sv}.v"
+            mkdir -p "$(dirname "${out_v}")"
+            "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+            echo "Transpiled Vivado Primitive: ${rel_path} -> $(basename "${out_v}")"
+        done
+        echo "VIVADO SystemVerilog transpilation complete."
     fi
 
     # Recreate SOFT_LOGIC directory hierarchy in output mirror
@@ -400,7 +428,7 @@ if [[ -d "${SRC_FLISTS}" ]]; then
 
         echo "" >> "${out_flist}"
 
-        if [[ "$(basename "${flist}")" == "soc.f" && -f "${VHDL_OUT}" ]]; then
+        if [[ "$(basename "${flist}")" == soc*.f && -f "${VHDL_OUT}" ]]; then
             if ! grep -q "neorv32_axi_wrapper.v" "${out_flist}"; then
                 echo "RTL/Integration/neorv32_axi_wrapper.v" >> "${out_flist}"
             fi
@@ -440,7 +468,7 @@ else
     shared_models=()
     while IFS= read -r f; do
         shared_models+=("${f}")
-    done < <(find "${OUT_RTL}" -type f -name "*pack*.v")
+    done < <(find "${OUT_RTL}" "${OUT_MACROS}" -type f \( -name "*pack*.v" -o -name "sram_macros.v" \))
 
     # Determine files to verify: either full tree or target subdirectory
     if [[ -z "${TARGET_SUBDIR}" ]]; then
@@ -537,7 +565,7 @@ else
         else
             # Tier 2: Structural elaboration, parameter resolution, and interface audit via Icarus Verilog
             tier2_log=$(mktemp)
-            if "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -t null "${iv_lib_args[@]}" "${shared_models[@]}" "${v_file}" > "${tier2_log}" 2>&1; then
+            if "${IVERILOG_BIN}" -g2012 -t null "${iv_lib_args[@]}" "${shared_models[@]}" "${v_file}" > "${tier2_log}" 2>&1; then
                 echo "  [STRUCT PASS] ${rel_path} (${mod_name})"
                 struct_passed=$((struct_passed + 1))
             else
@@ -566,28 +594,28 @@ if [[ -z "${TARGET_SUBDIR}" && "${EQUIV_MODE}" != "none" ]]; then
     echo "Running automated Icarus Verilog linter / elaboration on full SoC..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/soc.f -s crocoscale_soc -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/soc.f -s crocoscale_soc -o /dev/null
     )
     echo "Icarus Verilog lint check passed: Full SoC elaboration successful."
 
     echo "Running automated Icarus Verilog linter on ASIC macros..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/macros.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/macros.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: ASIC macros elaboration successful."
 
     echo "Running automated Icarus Verilog linter on eFPGA soft-logic..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/soft_logic_full.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/soft_logic_full.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
 
     echo "Running automated verification simulation on mirrored soft-logic sequencer..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -D__ICARUS__ -f FILE_LISTS/tb/tb_npu_full_sequencer.f -s tb_npu_full_sequencer -o /tmp/sim_soft_ctrl.vvp
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/tb/tb_npu_full_sequencer.f -s tb_npu_full_sequencer -o /tmp/sim_soft_ctrl.vvp
         vvp /tmp/sim_soft_ctrl.vvp > /dev/null
         rm -f /tmp/sim_soft_ctrl.vvp
     )

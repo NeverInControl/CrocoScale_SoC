@@ -32,33 +32,64 @@ if {[llength $old_src_files] > 0} {
 }
 
 # ------------------------------------------------------------------------------
-# 3. Add Verilog & SystemVerilog sources from curated soc.f in-place
-#    (Guarantees 100% parity with production filelists; zero duplicate primitives)
+# 3. Add Verilog & SystemVerilog sources from FILE_LISTS/vivado/soc_vivado.f
+#    (Recursively resolves nested -f filelists directly in Tcl; zero ifdefs!)
 # ------------------------------------------------------------------------------
-puts "==> Step 3: Adding curated Verilog/SystemVerilog sources in-place..."
-set flat_list_file "$repo_root/gemini_workspace/soc_flat.f"
-if {![file exists $flat_list_file]} {
-    error "Flat filelist not found: $flat_list_file. Run 'python scripts/flatten_filelists.py FILE_LISTS/soc.f -o gemini_workspace/soc_flat.f' first!"
-}
+puts "==> Step 3: Adding curated Vivado Verilog/SystemVerilog sources in-place..."
 
-set fp [open $flat_list_file r]
-set v_files [list]
-while {[gets $fp line] >= 0} {
-    set line [string trim $line]
-    if {$line ne "" && ![string match "#*" $line]} {
-        set abs_path [file normalize "$repo_root/$line"]
-        if {[file exists $abs_path]} {
-            lappend v_files $abs_path
+proc resolve_filelist {flist_path repo_root visited_var} {
+    upvar 1 $visited_var visited
+    set norm_flist [file normalize $flist_path]
+    if {[lsearch -exact $visited $norm_flist] != -1 || ![file exists $norm_flist]} {
+        return [list]
+    }
+    lappend visited $norm_flist
+    set flist_dir [file dirname $norm_flist]
+    set result [list]
+
+    set fp [open $norm_flist r]
+    while {[gets $fp line] >= 0} {
+        set line [string trim $line]
+        if {$line eq "" || [string match "#*" $line] || [string match "//*" $line]} {
+            continue
+        }
+        if {[regexp {^-[fc]\s+(\S+)} $line -> sub_rel]} {
+            set cand1 [file normalize "$flist_dir/$sub_rel"]
+            set cand2 [file normalize "$repo_root/FILE_LISTS/$sub_rel"]
+            set cand3 [file normalize "$repo_root/$sub_rel"]
+            if {[file exists $cand1]} {
+                set sub_files [resolve_filelist $cand1 $repo_root visited]
+            } elseif {[file exists $cand2]} {
+                set sub_files [resolve_filelist $cand2 $repo_root visited]
+            } else {
+                set sub_files [resolve_filelist $cand3 $repo_root visited]
+            }
+            foreach sf $sub_files {
+                if {[lsearch -exact $result $sf] == -1} {
+                    lappend result $sf
+                }
+            }
         } else {
-            puts "    WARNING: File not found on disk: $abs_path"
+            set abs_path [file normalize "$repo_root/$line"]
+            if {[file exists $abs_path]} {
+                if {[lsearch -exact $result $abs_path] == -1} {
+                    lappend result $abs_path
+                }
+            } else {
+                puts "    WARNING: File not found on disk: $abs_path"
+            }
         }
     }
+    close $fp
+    return $result
 }
-close $fp
+
+set visited_flists [list]
+set v_files [resolve_filelist "$repo_root/FILE_LISTS/vivado/soc_vivado.f" $repo_root visited_flists]
 
 if {[llength $v_files] > 0} {
     add_files -norecurse $v_files
-    puts "    Added [llength $v_files] curated Verilog/SystemVerilog files by reference."
+    puts "    Added [llength $v_files] curated Verilog/SystemVerilog files from FILE_LISTS/vivado/soc_vivado.f."
 }
 
 # ------------------------------------------------------------------------------
@@ -122,11 +153,11 @@ foreach tb $tb_files {
 puts "    Added boundary harness and system testbenches to sim_1 by reference."
 
 # ------------------------------------------------------------------------------
-# 7. Set Compiler Defines and Top Module
+# 7. Configure Top Module (Zero compiler defines required; 100% filelist-driven)
 # ------------------------------------------------------------------------------
-puts "==> Step 7: Configuring VIVADO=1 defines and top module..."
-set_property verilog_define {VIVADO=1} [get_filesets sources_1]
-set_property verilog_define {VIVADO=1} [get_filesets sim_1]
+puts "==> Step 7: Configuring top module (100% filelist-driven architecture)..."
+set_property verilog_define {} [get_filesets sources_1]
+set_property verilog_define {} [get_filesets sim_1]
 set_property top crocoscale_soc [get_filesets sources_1]
 update_compile_order -fileset sources_1
 

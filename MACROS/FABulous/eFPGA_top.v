@@ -5,6 +5,7 @@
  * Drop-in replacement for FABulous eFPGA_top.v
  * =============================================================================================== */
 
+(* blackbox *)
 module eFPGA_top #(
     parameter include_eFPGA     = 1,
     parameter NumberOfRows      = 18,

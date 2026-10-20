@@ -12,5 +12,4 @@ path_mappings:
 # Source path prefix stripping rules (top-level folders stripped before export)
 strip_prefixes:
   - "RTL"
-  - "MACROS"
   - "VERILOG_MIRROR_GENERATED"

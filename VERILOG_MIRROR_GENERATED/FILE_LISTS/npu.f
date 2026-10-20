@@ -1,14 +1,11 @@
+# Target-Switched Primitives (Simulation / Behavioral Default)
 RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/cg_cell.v
+RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/npu_clk_ctrl.v
 RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.v
+
+# NPU Containers & Core
 RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.v
-RTL/eFPGA_Subsystem/NPU_complex/act_buffer/act_buffer_TOP/act_buffer_top.v
-RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/pe.v
-RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/systolic_array.v
-RTL/eFPGA_Subsystem/NPU_complex/compute_core/crossbar/npu_crossbar.v
-RTL/eFPGA_Subsystem/NPU_complex/compute_core/quant_config/quant_shift_chain.v
-RTL/eFPGA_Subsystem/NPU_complex/compute_core/compute_core_TOP/compute_core_top.v
 RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/requantizer/npu_requantizer_lane.v
 RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/psum_requant_container.v
-RTL/eFPGA_Subsystem/NPU_complex/psum_requant/psum_requant_TOP/psum_requant_top.v
-RTL/eFPGA_Subsystem/NPU_complex/NPU_complex_TOP/npu_wrapper.v
+-f npu_core.f
 

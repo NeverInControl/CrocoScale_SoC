@@ -4,12 +4,8 @@ module efpga_subsystem_top #(
     parameter int NUM_SLOTS        = 1,
     parameter int AXI_ID_WIDTH     = 8,
     parameter logic [31:0] HW_VERSION = 32'hFAB00001,
-    parameter int WEIGHT_SPLIT     = 8,
-`ifdef VIVADO
-    parameter int USE_LADDER_CLOCKS = 0
-`else
+    parameter int WEIGHT_SPLIT      = 8,
     parameter int USE_LADDER_CLOCKS = 1
-`endif
 ) (
     // Global Clock & eFPGA Subsystem Reset Domain Inputs (from Top-Level Reset Controller)
     input  logic                                clk_i,
@@ -384,18 +380,6 @@ module efpga_subsystem_top #(
     assign axi4_dma_s_awprot = slot_dma_awprot;
     assign axi4_dma_s_arprot = slot_dma_arprot;
 
-`ifdef __ICARUS__
-    `ifndef EXCLUDE_FPGA
-        `define EXCLUDE_FPGA
-    `endif
-`endif
-`ifdef EXCLUDE_EFPGA
-    `ifndef EXCLUDE_FPGA
-        `define EXCLUDE_FPGA
-    `endif
-`endif
-
-`ifndef EXCLUDE_FPGA
     // -------------------------------------------------------------------------
     // FABulous eFPGA Soft-Fabric Top
     // -------------------------------------------------------------------------
@@ -580,63 +564,5 @@ module efpga_subsystem_top #(
             assign axi4_dma_s_rvalid[NUM_SLOTS-1:1]     = '0;
         end
     endgenerate
-
-`else // Simulation Bypass when EXCLUDE_FPGA is defined
-    assign axil_ctrl_m_awready = {NUM_SLOTS{1'b1}};
-    assign axil_ctrl_m_wready  = {NUM_SLOTS{1'b1}};
-    assign axil_ctrl_m_bresp   = '0;
-    assign axil_ctrl_m_bvalid  = axil_ctrl_m_wvalid & axil_ctrl_m_awvalid;
-    assign axil_ctrl_m_arready = {NUM_SLOTS{1'b1}};
-    assign axil_ctrl_m_rdata   = 32'hDEADBEEF;
-    assign axil_ctrl_m_rresp   = '0;
-    assign axil_ctrl_m_rvalid  = axil_ctrl_m_arvalid;
-
-    assign axi4_dma_s_awaddr   = '0;
-    assign axi4_dma_s_awlen    = '0;
-    assign axi4_dma_s_awsize   = '0;
-    assign axi4_dma_s_awburst  = '0;
-    assign axi4_dma_s_awlock   = '0;
-    assign axi4_dma_s_awcache  = '0;
-    assign axi4_dma_s_awvalid  = '0;
-    assign axi4_dma_s_wdata    = '0;
-    assign axi4_dma_s_wstrb    = '0;
-    assign axi4_dma_s_wlast    = '0;
-    assign axi4_dma_s_wvalid   = '0;
-    assign axi4_dma_s_bready   = '0;
-    assign axi4_dma_s_araddr   = '0;
-    assign axi4_dma_s_arlen    = '0;
-    assign axi4_dma_s_arsize   = '0;
-    assign axi4_dma_s_arburst  = '0;
-    assign axi4_dma_s_arlock   = '0;
-    assign axi4_dma_s_arcache  = '0;
-    assign axi4_dma_s_arvalid  = '0;
-    assign axi4_dma_s_rready   = '0;
-
-    assign efpga_com_active    = 1'b0;
-    assign slot_debug_in       = slot_debug_out;
-
-    assign raw_pmod_io_o       = '0;
-    assign raw_pmod_io_oe      = '0;
-    assign slot_usr_irq_raw    = '0;
-
-    assign npu_act_addr        = '0;
-    assign npu_act_wdata       = '0;
-    assign npu_act_we          = '0;
-    assign npu_addr            = '0;
-    assign npu_wdata           = '0;
-    assign npu_we              = '0;
-    assign npu_read_bank_sel   = '0;
-    assign npu_weight_in       = '0;
-    assign npu_array_en        = '0;
-    assign npu_psum_systolic_en= '0;
-    assign npu_psum_lut_en     = '0;
-    assign npu_swap_weights    = '0;
-    assign npu_psum_skew_en    = '0;
-    assign npu_compute_bank_swap = '0;
-    assign npu_quant_shift_in  = '0;
-    assign npu_quant_shift_en  = '0;
-    assign npu_xbar_sel        = '0;
-    assign npu_weight_shift_en = '0;
-`endif
 
 endmodule

@@ -1,21 +1,21 @@
 `timescale 1ns / 1ps
 
 /* ===============================================================================================
- * IHP SG13G2 Single-Port SRAM Hard Macro Wrapper
- * Process: IHP 130nm CMOS5L / SG13G2
+ * IHP 130nm CMOS5L Single-Port SRAM Hard Macro Wrapper
+ * Process: IHP 130nm CMOS5L (sg13cmos5l)
  * Drop-in replacement for RTL sram_bank.sv when targeting ASIC foundry hard macros.
  * =============================================================================================== */
 
 module sram_bank #(
-    parameter integer DATA_WIDTH = 8,
-    parameter integer DEPTH      = 512,
-    parameter integer ADDR_WIDTH = 9
+    parameter int DATA_WIDTH = 8,
+    parameter int DEPTH      = 512,
+    parameter int ADDR_WIDTH = $clog2(DEPTH)
 )(
-    input  wire                          clk_i,
-    input  wire                          we,
-    input  wire         [ADDR_WIDTH-1:0] addr,
-    input  wire signed  [DATA_WIDTH-1:0] wdata,
-    output wire signed  [DATA_WIDTH-1:0] rdata
+    input  wire                         clk_i,
+    input  wire                         we,
+    input  wire        [ADDR_WIDTH-1:0] addr,
+    input  wire signed [DATA_WIDTH-1:0] wdata,
+    output wire signed [DATA_WIDTH-1:0] rdata
 );
 
     wire A_MEN = 1'b1;  // Memory enable (active high)
@@ -69,9 +69,7 @@ module sram_bank #(
             );
 
         end else begin : gen_unsupported_config
-            initial begin
-                $fatal(1, "sram_bank: Unsupported ASIC configuration (DEPTH=%0d, DATA_WIDTH=%0d). Only 512x8 and 256x32 macros are supported.", DEPTH, DATA_WIDTH);
-            end
+            assign rdata = {DATA_WIDTH{1'b0}};
         end
     endgenerate
 

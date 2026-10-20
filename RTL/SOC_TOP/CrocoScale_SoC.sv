@@ -10,72 +10,28 @@ module crocoscale_soc #(
     input  logic       rstn_i,      // Raw async button
     output logic [7:0] gpio_o,      
     output logic       uart0_txd_o,
-    input  logic       uart0_rxd_i
-`ifdef VIVADO
-    ,
-    inout  wire  [7:0] ja,          // Digilent Nexys Video PMOD Header JA (eFPGA Fabric User I/O)
-    inout  wire  [7:0] jb           // Digilent Nexys Video PMOD Header JB (eFPGA BitBang Config)
-`else
-    ,
-    input  logic       efpga_cfg_sclk_i = 1'b0,
-    input  logic       efpga_cfg_sdata_i = 1'b0
-`endif
+    input  logic       uart0_rxd_i,
+    inout  wire  [7:0] ja,          // External PMOD Header JA (eFPGA Fabric User I/O)
+    inout  wire  [7:0] jb           // External PMOD Header JB (eFPGA BitBang Config)
 );
 
     // ===========================================================================
-    // Global Control & Clock Generation
+    // Global Control, Clock Generation & Reset Synchronization
     // ===========================================================================
     logic [7:0] con_gpio_out;
     assign gpio_o = con_gpio_out;
-    
-`ifdef VIVADO
-    // Emulation clock divider (100 MHz to 10 MHz) and global clock buffer for Digilent Nexys Video
-    logic [2:0] clk_div = 0;
-    logic       clk_10mhz_unbuf = 0;
-    logic       clk_10mhz;
 
-    always_ff @(posedge clk_i) begin
-        if (clk_div == 3'd4) begin
-            clk_div         <= 3'd0;
-            clk_10mhz_unbuf <= ~clk_10mhz_unbuf;
-        end else begin
-            clk_div         <= clk_div + 3'd1;
-        end
-    end
+    logic clk_10mhz;
+    logic sys_rstn; // Safe Active-Low
+    logic sys_rst;  // Safe Active-High
 
-    BUFG clk_bufg (
-        .I(clk_10mhz_unbuf),
-        .O(clk_10mhz)
+    soc_clk_rst_gen u_soc_clk_rst_gen (
+        .clk_i      (clk_i),
+        .rstn_i     (rstn_i),
+        .sys_clk_o  (clk_10mhz),
+        .sys_rstn_o (sys_rstn),
+        .sys_rst_o  (sys_rst)
     );
-`else
-    // ASIC and Simulation: clk_i directly drives the internal system clock
-    wire clk_10mhz = clk_i;
-`endif
-
-    // ===========================================================================
-    // 2. Global Reset Synchronizer (Async Assert, Sync De-assert)
-    // ===========================================================================
-`ifdef VIVADO
-    (* ASYNC_REG = "TRUE" *) logic rst_sync_0, rst_sync_1;
-`else
-    logic rst_sync_0, rst_sync_1;
-`endif
-    
-    always_ff @(posedge clk_10mhz or negedge rstn_i) begin
-        if (!rstn_i) begin
-            rst_sync_0 <= 1'b0;
-            rst_sync_1 <= 1'b0;
-        end else begin
-            rst_sync_0 <= 1'b1;
-            rst_sync_1 <= rst_sync_0;
-        end
-    end
-
-    logic sys_rstn; // Safe Active-Low 
-    logic sys_rst;  // Safe Active-High 
-    
-    assign sys_rstn = rst_sync_1;
-    assign sys_rst  = ~sys_rstn;
 
     // ===========================================================================
     // AXI Crossbar Sizing & Routing Map
@@ -383,34 +339,25 @@ module crocoscale_soc #(
     endgenerate
 
     // ===========================================================================
-    // External Padring PMOD Interface (Header JA on Digilent Nexys Video)
+    // External Padring PMOD Interface (Header JA)
     // ===========================================================================
     logic [7:0] pmod_io_i;
     logic [7:0] pmod_io_o;
     logic [7:0] pmod_io_oe_o;
 
-`ifdef VIVADO
     for (genvar i = 0; i < 8; i++) begin : gen_pmod_ja
         assign ja[i]        = pmod_io_oe_o[i] ? pmod_io_o[i] : 1'bz;
         assign pmod_io_i[i] = ja[i];
     end
-`else
-    assign pmod_io_i = 8'd0;
-`endif
 
     // ===========================================================================
-    // External BitBang Configuration Interface (Header JB on Digilent Nexys Video)
+    // External BitBang Configuration Interface (Header JB)
     // ===========================================================================
     logic efpga_cfg_sclk;
     logic efpga_cfg_sdata;
 
-`ifdef VIVADO
-    assign efpga_cfg_sclk  = jb[0]; // JB Pin 1 (Package Pin V8)
-    assign efpga_cfg_sdata = jb[1]; // JB Pin 2 (Package Pin V9)
-`else
-    assign efpga_cfg_sclk  = efpga_cfg_sclk_i;
-    assign efpga_cfg_sdata = efpga_cfg_sdata_i;
-`endif
+    assign efpga_cfg_sclk  = jb[0];
+    assign efpga_cfg_sdata = jb[1];
 
     // ===========================================================================
     // eFPGA Subsystem (Encapsulated Connector & eFPGA Fabric)
