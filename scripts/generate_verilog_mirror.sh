@@ -218,11 +218,16 @@ EOF
 
     # Transpile SystemVerilog sources to IEEE Verilog-2001
     echo "Transpiling SystemVerilog sources via sv2v (${SV2V_BIN})..."
+    RTL_CFG_PKG="${SRC_RTL}/Config/target_config_pkg.sv"
     find "${SRC_RTL}" -type f -name "*.sv" | while read -r sv_file; do
         rel_path="${sv_file#"${SRC_RTL}/"}"
         out_v="${OUT_RTL}/${rel_path%.sv}.v"
         mkdir -p "$(dirname "${out_v}")"
-        "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+        if [[ -f "${RTL_CFG_PKG}" && "${sv_file}" != "${RTL_CFG_PKG}" ]]; then
+            "${SV2V_BIN}" "${RTL_CFG_PKG}" "${sv_file}" > "${out_v}"
+        else
+            "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+        fi
         echo "Transpiled: ${rel_path} -> $(basename "${out_v}")"
     done
     echo "SystemVerilog transpilation complete."
@@ -362,6 +367,7 @@ else
 
     # Transpile SystemVerilog sources in TARGET_SUBDIR
     echo "Transpiling SystemVerilog sources in ${TARGET_SUBDIR} via sv2v (${SV2V_BIN})..."
+    RTL_CFG_PKG="${SRC_RTL}/Config/target_config_pkg.sv"
     find "${REPO_ROOT}/${TARGET_SUBDIR}" -type f -name "*.sv" ! -path "*/CPU*" | while read -r sv_file; do
         rel_path="${sv_file#"${REPO_ROOT}/"}"
         out_v="${OUT_DIR}/${rel_path%.sv}.v"
@@ -377,7 +383,11 @@ else
                 echo "================================================================================" >&2
             fi
         else
-            "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+            if [[ -f "${RTL_CFG_PKG}" && "${sv_file}" != "${RTL_CFG_PKG}" && "${rel_path}" == "RTL/"* ]]; then
+                "${SV2V_BIN}" "${RTL_CFG_PKG}" "${sv_file}" > "${out_v}"
+            else
+                "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+            fi
             echo "Transpiled: ${rel_path} -> $(basename "${out_v}")"
         fi
     done
@@ -420,11 +430,14 @@ if [[ -d "${SRC_FLISTS}" ]]; then
         out_flist="${OUT_FLISTS}/${rel_flist}"
         mkdir -p "$(dirname "${out_flist}")"
 
-        awk '{
-            sub(/\r$/, "");
-            sub(/\.sv$/, ".v");
-            print;
-        }' "${flist}" > "${out_flist}"
+        awk '
+            /_pkg\.sv[[:space:]]*$/ { next }
+            {
+                sub(/\r$/, "");
+                sub(/\.sv$/, ".v");
+                print;
+            }
+        ' "${flist}" > "${out_flist}"
 
         echo "" >> "${out_flist}"
 
@@ -503,8 +516,8 @@ else
             v_file="${OUT_DIR}/${rel_path%.sv}.v"
         fi
 
-        # Skip testbenches from formal logic equivalence
-        if [[ "${rel_path}" == "TEST/"* ]]; then
+        # Skip testbenches and pure package files from formal logic equivalence
+        if [[ "${rel_path}" == "TEST/"* || "${rel_path}" == *"_pkg.sv" ]]; then
             continue
         fi
 
@@ -523,11 +536,15 @@ else
         fi
 
         tier1_log=$(mktemp)
+        pkg_arg=""
+        if [[ -f "${SRC_RTL}/Config/target_config_pkg.sv" ]]; then
+            pkg_arg="${SRC_RTL}/Config/target_config_pkg.sv"
+        fi
 
         if [[ "${EQUIV_MODE}" == "full" ]]; then
             # Tier 1 Full: Include library directories for full hierarchical flattening and verification
             lec_cmd="
-                read_slang --top ${mod_name} ${slang_lib_dirs[*]} -Y .sv ${inc_dirs[*]} ${sv_file};
+                read_slang --top ${mod_name} ${slang_lib_dirs[*]} -Y .sv ${inc_dirs[*]} ${pkg_arg} ${sv_file};
                 rename ${mod_name} gold;
                 read_verilog ${v_file};
                 rename ${mod_name} gate;
@@ -545,7 +562,7 @@ else
         else
             # Tier 1 Leaf (Default): Fast check on leaf outputs
             lec_cmd="
-                read_slang --top ${mod_name} --ignore-unknown-modules ${inc_dirs[*]} ${sv_file};
+                read_slang --top ${mod_name} --ignore-unknown-modules ${inc_dirs[*]} ${pkg_arg} ${sv_file};
                 rename ${mod_name} gold;
                 read_verilog ${v_file};
                 rename ${mod_name} gate;

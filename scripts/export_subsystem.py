@@ -433,6 +433,10 @@ def export_subsystem(
         curr_rtl_dir.mkdir(parents=True, exist_ok=True)
 
         for rel_path in raw_files:
+            # In pure Verilog-2001 ('v') mode, sv2v already inlines SystemVerilog packages into the modules
+            if f_fmt == "v" and rel_path.endswith("_pkg.sv"):
+                continue
+
             src_file = resolve_source_file(rel_path, f_fmt, repo_root)
             if not src_file.exists():
                 print(f"[WARNING] Source file not found: {src_file}")
@@ -460,15 +464,15 @@ def export_subsystem(
             # For MACROS/ entries in the ASIC export, also copy any physical collaterals (.gds, .lef, .lib, .def, .spef) in that folder
             if norm_rel.startswith("MACROS/"):
                 src_macro_folder = (repo_root / norm_rel).parent
-                if src_macro_folder.exists():
+                if src_macro_folder.exists() and src_macro_folder != (repo_root / "MACROS"):
                     for ext in ("*.gds", "*.lef", "*.lib", "*.def", "*.spef"):
                         for phys_f in src_macro_folder.glob(ext):
                             dst_phys = dst_file.parent / phys_f.name
                             if not dst_phys.exists():
                                 shutil.copy2(phys_f, dst_phys)
 
-        # When --flow asic is selected (or --include-macros), copy the complete MACROS/ directory tree
-        if flow == "asic" or include_macros:
+        # Optionally copy the complete MACROS/ directory tree if --include-macros is explicitly passed
+        if include_macros:
             macros_src_root = repo_root / "MACROS"
             macros_dst_root = output_dir / "MACROS" if fmt != "both" else output_dir / "MACROS" / f_fmt
             if macros_src_root.exists():

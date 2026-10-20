@@ -1,6 +1,6 @@
-# Target-Switched Primitives (Xilinx Artix-7 Vivado Emulation)
+# Target Configuration & Primitives (Xilinx Artix-7 Vivado Emulation)
+VIVADO/target_config_pkg.sv
 VIVADO/cg_cell.sv
-VIVADO/npu_clk_ctrl.sv
 RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.sv
 
 # NPU Containers & Core

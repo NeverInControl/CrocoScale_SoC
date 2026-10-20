@@ -38,7 +38,8 @@ module npu_wrapper (
 	parameter signed [31:0] PSUM_WIDTH = 32;
 	parameter signed [31:0] SCALE_WIDTH = 16;
 	parameter signed [31:0] WEIGHT_SPLIT = 8;
-	parameter signed [31:0] USE_LADDER_CLOCKS = 1;
+	localparam signed [31:0] target_config_pkg_TARGET_USE_LADDER_CLOCKS = 1;
+	parameter signed [31:0] USE_LADDER_CLOCKS = target_config_pkg_TARGET_USE_LADDER_CLOCKS;
 	localparam signed [31:0] PSUM_WORDS = TILE_SIZE * TILE_SIZE;
 	localparam signed [31:0] ACT_WORDS = (TILE_SIZE * TILE_SIZE) * ACT_HALO_PAD;
 	localparam signed [31:0] PSUM_ADDR_WIDTH = $clog2(PSUM_WORDS);
@@ -95,16 +96,16 @@ module npu_wrapper (
 	wire [NUM_ACT_BANKS - 1:0] effective_act_clk;
 	wire act_forwarded_core_clk;
 	wire npu_clk_core;
-	npu_clk_ctrl #(
-		.NUM_ACT_BANKS(NUM_ACT_BANKS),
-		.USE_LADDER_CLOCKS(USE_LADDER_CLOCKS)
-	) npu_clk_ctrl_inst(
-		.clk_i(clk_i),
-		.act_clk_i(act_clk_i),
-		.act_forwarded_core_clk(act_forwarded_core_clk),
-		.effective_act_clk(effective_act_clk),
-		.npu_clk_core(npu_clk_core)
-	);
+	generate
+		if (USE_LADDER_CLOCKS != 0) begin : gen_ladder_clks
+			assign effective_act_clk = act_clk_i;
+			assign npu_clk_core = act_forwarded_core_clk;
+		end
+		else begin : gen_global_clks
+			assign effective_act_clk = {NUM_ACT_BANKS {clk_i}};
+			assign npu_clk_core = clk_i;
+		end
+	endgenerate
 	act_buffer_top #(
 		.NUM_ACT_BANKS(NUM_ACT_BANKS),
 		.ACT_WORDS(ACT_WORDS),

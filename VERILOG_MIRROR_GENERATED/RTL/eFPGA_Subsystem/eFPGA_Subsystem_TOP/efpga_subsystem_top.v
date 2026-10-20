@@ -90,7 +90,8 @@ module efpga_subsystem_top (
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter signed [31:0] WEIGHT_SPLIT = 8;
-	parameter signed [31:0] USE_LADDER_CLOCKS = 1;
+	localparam signed [31:0] target_config_pkg_TARGET_USE_LADDER_CLOCKS = 1;
+	parameter signed [31:0] USE_LADDER_CLOCKS = target_config_pkg_TARGET_USE_LADDER_CLOCKS;
 	input wire clk_i;
 	input wire rst_efpga_connector_n_i;
 	input wire rst_efpga_connector_i;

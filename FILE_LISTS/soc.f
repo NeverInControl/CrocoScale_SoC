@@ -3,5 +3,5 @@
 -f efpga_subsystem.f
 
 # SoC Clock/Reset & Top
-RTL/SOC_TOP/soc_clk_rst_gen.sv
+RTL/Clock_Reset/soc_clk_rst_gen.sv
 RTL/SOC_TOP/CrocoScale_SoC.sv

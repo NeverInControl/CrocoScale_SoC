@@ -149,7 +149,6 @@ RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_Config.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_top.v
 RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/cg_cell.v
-RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/npu_clk_ctrl.v
 RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.v
 RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.v
 RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/requantizer/npu_requantizer_lane.v

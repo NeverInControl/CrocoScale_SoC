@@ -1,6 +1,5 @@
-# Target-Switched Primitives (Simulation / Behavioral Default)
+# Target Configuration & Primitives (Simulation / Behavioral Default)
 RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/cg_cell.v
-RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/npu_clk_ctrl.v
 RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.v
 
 # NPU Containers & Core

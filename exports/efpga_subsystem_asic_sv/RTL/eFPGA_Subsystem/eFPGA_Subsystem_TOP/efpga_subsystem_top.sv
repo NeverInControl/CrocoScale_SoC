@@ -5,7 +5,7 @@ module efpga_subsystem_top #(
     parameter int AXI_ID_WIDTH     = 8,
     parameter logic [31:0] HW_VERSION = 32'hFAB00001,
     parameter int WEIGHT_SPLIT      = 8,
-    parameter int USE_LADDER_CLOCKS = 1
+    parameter int USE_LADDER_CLOCKS = target_config_pkg::TARGET_USE_LADDER_CLOCKS
 ) (
     // Global Clock & eFPGA Subsystem Reset Domain Inputs (from Top-Level Reset Controller)
     input  logic                                clk_i,

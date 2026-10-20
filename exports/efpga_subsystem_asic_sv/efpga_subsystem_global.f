@@ -11,14 +11,11 @@ RTL/AXI_LIB/axi_register_wr.v
 RTL/AXI_LIB/axi_register_rd.v
 RTL/AXI_LIB/axi_register.v
 MACROS/FABulous/eFPGA_top.v
+MACROS/target_config_pkg.sv
 MACROS/Cells/sg13cmos5l_lgcp_1.v
 MACROS/Cells/cg_cell.sv
-RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/npu_clk_ctrl.sv
-MACROS/SRAM/sram_macros.v
-MACROS/SRAM/sram_bank.sv
-RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.sv
-RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/requantizer/npu_requantizer_lane.sv
-RTL/eFPGA_Subsystem/NPU_complex/psum_requant/containers/psum_requant_container.sv
+MACROS/act_buffer/act_bank_container.v
+MACROS/psum_requant/psum_requant_container.v
 RTL/eFPGA_Subsystem/NPU_complex/act_buffer/act_buffer_TOP/act_buffer_top.sv
 RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/pe.sv
 RTL/eFPGA_Subsystem/NPU_complex/compute_core/systolic_array/systolic_array.sv
