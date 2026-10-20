@@ -12,6 +12,9 @@ RTL/AXI_LIB/axil_crossbar_wr.v
 RTL/AXI_LIB/axil_dp_ram.v
 RTL/AXI_LIB/axil_interconnect.v
 RTL/AXI_LIB/axil_ram.v
+RTL/AXI_LIB/axil_register.v
+RTL/AXI_LIB/axil_register_rd.v
+RTL/AXI_LIB/axil_register_wr.v
 RTL/AXI_LIB/axil_reg_if.v
 RTL/AXI_LIB/axil_reg_if_rd.v
 RTL/AXI_LIB/axil_reg_if_wr.v
@@ -40,6 +43,9 @@ RTL/AXI_LIB/axi_ram.v
 RTL/AXI_LIB/axi_ram_rd_if.v
 RTL/AXI_LIB/axi_ram_wr_if.v
 RTL/AXI_LIB/axi_ram_wr_rd_if.v
+RTL/AXI_LIB/axi_register.v
+RTL/AXI_LIB/axi_register_rd.v
+RTL/AXI_LIB/axi_register_wr.v
 RTL/AXI_LIB/axi_vfifo_dec.v
 RTL/AXI_LIB/axi_vfifo_enc.v
 RTL/AXI_LIB/axi_vfifo_raw.v

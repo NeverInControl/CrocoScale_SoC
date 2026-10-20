@@ -1,9 +1,9 @@
 # CrocoScale IP Package: `efpga_subsystem`
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `e973a74`
+* **Commit**: `c994c8e`
 * **Format**: `sv`
-* **RTL Modules**: 176 files
+* **RTL Modules**: 27 files
 
 ## Package Layout
 
@@ -12,9 +12,9 @@
 * `TEST/`: Verification testbenches (1 files) and vectors (0 `.mem` files).
 * `HAL/`: C hardware abstraction layer drivers (2 files).
 
-## Simulation Quickstart
+## Simulation / Synthesis Quickstart
 
 ```bash
-# Compile standalone RTL using Icarus Verilog:
-iverilog -g2012 -f efpga_subsystem_global.f -o sim.vvp
+# Pass external AXI library via -y <path/to/axi_lib>:
+iverilog -g2012 -y <path/to/axi_lib> -f efpga_subsystem_global.f -o sim.vvp
 ```
