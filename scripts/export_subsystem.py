@@ -467,8 +467,8 @@ def export_subsystem(
                             if not dst_phys.exists():
                                 shutil.copy2(phys_f, dst_phys)
 
-        # Optionally copy the complete MACROS/ directory tree (blackboxes, cell/SRAM behavioral models, collaterals)
-        if include_macros:
+        # When --flow asic is selected (or --include-macros), copy the complete MACROS/ directory tree
+        if flow == "asic" or include_macros:
             macros_src_root = repo_root / "MACROS"
             macros_dst_root = output_dir / "MACROS" if fmt != "both" else output_dir / "MACROS" / f_fmt
             if macros_src_root.exists():

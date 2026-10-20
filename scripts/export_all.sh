@@ -49,8 +49,7 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --flow asic \
     --format sv \
     --include-tb \
-    --include-lib \
-    --include-macros
+    --include-lib
 
 echo ""
 echo "================================================================================"

@@ -2,10 +2,11 @@
 # CrocoScale SoC -- Vivado Clean In-Place Source Reimport & OOC Setup Script
 # ==============================================================================
 # Usage in Vivado Tcl Console:
-#   source C:/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/scripts/vivado_reimport_sources.tcl
+#   source <path_to_repo>/scripts/vivado_reimport_sources.tcl
 # ==============================================================================
 
-set repo_root "C:/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC"
+set script_dir [file dirname [file normalize [info script]]]
+set repo_root  [file dirname $script_dir]
 
 puts "=================================================================="
 puts ">>> Starting CrocoScale SoC Clean Source Reimport & OOC Setup <<<"
@@ -121,36 +122,29 @@ if {[llength $vhdl_integ] > 0} {
 }
 
 # ------------------------------------------------------------------------------
-# 5. Add Soft-Logic Controllers
+# 5. Add Simulation Sources (Soft-Logic Controllers, Boundary Harness & TBs) to sim_1
 # ------------------------------------------------------------------------------
-puts "==> Step 5: Adding Soft Logic controllers..."
-set soft_files [concat \
+puts "==> Step 5: Adding Soft-Logic controllers, boundary harness, and testbenches to sim_1..."
+set sim_only_files [concat \
     [glob -nocomplain "$repo_root/SOFT_LOGIC/minimal/*.sv"] \
     [glob -nocomplain "$repo_root/SOFT_LOGIC/full/*.sv"] \
+    [glob -nocomplain "$repo_root/TEST/NPU/TestBenches/*.sv"] \
+    [list \
+        [file normalize "$repo_root/TEST/SoftLogic/common/efpga_boundary_harness.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/full/modules/tb_npu_full_sequencer.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv"] \
+        [file normalize "$repo_root/TEST/eFPGA_Subsystem/TestBenches/tb_efpga_manager.sv"] \
+    ] \
 ]
-if {[llength $soft_files] > 0} {
-    add_files -norecurse $soft_files
-    puts "    Added [llength $soft_files] Soft Logic controller files."
-}
-
-# ------------------------------------------------------------------------------
-# 6. Add Simulation Testbenches & Boundary Harness to sim_1 (In-Place)
-# ------------------------------------------------------------------------------
-puts "==> Step 6: Adding simulation testbenches and boundary harness to sim_1..."
-set tb_files [list \
-    [file normalize "$repo_root/TEST/SoftLogic/common/efpga_boundary_harness.sv"] \
-    [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv"] \
-    [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv"] \
-    [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv"] \
-    [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv"] \
-    [file normalize "$repo_root/TEST/eFPGA_Subsystem/TestBenches/tb_efpga_manager.sv"] \
-]
-foreach tb $tb_files {
-    if {[file exists $tb]} {
-        add_files -fileset sim_1 -norecurse $tb
+foreach sf $sim_only_files {
+    if {[file exists $sf]} {
+        add_files -fileset sim_1 -norecurse $sf
     }
 }
-puts "    Added boundary harness and system testbenches to sim_1 by reference."
+puts "    Added Soft-Logic controllers, boundary harness, and all testbenches to sim_1."
 
 # ------------------------------------------------------------------------------
 # 7. Configure Top Module (Zero compiler defines required; 100% filelist-driven)
@@ -172,7 +166,8 @@ set_property -dict [list xsim.simulate.xsim.more_options "-testplusarg MEM_DIR=$
 # 9. Attach DRC Crash Prevention Hook (disable_drc.tcl)
 # ------------------------------------------------------------------------------
 puts "==> Step 9: Attaching DRC loop & stack overflow crash prevention hook..."
-set drc_hook [file normalize "C:/Users/Niels/Vivado/CrocoScale_SoC/disable_drc.tcl"]
+set proj_dir [get_property DIRECTORY [current_project]]
+set drc_hook [file normalize "$proj_dir/disable_drc.tcl"]
 if {![file exists $drc_hook]} {
     set drc_hook [file normalize "$repo_root/scripts/disable_drc.tcl"]
 }
