@@ -19,8 +19,8 @@ source ~/custom_functions/custom_functions.sh && pyenv Yosys
 
 This runs:
 1. `./scripts/generate_verilog_mirror.sh` (transpilation + formal SAT equivalence proofs).
-2. `exports/efpga_subsystem_v/` (Icarus Simulation Verilog: `--format v --include-tb --include-hal`).
-3. `exports/efpga_subsystem_sv/` (Macro-Backend SystemVerilog: `--format sv --include-tb --include-lib --include-macros`).
+2. `exports/efpga_subsystem_simulation_v/` (Icarus Simulation Verilog: `--flow simulation --format v --include-tb --include-hal`).
+3. `exports/efpga_subsystem_asic_sv/` (Macro-Backend SystemVerilog: `--flow asic --format sv --include-tb --include-lib --include-macros`).
 
 ### Manual 2-Step Export Sequence
 
@@ -31,9 +31,9 @@ Exporting pure, formally verified IEEE 1364-2001 Verilog manually:
 source ~/custom_functions/custom_functions.sh && pyenv Yosys
 ./scripts/generate_verilog_mirror.sh
 
-# Step 2: Package standalone subsystem into exports/<target>_<format>/
-python3 scripts/export_subsystem.py --target efpga_subsystem --format v --include-tb --include-hal
-python3 scripts/export_subsystem.py --target efpga_subsystem --format sv --include-tb --include-lib --include-macros
+# Step 2: Package standalone subsystem into exports/<target>_<flow>_<format>/
+python3 scripts/export_subsystem.py --target efpga_subsystem --flow simulation --format v --include-tb --include-hal
+python3 scripts/export_subsystem.py --target efpga_subsystem --flow asic --format sv --include-tb --include-lib --include-macros
 ```
 
 > **Why Step 1 is required before Step 2:**

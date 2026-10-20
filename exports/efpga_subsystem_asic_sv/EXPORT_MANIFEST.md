@@ -1,7 +1,8 @@
-# CrocoScale IP Package: `efpga_subsystem`
+# CrocoScale IP Package: `efpga_subsystem` (`asic`)
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `f9219cf`
+* **Commit**: `6c71879`
+* **Target Flow**: `asic` (`FILE_LISTS/asic/efpga_subsystem_asic.f`)
 * **Format**: `sv`
 * **RTL Modules**: 35 files in `efpga_subsystem_global.f`
 

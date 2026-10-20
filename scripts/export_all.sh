@@ -6,11 +6,13 @@ set -euo pipefail
 #
 # Runs the complete 2-step export sequence for both required downstream packages:
 #   1. Regenerates and verifies the Verilog-2001 mirror (VERILOG_MIRROR_GENERATED/)
-#   2. Exports the Icarus Simulation Verilog package (exports/efpga_subsystem_v/)
+#   2. Exports the Icarus Simulation Verilog package (exports/efpga_subsystem_simulation_v/)
+#      - Flow: simulation (FILE_LISTS/efpga_subsystem.f)
 #      - Format: v (Pure Verilog-2001)
 #      - Includes: Simulation RTL + Testbenches + Golden Vectors + C HAL Drivers
 #      - External AXI_LIB stays decoupled (pass via -y <path/to/axi_lib>)
-#   3. Exports the Macro-Backend SystemVerilog package (exports/efpga_subsystem_sv/)
+#   3. Exports the Macro-Backend SystemVerilog package (exports/efpga_subsystem_asic_sv/)
+#      - Flow: asic (FILE_LISTS/asic/efpga_subsystem_asic.f)
 #      - Format: sv (SystemVerilog)
 #      - Includes: ASIC RTL + All MACROS/ + AXI_LIB + Testbenches + Golden Vectors
 #
@@ -29,20 +31,22 @@ echo "==========================================================================
 
 echo ""
 echo "================================================================================"
-echo "[2/3] Exporting Icarus Simulation Package (exports/efpga_subsystem_v/)..."
+echo "[2/3] Exporting Icarus Simulation Package (exports/efpga_subsystem_simulation_v/)..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target efpga_subsystem \
+    --flow simulation \
     --format v \
     --include-tb \
     --include-hal
 
 echo ""
 echo "================================================================================"
-echo "[3/3] Exporting Macro-Backend ASIC Package (exports/efpga_subsystem_sv/)..."
+echo "[3/3] Exporting Macro-Backend ASIC Package (exports/efpga_subsystem_asic_sv/)..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target efpga_subsystem \
+    --flow asic \
     --format sv \
     --include-tb \
     --include-lib \
@@ -51,8 +55,7 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
 echo ""
 echo "================================================================================"
 echo "All exports complete:"
-echo "  - Icarus Simulation (Verilog-2001, TBs, HAL):  ${REPO_ROOT}/exports/efpga_subsystem_v/"
-echo "  - Macro-Backend Flow (SV, Macros, Lib, TBs):   ${REPO_ROOT}/exports/efpga_subsystem_sv/"
-echo "  - Vivado Emulation: Uses original RTL/ + VIVADO/ tree directly (no export needed)."
+echo "  - Icarus Simulation (Verilog-2001, TBs, HAL):  ${REPO_ROOT}/exports/efpga_subsystem_simulation_v/"
+echo "  - Macro-Backend Flow (SV, Macros, Lib, TBs):   ${REPO_ROOT}/exports/efpga_subsystem_asic_sv/"
+echo "  - Vivado Emulation: Uses original RTL/ + VIVADO/ tree directly (or run with --flow vivado)."
 echo "================================================================================"
-

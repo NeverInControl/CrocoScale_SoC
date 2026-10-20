@@ -71,11 +71,12 @@ except ImportError:
 # Dynamic Detection Utilities (Zero Hardcoding)
 # -----------------------------------------------------------------------------
 
-def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fmt: str = "v") -> Path:
+def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, flow: str = "simulation") -> Path:
     """
-    Dynamically finds the root filelist for any target:
-    - 'v'  (Simulation Verilog for Icarus): resolves FILE_LISTS/<target>.f
-    - 'sv' (Backend ASIC/Macros SystemVerilog): resolves FILE_LISTS/asic/<target>_asic.f first
+    Dynamically finds the root filelist for any target across the 3 flow trees:
+    - 'simulation': resolves FILE_LISTS/<target>.f
+    - 'asic'      : resolves FILE_LISTS/asic/<target>_asic.f (falls back to FILE_LISTS/<target>.f)
+    - 'vivado'    : resolves FILE_LISTS/vivado/<target>_vivado.f (falls back to FILE_LISTS/<target>.f)
     """
     if custom_flist:
         p = custom_flist if custom_flist.is_absolute() else repo_root / custom_flist
@@ -84,10 +85,17 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fm
         raise FileNotFoundError(f"Custom filelist not found: {p}")
 
     candidates = []
-    if fmt == "sv":
+    if flow == "asic":
         candidates.extend([
             repo_root / "FILE_LISTS" / "asic" / f"{target}_asic.f",
             repo_root / "FILE_LISTS" / "asic" / f"{target}_subsystem_asic.f",
+            repo_root / "FILE_LISTS" / "asic" / f"{target}.f",
+        ])
+    elif flow == "vivado":
+        candidates.extend([
+            repo_root / "FILE_LISTS" / "vivado" / f"{target}_vivado.f",
+            repo_root / "FILE_LISTS" / "vivado" / f"{target}_subsystem_vivado.f",
+            repo_root / "FILE_LISTS" / "vivado" / f"{target}.f",
         ])
     candidates.extend([
         repo_root / "FILE_LISTS" / f"{target}.f",
@@ -97,7 +105,7 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fm
     for c in candidates:
         if c.exists():
             return c
-    raise FileNotFoundError(f"No filelist found for target '{target}' in FILE_LISTS/. Tried: {[str(c) for c in candidates]}")
+    raise FileNotFoundError(f"No filelist found for target '{target}' (flow='{flow}') in FILE_LISTS/. Tried: {[str(c) for c in candidates]}")
 
 
 def collect_included_flists(flist_path: Path, repo_root: Path, visited: set = None) -> set:
@@ -338,6 +346,7 @@ def export_subsystem(
     output_dir: Path,
     custom_flist: Path = None,
     config_path: Path = None,
+    flow: str = "simulation",
     fmt: str = "v",
     include_tb: bool = False,
     include_hal: bool = False,
@@ -347,11 +356,11 @@ def export_subsystem(
     repo_root: Path = REPO_ROOT,
 ):
     print("=" * 80)
-    print(f"CrocoScale IP Exporter — Target: '{target}' | Format: '{fmt}'")
+    print(f"CrocoScale IP Exporter — Target: '{target}' | Flow: '{flow}' | Format: '{fmt}'")
     print("=" * 80)
 
-    # Resolve target filelist path ('v' -> Simulation filelist, 'sv' -> ASIC/Macros filelist)
-    flist_path = resolve_target_filelist(target, custom_flist, repo_root, fmt=fmt)
+    # Resolve target filelist path ('simulation' -> FILE_LISTS/, 'asic' -> FILE_LISTS/asic/, 'vivado' -> FILE_LISTS/vivado/)
+    flist_path = resolve_target_filelist(target, custom_flist, repo_root, flow=flow)
     print(f"[INFO] Root filelist: {flist_path}")
 
     # Parse and flatten RTL dependencies from filelists
@@ -370,16 +379,19 @@ def export_subsystem(
     path_mappings = config.get("path_mappings", DEFAULT_CONFIG["path_mappings"])
     strip_prefixes = config.get("strip_prefixes", DEFAULT_CONFIG["strip_prefixes"])
 
-    # Clean up previous export and HDL version directories for this module
+    # Clean up previous export and legacy directories for this module
     if clean:
         if output_dir.exists():
-            print(f"[INFO] Removing previous export/HDL version directory: {output_dir}")
+            print(f"[INFO] Removing previous export directory: {output_dir}")
             shutil.rmtree(output_dir)
 
-        legacy_dir = repo_root / "exports" / target
-        if legacy_dir.exists() and legacy_dir.resolve() != output_dir.resolve():
-            print(f"[INFO] Removing legacy un-suffixed export directory: {legacy_dir}")
-            shutil.rmtree(legacy_dir)
+        for legacy_dir in (
+            repo_root / "exports" / target,
+            repo_root / "exports" / f"{target}_{fmt}",
+        ):
+            if legacy_dir.exists() and legacy_dir.resolve() != output_dir.resolve():
+                print(f"[INFO] Removing legacy export directory: {legacy_dir}")
+                shutil.rmtree(legacy_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rtl_out_dir = output_dir / "RTL"
@@ -594,9 +606,10 @@ def export_subsystem(
     git_sha = get_git_commit(repo_root)
     manifest_path = output_dir / "EXPORT_MANIFEST.md"
     with open(manifest_path, "w", encoding="utf-8", newline="\n") as mf:
-        mf.write(f"# CrocoScale IP Package: `{target}`\n\n")
+        mf.write(f"# CrocoScale IP Package: `{target}` (`{flow}`)\n\n")
         mf.write(f"* **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)\n")
         mf.write(f"* **Commit**: `{git_sha}`\n")
+        mf.write(f"* **Target Flow**: `{flow}` (`{flist_path.relative_to(repo_root).as_posix()}`)\n")
         mf.write(f"* **Format**: `{fmt}`\n")
         mf.write(f"* **RTL Modules**: {len(copied_rtl_entries)} files in `{global_flist_name}`\n\n")
         mf.write("## Package Layout\n\n")
@@ -604,6 +617,8 @@ def export_subsystem(
         mf.write(f"* `RTL/`: Synthesizable module sources{' (including `RTL/AXI_LIB/`)' if include_lib else ''}.\n")
         if include_macros or any(e.startswith("MACROS/") for e in copied_rtl_entries):
             mf.write(f"* `MACROS/`: Foundry hard macro wrappers, blackbox models, and cell collaterals.\n")
+        if any(e.startswith("VIVADO/") for e in copied_rtl_entries):
+            mf.write(f"* `VIVADO/`: Vivado emulation primitive wrappers.\n")
         if include_tb:
             mf.write(f"* `TEST/`: Verification testbenches ({copied_tb_count} files) and golden vectors ({copied_mem_count} `.mem` files).\n")
         if include_hal and copied_hal_count > 0:
@@ -632,7 +647,16 @@ def main():
         "--target",
         type=str,
         default="efpga_subsystem",
-        help="Subsystem target name (default: 'efpga_subsystem'). Automatically resolves to FILE_LISTS/<target>.f",
+        help="Subsystem target name (default: 'efpga_subsystem').",
+    )
+    parser.add_argument(
+        "--flow",
+        "--platform",
+        dest="flow",
+        type=str,
+        choices=["simulation", "sim", "asic", "vivado"],
+        default=None,
+        help="Filelist flow tree to walk: 'simulation' (FILE_LISTS/<target>.f), 'asic' (FILE_LISTS/asic/<target>_asic.f), or 'vivado' (FILE_LISTS/vivado/<target>_vivado.f).",
     )
     parser.add_argument(
         "--filelist",
@@ -644,7 +668,7 @@ def main():
         "--output-dir",
         type=Path,
         default=None,
-        help="Destination directory for the exported package (default: exports/<target>_<format>/).",
+        help="Destination directory for the exported package (default: exports/<target>_<flow>_<format>/).",
     )
     parser.add_argument(
         "--format",
@@ -691,18 +715,41 @@ def main():
 
     args = parser.parse_args()
 
-    target_name = args.target if not args.filelist else args.filelist.stem
+    # Determine flow ('simulation', 'asic', or 'vivado')
+    if args.flow:
+        flow_name = "simulation" if args.flow == "sim" else args.flow
+    elif args.filelist:
+        fl_parts = [p.lower() for p in args.filelist.parts]
+        if "asic" in fl_parts or args.filelist.stem.endswith("_asic"):
+            flow_name = "asic"
+        elif "vivado" in fl_parts or args.filelist.stem.endswith("_vivado"):
+            flow_name = "vivado"
+        else:
+            flow_name = "simulation"
+    else:
+        flow_name = "asic" if args.format == "sv" else "simulation"
+
+    # Normalize target name (strip _asic / _vivado if derived from --filelist)
+    if args.filelist:
+        target_name = args.filelist.stem
+        for sfx in ("_asic", "_vivado"):
+            if target_name.endswith(sfx):
+                target_name = target_name[:-len(sfx)]
+    else:
+        target_name = args.target
+
     if args.output_dir:
         out_dir = args.output_dir
     else:
-        suffix = f"_{args.format}" if args.format != "both" else ""
-        out_dir = REPO_ROOT / "exports" / f"{target_name}{suffix}"
+        fmt_sfx = f"_{args.format}" if args.format != "both" else ""
+        out_dir = REPO_ROOT / "exports" / f"{target_name}_{flow_name}{fmt_sfx}"
 
     export_subsystem(
         target=target_name,
         output_dir=out_dir,
         custom_flist=args.filelist,
         config_path=args.config,
+        flow=flow_name,
         fmt=args.format,
         include_tb=args.include_tb,
         include_hal=args.include_hal,
