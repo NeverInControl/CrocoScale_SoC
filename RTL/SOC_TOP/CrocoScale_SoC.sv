@@ -420,9 +420,12 @@ module crocoscale_soc #(
         .AXI_ID_WIDTH(AXI_ID_WIDTH),
         .HW_VERSION  (HW_VERSION)
     ) efpga_subsystem_top_inst (
-        .clk_i              (clk_10mhz),
-        .rstn_i             (sys_rstn),
-        .rst_i              (sys_rst),
+        .clk_i                   (clk_10mhz),
+        .rst_efpga_connector_n_i (sys_rstn),
+        .rst_efpga_connector_i   (sys_rst),
+        .rst_efpga_fabric_n_i    (sys_rstn),
+        .rst_efpga_slot_n_i      ({(4*NUM_SLOTS){sys_rstn}}),
+        .rst_efpga_npu_n_i       ({NUM_SLOTS{sys_rstn}}),
 
         // Global Management Interface (from Manager Bridge M1)
         .s_axil_mgr_awaddr  (axil_mgr_awaddr),

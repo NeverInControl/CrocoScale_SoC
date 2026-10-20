@@ -25,6 +25,12 @@ module systolic_array (
 	input wire signed [(ARRAY_HEIGHT * WEIGHT_WIDTH) - 1:0] weight_shift_in;
 	input wire [WEIGHT_SPLIT - 1:0] weight_shift_en;
 	input wire swap_weights;
+	wire clk_compute;
+	cg_cell cg_compute_inst(
+		.clk_i(clk_i),
+		.enable_i(array_en),
+		.clk_o(clk_compute)
+	);
 	wire signed [ACTIVATION_WIDTH - 1:0] act_wire [0:ARRAY_HEIGHT - 1][0:ARRAY_WIDTH + 0];
 	wire signed [PSUM_WIDTH - 1:0] psum_wire [0:ARRAY_HEIGHT + 0][0:ARRAY_WIDTH - 1];
 	wire signed [WEIGHT_WIDTH - 1:0] w_chain [0:ARRAY_HEIGHT - 1][0:ARRAY_WIDTH + 0];
@@ -77,8 +83,8 @@ module systolic_array (
 					.PSUM_WIDTH(PSUM_WIDTH)
 				) pe_inst(
 					.clk_i(clk_i),
+					.clk_compute(clk_compute),
 					.rst_n(rst_n),
-					.array_en(array_en),
 					.act_in(act_wire[r][c]),
 					.psum_in(psum_wire[r][c]),
 					.act_out(act_wire[r][c + 1]),

@@ -525,8 +525,11 @@ module crocoscale_soc (
 		.HW_VERSION(HW_VERSION)
 	) efpga_subsystem_top_inst(
 		.clk_i(clk_10mhz),
-		.rstn_i(sys_rstn),
-		.rst_i(sys_rst),
+		.rst_efpga_connector_n_i(sys_rstn),
+		.rst_efpga_connector_i(sys_rst),
+		.rst_efpga_fabric_n_i(sys_rstn),
+		.rst_efpga_slot_n_i({4 * NUM_SLOTS {sys_rstn}}),
+		.rst_efpga_npu_n_i({NUM_SLOTS {sys_rstn}}),
 		.s_axil_mgr_awaddr(axil_mgr_awaddr),
 		.s_axil_mgr_awprot(axil_mgr_awprot),
 		.s_axil_mgr_awvalid(axil_mgr_awvalid),

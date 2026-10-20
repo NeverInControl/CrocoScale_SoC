@@ -111,6 +111,7 @@ module tb_npu_im2col_benchmark;
         .WEIGHT_SPLIT    (WEIGHT_SPLIT)
     ) dut (
         .clk_i              (clk_i),
+        .act_clk_i          ({ARRAY_HEIGHT{clk_i}}),
         .rst_n              (rst_n),
         .array_en           (array_en),
         .psum_systolic_en   (psum_systolic_en),

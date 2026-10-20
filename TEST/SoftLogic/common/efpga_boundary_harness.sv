@@ -105,6 +105,7 @@ module efpga_boundary_harness #(
     // =========================================================================
     // NPU Facing Ports (Connected to npu_wrapper / npu_top)
     // =========================================================================
+    output wire        [ARRAY_HEIGHT-1:0]                                npu_act_clk,
     output wire                                                          npu_array_en,
     output wire                                                          npu_psum_systolic_en,
     output wire                                                          npu_psum_lut_en,
@@ -430,6 +431,7 @@ module efpga_boundary_harness #(
                 .NPU_WEIGHT_SHIFT_EN (npu_weight_shift_en[r]),
                 .NPU_XBAR_SEL        (npu_crossbar_sel[r]),
                 .NPU_OUT_ACT         (npu_out_act[r]),
+                .FAB_USER_CLK        (npu_act_clk[r]),
 
                 .FAB_ACT_ADDR        (fab_ext_act_sram_addr[r]),
                 .FAB_ACT_WDATA       (fab_ext_act_sram_wdata[r]),

@@ -131,12 +131,13 @@ module efpga_connector (
 	dma_m_rready,
 	efpga_config_we_o,
 	efpga_config_data_o,
-	slot_fabric_rst_n_o,
-	slot_npu_rst_n_o,
 	efpga_com_active_i,
 	efpga_bitbang_active_i,
 	slot_debug_in_i,
 	slot_debug_out_o,
+	slot_usr_irq_i,
+	slot_usr_irq_o,
+	slot_pmod_en_o,
 	fault_irq_o,
 	slot_dma_awprot_o,
 	slot_dma_arprot_o
@@ -287,12 +288,13 @@ module efpga_connector (
 	output wire [NUM_SLOTS - 1:0] dma_m_rready;
 	output wire efpga_config_we_o;
 	output wire [31:0] efpga_config_data_o;
-	output wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n_o;
-	output wire [NUM_SLOTS - 1:0] slot_npu_rst_n_o;
 	input wire efpga_com_active_i;
 	input wire efpga_bitbang_active_i;
 	input wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in_i;
 	output wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out_o;
+	input wire [(NUM_SLOTS * 4) - 1:0] slot_usr_irq_i;
+	output wire [(NUM_SLOTS * 4) - 1:0] slot_usr_irq_o;
+	output wire [NUM_SLOTS - 1:0] slot_pmod_en_o;
 	output wire [NUM_SLOTS - 1:0] fault_irq_o;
 	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot_o;
 	output wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot_o;
@@ -301,6 +303,7 @@ module efpga_connector (
 	wire [NUM_SLOTS - 1:0] dec_is_dec;
 	wire [NUM_SLOTS - 1:0] dec_host_act;
 	wire [NUM_SLOTS - 1:0] dec_dma_act;
+	wire [NUM_SLOTS - 1:0] slot_usr_irq_en;
 	wire [NUM_SLOTS - 1:0] pmp_r_violation;
 	wire [NUM_SLOTS - 1:0] pmp_w_violation;
 	wire [NUM_SLOTS - 1:0] slot_wb_s_en;
@@ -309,7 +312,6 @@ module efpga_connector (
 	wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] p_base;
 	wire [((NUM_SLOTS * NUM_PMP_REGIONS) * 32) - 1:0] p_limit;
 	localparam [0:0] ANY_WDOG_ENABLED = ((ENABLE_WDOG_CTRL_SLAVE | ENABLE_WDOG_DMA_MASTER) | ENABLE_WDOG_CTRL_MASTER) | ENABLE_WDOG_DMA_SLAVE;
-	wire [(NUM_SLOTS * 32) - 1:0] slot_reset_reg;
 	wire [NUM_SLOTS - 1:0] wdog_cs_to_w;
 	wire [NUM_SLOTS - 1:0] wdog_cs_to_r;
 	wire [NUM_SLOTS - 1:0] wdog_cs_pr_w;
@@ -367,12 +369,13 @@ module efpga_connector (
 		.efpga_bitbang_active_i(efpga_bitbang_active_i),
 		.slot_debug_in_i(slot_debug_in_i),
 		.slot_debug_out_o(slot_debug_out_o),
-		.slot_reset_o(slot_reset_reg),
 		.decoupler_req_o(dec_req),
 		.decoupler_force_o(dec_force),
 		.decoupler_is_decoupled_i(dec_is_dec),
 		.decoupler_host_act_i(dec_host_act),
 		.decoupler_dma_act_i(dec_dma_act),
+		.slot_usr_irq_en_o(slot_usr_irq_en),
+		.slot_pmod_en_o(slot_pmod_en_o),
 		.slot_pmp_r_violation_i(pmp_r_violation),
 		.slot_pmp_w_violation_i(pmp_w_violation),
 		.slot_wdog_cs_to_w_i(wdog_cs_to_w),
@@ -404,13 +407,7 @@ module efpga_connector (
 	generate
 		for (_gv_i_1 = 0; _gv_i_1 < NUM_SLOTS; _gv_i_1 = _gv_i_1 + 1) begin : slot_gen
 			localparam i = _gv_i_1;
-			wire [3:0] slot_fabric_rst_n = {4 {rstn_i}} & ~slot_reset_reg[(i * 32) + 3-:4];
-			wire slot_npu_rst_n = rstn_i & ~slot_reset_reg[(i * 32) + 4];
-			wire slot_wdog_rst_n = rstn_i & ~slot_reset_reg[(i * 32) + 16];
-			wire slot_bridge_ctrl_rst_n = rstn_i & ~slot_reset_reg[(i * 32) + 24];
-			wire slot_bridge_dma_rst_n = rstn_i & ~slot_reset_reg[(i * 32) + 25];
-			assign slot_fabric_rst_n_o[i * 4+:4] = slot_fabric_rst_n;
-			assign slot_npu_rst_n_o[i] = slot_npu_rst_n;
+			assign slot_usr_irq_o[i * 4+:4] = (slot_usr_irq_en[i] && !dec_is_dec[i] ? slot_usr_irq_i[i * 4+:4] : 4'b0000);
 			wire [31:0] slice_ctrl_awaddr;
 			wire [2:0] slice_ctrl_awprot;
 			wire slice_ctrl_awvalid;
@@ -748,7 +745,7 @@ module efpga_connector (
 					.WATCHDOG_LIMIT(512)
 				) inst_wdog_cm(
 					.clk_i(clk_i),
-					.rstn_i(slot_wdog_rst_n),
+					.rstn_i(rstn_i),
 					.awvalid(slice_ctrl_awvalid),
 					.awready(slice_ctrl_awready),
 					.awaddr(slice_ctrl_awaddr),
@@ -914,7 +911,7 @@ module efpga_connector (
 					.WATCHDOG_LIMIT(512)
 				) inst_wdog_cs(
 					.clk_i(clk_i),
-					.rstn_i(slot_wdog_rst_n),
+					.rstn_i(rstn_i),
 					.awvalid(dec_ctrl_awvalid),
 					.awready(dec_ctrl_awready),
 					.wvalid(dec_ctrl_wvalid),
@@ -1000,7 +997,7 @@ module efpga_connector (
 					.AXI_ID_WIDTH(AXI_ID_WIDTH)
 				) inst_wdog_dm(
 					.clk_i(clk_i),
-					.rstn_i(slot_wdog_rst_n),
+					.rstn_i(rstn_i),
 					.awvalid(dec_dma_awvalid),
 					.awready(dec_dma_awready),
 					.awid(dec_dma_awid),
@@ -1059,7 +1056,7 @@ module efpga_connector (
 			if (ENABLE_BRIDGE_CTRL) begin : gen_bridge_ctrl
 				bridge_soc_to_fabric_slave bridge_ctrl_inst(
 					.clk(clk_i),
-					.resetn(slot_bridge_ctrl_rst_n),
+					.resetn(rstn_i),
 					.cfg_wb_enable(slot_wb_s_en[i]),
 					.soc_awaddr(dec_ctrl_awaddr),
 					.soc_awprot(dec_ctrl_awprot),
@@ -1125,7 +1122,7 @@ module efpga_connector (
 			if (ENABLE_BRIDGE_DMA) begin : gen_bridge_dma
 				bridge_fabric_master_to_soc #(.AXI_ID_WIDTH(AXI_ID_WIDTH)) bridge_dma_inst(
 					.clk(clk_i),
-					.resetn(slot_bridge_dma_rst_n),
+					.resetn(rstn_i),
 					.cfg_wb_enable(slot_wb_m_en[i]),
 					.fab_awid(dma_s_awid[i * AXI_ID_WIDTH+:AXI_ID_WIDTH]),
 					.fab_awaddr(dma_s_awaddr[i * 32+:32]),
@@ -1251,7 +1248,7 @@ module efpga_connector (
 					.AXI_ID_WIDTH(AXI_ID_WIDTH)
 				) inst_wdog_ds(
 					.clk_i(clk_i),
-					.rstn_i(slot_wdog_rst_n),
+					.rstn_i(rstn_i),
 					.awvalid(slice_dma_awvalid),
 					.awready(slice_dma_awready),
 					.wvalid(slice_dma_wvalid),

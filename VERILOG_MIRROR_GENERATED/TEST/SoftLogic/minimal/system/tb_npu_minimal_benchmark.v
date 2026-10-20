@@ -156,6 +156,7 @@ module tb_npu_minimal_benchmark;
 	wire signed [63:0] npu_ext_act_sram_wdata;
 	wire signed [63:0] npu_act_sram_rdata;
 	wire signed [63:0] npu_out_act;
+	wire [7:0] npu_act_clk;
 	wire [3:0] efpga_usr_irq_o;
 	initial clk = 0;
 	always #(5) clk = ~clk;
@@ -272,6 +273,7 @@ module tb_npu_minimal_benchmark;
 		.soc_debug_in_o(),
 		.soc_usr_irq_o(efpga_usr_irq_o),
 		.soc_slot_soft_rst_n_i({3'b000, rst_n}),
+		.npu_act_clk(npu_act_clk),
 		.npu_array_en(npu_array_en),
 		.npu_psum_systolic_en(npu_psum_systolic_en),
 		.npu_psum_lut_en(npu_psum_lut_en),
@@ -380,6 +382,7 @@ module tb_npu_minimal_benchmark;
 		.WEIGHT_SPLIT(WEIGHT_SPLIT)
 	) npu_wrapper_inst(
 		.clk_i(clk),
+		.act_clk_i(npu_act_clk),
 		.rst_n(rst_n),
 		.array_en(npu_array_en),
 		.psum_systolic_en(npu_psum_systolic_en),
@@ -651,7 +654,7 @@ module tb_npu_minimal_benchmark;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:710:13 - tb_npu_minimal_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:713:13 - tb_npu_minimal_benchmark.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -663,7 +666,7 @@ module tb_npu_minimal_benchmark;
 			fd = $fopen(filename, "r");
 			if (fd == 0) begin
 				$display("\n[FATAL ERROR] Required memory file '%s' was NOT found!", filename);
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:719:13 - tb_npu_minimal_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:722:13 - tb_npu_minimal_benchmark.check_file_exists.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 			$fclose(fd);
@@ -677,7 +680,7 @@ module tb_npu_minimal_benchmark;
 			min_required = 1;
 			if (nonzero_count < min_required) begin
 				$display("\n[FATAL ERROR] Vector '%s' contains NO non-zero elements (%0d found, min %0d required)!", vec_name, nonzero_count, min_required);
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:732:13 - tb_npu_minimal_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:735:13 - tb_npu_minimal_benchmark.assert_vector_nonzero.<unnamed_block>\n msg: ", $time, "Zero-data assertion failure on vector: %s", vec_name);
 				$finish(1);
 			end
 		end
@@ -1078,7 +1081,7 @@ module tb_npu_minimal_benchmark;
 			$display(">>> SUCCESS: Minimal 36-Block Benchmark PASSED 100%%! <<<");
 		else begin
 			$display(">>> FAILED: Benchmark had %0d mismatches across the output tensor! <<<", errs);
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:1116:13 - tb_npu_minimal_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Minimal benchmark verification failed!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv:1119:13 - tb_npu_minimal_benchmark.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Minimal benchmark verification failed!");
 			$finish(1);
 		end
 		$finish;

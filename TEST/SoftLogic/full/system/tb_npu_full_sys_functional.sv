@@ -132,6 +132,7 @@ module tb_npu_full_sys_functional;
     wire [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] npu_ext_act_sram_wdata;
     wire [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] npu_act_sram_rdata;
     wire [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0]  npu_out_act;
+    wire [ARRAY_HEIGHT-1:0]                       npu_act_clk;
     wire [3:0]                 efpga_usr_irq_o;
 
     // =========================================================================
@@ -284,6 +285,7 @@ module tb_npu_full_sys_functional;
         .soc_slot_soft_rst_n_i   ({3'b0, rst_n}),
 
         // NPU Facing Ports
+        .npu_act_clk             (npu_act_clk),
         .npu_array_en            (npu_array_en),
         .npu_psum_systolic_en    (npu_psum_systolic_en),
         .npu_psum_lut_en         (npu_psum_lut_en),
@@ -481,6 +483,7 @@ module tb_npu_full_sys_functional;
         .WEIGHT_SPLIT    (WEIGHT_SPLIT)
     ) npu_inst (
         .clk_i                  (clk),
+        .act_clk_i              (npu_act_clk),
         .rst_n                  (rst_n),
         .array_en               (npu_array_en),
         .psum_systolic_en       (npu_psum_systolic_en),

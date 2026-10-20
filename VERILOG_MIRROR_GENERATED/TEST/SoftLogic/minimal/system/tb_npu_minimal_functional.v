@@ -78,6 +78,7 @@ module tb_npu_minimal_functional;
 	wire signed [63:0] npu_ext_act_sram_wdata;
 	wire signed [63:0] npu_act_sram_rdata;
 	wire signed [63:0] npu_out_act;
+	wire [7:0] npu_act_clk;
 	wire [3:0] efpga_usr_irq_o;
 	initial clk = 0;
 	always #(5) clk = ~clk;
@@ -140,6 +141,7 @@ module tb_npu_minimal_functional;
 		.WEIGHT_SPLIT(8)
 	) npu_wrapper_inst(
 		.clk_i(clk),
+		.act_clk_i(npu_act_clk),
 		.rst_n(rst_n),
 		.array_en(npu_array_en),
 		.psum_systolic_en(npu_psum_systolic_en),
@@ -298,6 +300,7 @@ module tb_npu_minimal_functional;
 		.soc_debug_in_o(),
 		.soc_usr_irq_o(efpga_usr_irq_o),
 		.soc_slot_soft_rst_n_i({3'b000, rst_n}),
+		.npu_act_clk(npu_act_clk),
 		.npu_array_en(npu_array_en),
 		.npu_psum_systolic_en(npu_psum_systolic_en),
 		.npu_psum_lut_en(npu_psum_lut_en),
@@ -900,7 +903,7 @@ module tb_npu_minimal_functional;
 				$display(" Checked plusarg path and standard default 'TEST/GoldenReference/'.");
 				$display(" Please provide a valid path via +MEM_DIR=<path> (e.g. in Vivado simulation settings).");
 				$display("=====================================================================================\n");
-				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:933:13 - tb_npu_minimal_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
+				$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:936:13 - tb_npu_minimal_functional.resolve_mem_dir.<unnamed_block>\n msg: ", $time, "Aborting simulation due to missing test vector files.");
 				$finish(1);
 			end
 		end
@@ -1354,7 +1357,7 @@ module tb_npu_minimal_functional;
 		if ((errors_1x1 == 0) && (errors_3x3 == 0))
 			$display(">>> ALL DUAL-MODE MINIMAL TESTS PASSED SUCCESSFULLY! <<<\n");
 		else begin
-			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:1349:13 - tb_npu_minimal_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Verification failed with errors!");
+			$display("Fatal [%0t] /mnt/c/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv:1352:13 - tb_npu_minimal_functional.<unnamed_block>.<unnamed_block>\n msg: ", $time, "Verification failed with errors!");
 			$finish(1);
 		end
 		#(100)

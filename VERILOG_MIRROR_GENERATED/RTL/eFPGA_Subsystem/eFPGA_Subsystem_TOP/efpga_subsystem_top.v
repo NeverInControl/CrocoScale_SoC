@@ -1,7 +1,10 @@
 module efpga_subsystem_top (
 	clk_i,
-	rstn_i,
-	rst_i,
+	rst_efpga_connector_n_i,
+	rst_efpga_connector_i,
+	rst_efpga_fabric_n_i,
+	rst_efpga_slot_n_i,
+	rst_efpga_npu_n_i,
 	s_axil_mgr_awaddr,
 	s_axil_mgr_awprot,
 	s_axil_mgr_awvalid,
@@ -87,9 +90,13 @@ module efpga_subsystem_top (
 	parameter signed [31:0] AXI_ID_WIDTH = 8;
 	parameter [31:0] HW_VERSION = 32'hfab00001;
 	parameter signed [31:0] WEIGHT_SPLIT = 8;
+	parameter signed [31:0] USE_LADDER_CLOCKS = 1;
 	input wire clk_i;
-	input wire rstn_i;
-	input wire rst_i;
+	input wire rst_efpga_connector_n_i;
+	input wire rst_efpga_connector_i;
+	input wire rst_efpga_fabric_n_i;
+	input wire [(NUM_SLOTS * 4) - 1:0] rst_efpga_slot_n_i;
+	input wire [NUM_SLOTS - 1:0] rst_efpga_npu_n_i;
 	input wire [31:0] s_axil_mgr_awaddr;
 	input wire [2:0] s_axil_mgr_awprot;
 	input wire s_axil_mgr_awvalid;
@@ -226,25 +233,29 @@ module efpga_subsystem_top (
 	wire [NUM_SLOTS - 1:0] axi4_dma_s_arlock;
 	wire [31:0] efpga_config_data;
 	wire efpga_config_we;
-	wire [(NUM_SLOTS * 4) - 1:0] slot_fabric_rst_n;
-	wire [NUM_SLOTS - 1:0] slot_npu_rst_n;
 	wire efpga_com_active;
 	wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in;
 	wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out;
+	wire [(NUM_SLOTS * 4) - 1:0] slot_usr_irq_raw;
+	wire [(NUM_SLOTS * 4) - 1:0] slot_usr_irq_gated;
+	wire [NUM_SLOTS - 1:0] slot_pmod_en;
+	wire [7:0] raw_pmod_io_o;
+	wire [7:0] raw_pmod_io_oe;
 	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_awprot;
 	wire [(NUM_SLOTS * 3) - 1:0] slot_dma_arprot;
+	assign efpga_usr_irq_o = slot_usr_irq_gated[0+:4];
+	assign pmod_io_o = (slot_pmod_en[0] ? raw_pmod_io_o : 8'h00);
+	assign pmod_io_oe_o = (slot_pmod_en[0] ? raw_pmod_io_oe : 8'h00);
 	reg [2:0] sclk_sync;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i)
+	always @(posedge clk_i or negedge rst_efpga_connector_n_i)
+		if (!rst_efpga_connector_n_i)
 			sclk_sync <= 3'b000;
 		else
 			sclk_sync <= {sclk_sync[1:0], efpga_cfg_sclk_i};
 	wire sclk_edge = sclk_sync[2] ^ sclk_sync[1];
 	reg [3:0] bb_edge_cnt;
-	always @(posedge clk_i or negedge rstn_i)
-		if (!rstn_i)
-			bb_edge_cnt <= 4'd0;
-		else if (!slot_fabric_rst_n[0])
+	always @(posedge clk_i or negedge rst_efpga_connector_n_i)
+		if (!rst_efpga_connector_n_i)
 			bb_edge_cnt <= 4'd0;
 		else if (sclk_edge && (bb_edge_cnt != 4'd15))
 			bb_edge_cnt <= bb_edge_cnt + 4'd1;
@@ -255,8 +266,8 @@ module efpga_subsystem_top (
 		.HW_VERSION(HW_VERSION)
 	) efpga_connector_inst(
 		.clk_i(clk_i),
-		.rstn_i(rstn_i),
-		.rst_i(rst_i),
+		.rstn_i(rst_efpga_connector_n_i),
+		.rst_i(rst_efpga_connector_i),
 		.mgr_s_awaddr(s_axil_mgr_awaddr),
 		.mgr_s_awprot(s_axil_mgr_awprot),
 		.mgr_s_awvalid(s_axil_mgr_awvalid),
@@ -386,16 +397,18 @@ module efpga_subsystem_top (
 		.dma_m_rready(m_axi_dma_rready),
 		.efpga_config_data_o(efpga_config_data),
 		.efpga_config_we_o(efpga_config_we),
-		.slot_fabric_rst_n_o(slot_fabric_rst_n),
-		.slot_npu_rst_n_o(slot_npu_rst_n),
 		.efpga_com_active_i(efpga_com_active),
 		.efpga_bitbang_active_i(bitbang_active),
 		.slot_debug_in_i(slot_debug_in),
 		.slot_debug_out_o(slot_debug_out),
+		.slot_usr_irq_i(slot_usr_irq_raw),
+		.slot_usr_irq_o(slot_usr_irq_gated),
+		.slot_pmod_en_o(slot_pmod_en),
 		.slot_dma_awprot_o(slot_dma_awprot),
 		.slot_dma_arprot_o(slot_dma_arprot),
 		.fault_irq_o(efpga_fault_irq_o)
 	);
+	wire [7:0] npu_act_clk;
 	wire [71:0] npu_act_addr;
 	wire [63:0] npu_act_rdata;
 	wire [63:0] npu_act_wdata;
@@ -427,7 +440,7 @@ module efpga_subsystem_top (
 	assign axi4_dma_s_arprot = slot_dma_arprot;
 	eFPGA_top fabric_inst(
 		.CLK(clk_i),
-		.resetn(rstn_i),
+		.resetn(rst_efpga_fabric_n_i),
 		.SelfWriteData(efpga_config_data),
 		.SelfWriteStrobe(efpga_config_we),
 		.ComActive(efpga_com_active),
@@ -485,11 +498,12 @@ module efpga_subsystem_top (
 		.AXI_M_SOC_RREADY(axi4_dma_s_rready[0]),
 		.DEBUG_IN(slot_debug_in[0+:32]),
 		.DEBUG_OUT(slot_debug_out[0+:32]),
-		.SLOT_SOFT_RST_N(slot_fabric_rst_n[0+:4]),
-		.USR_IRQ(efpga_usr_irq_o),
+		.FAB_USER_CLK(npu_act_clk),
+		.SLOT_SOFT_RST_N(rst_efpga_slot_n_i[0+:4]),
+		.USR_IRQ(slot_usr_irq_raw[0+:4]),
 		.PMOD_IO_I(pmod_io_i),
-		.PMOD_IO_O(pmod_io_o),
-		.PMOD_IO_OE_O(pmod_io_oe_o),
+		.PMOD_IO_O(raw_pmod_io_o),
+		.PMOD_IO_OE_O(raw_pmod_io_oe),
 		.NPU_ARRAY_EN(npu_array_en),
 		.NPU_PSUM_SYSTOLIC_EN(npu_psum_systolic_en),
 		.NPU_PSUM_LUT_EN(npu_psum_lut_en),
@@ -521,10 +535,12 @@ module efpga_subsystem_top (
 		.WEIGHT_WIDTH(8),
 		.PSUM_WIDTH(32),
 		.SCALE_WIDTH(16),
-		.WEIGHT_SPLIT(WEIGHT_SPLIT)
+		.WEIGHT_SPLIT(WEIGHT_SPLIT),
+		.USE_LADDER_CLOCKS(USE_LADDER_CLOCKS)
 	) npu_inst(
 		.clk_i(clk_i),
-		.rst_n(slot_npu_rst_n[0]),
+		.act_clk_i(npu_act_clk),
+		.rst_n(rst_efpga_npu_n_i[0]),
 		.crossbar_sel(npu_xbar_sel),
 		.array_en(npu_array_en),
 		.psum_systolic_en(npu_psum_systolic_en),
@@ -555,6 +571,7 @@ module efpga_subsystem_top (
 	generate
 		if (NUM_SLOTS > 1) begin : gen_extra_slots
 			assign slot_debug_in[32 * (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : ((NUM_SLOTS - 1) + ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)) - 1) - (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS) - 1))+:32 * ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)] = slot_debug_out[32 * (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : ((NUM_SLOTS - 1) + ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)) - 1) - (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS) - 1))+:32 * ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)];
+			assign slot_usr_irq_raw[4 * (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : ((NUM_SLOTS - 1) + ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)) - 1) - (((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS) - 1))+:4 * ((NUM_SLOTS - 1) >= 1 ? NUM_SLOTS - 1 : 3 - NUM_SLOTS)] = 1'sb0;
 			assign axil_ctrl_m_awready[NUM_SLOTS - 1:1] = 1'sb1;
 			assign axil_ctrl_m_wready[NUM_SLOTS - 1:1] = 1'sb1;
 			assign axil_ctrl_m_bresp[(NUM_SLOTS * 2) - 1:2] = 1'sb0;

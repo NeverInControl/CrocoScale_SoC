@@ -124,6 +124,7 @@ module tb_npu_minimal_functional;
     wire signed [7:0][7:0] npu_act_sram_rdata;
 
     wire signed [7:0][7:0] npu_out_act;
+    wire  [7:0]  npu_act_clk;
     wire  [3:0]  efpga_usr_irq_o;
 
     // Clock Generation: 100 MHz (10ns period)
@@ -202,6 +203,7 @@ module tb_npu_minimal_functional;
         .WEIGHT_SPLIT    (8)
     ) npu_wrapper_inst (
         .clk_i              (clk),
+        .act_clk_i          (npu_act_clk),
         .rst_n              (rst_n),
 
         .array_en           (npu_array_en),
@@ -385,6 +387,7 @@ module tb_npu_minimal_functional;
         .soc_slot_soft_rst_n_i   ({3'b0, rst_n}),
 
         // NPU Facing Ports
+        .npu_act_clk             (npu_act_clk),
         .npu_array_en            (npu_array_en),
         .npu_psum_systolic_en    (npu_psum_systolic_en),
         .npu_psum_lut_en         (npu_psum_lut_en),

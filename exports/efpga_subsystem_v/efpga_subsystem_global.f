@@ -148,6 +148,7 @@ RTL/eFPGA_Subsystem/FABulous/Fabric/Frame_Select.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_Config.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA.v
 RTL/eFPGA_Subsystem/FABulous/Fabric/eFPGA_top.v
+RTL/eFPGA_Subsystem/NPU_complex/shared/clock_gate/cg_cell.v
 RTL/eFPGA_Subsystem/NPU_complex/shared/sram/sram_bank.v
 RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.v
 RTL/eFPGA_Subsystem/NPU_complex/act_buffer/act_buffer_TOP/act_buffer_top.v

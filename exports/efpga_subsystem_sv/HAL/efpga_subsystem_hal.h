@@ -131,6 +131,7 @@ typedef volatile struct __attribute__((packed, aligned(4))) {
  * @brief GLOBAL_CTRL register bit positions (mgr_base + 0x0004).
  */
 enum efpga_global_ctrl_bits {
+    EFPGA_GLOBAL_CTRL_SOFT_RESET       = (1U << 0),  /**< Global soft reset request bit (RW) */
     EFPGA_GLOBAL_CTRL_COM_ACTIVE       = (1U << 1),
     EFPGA_GLOBAL_CTRL_DESIGN_LOADED    = (1U << 2)
 };
@@ -159,6 +160,8 @@ enum efpga_slot_reset_bits {
 enum efpga_slot_ctrl_bits {
     EFPGA_SLOT_CTRL_DECOUPLE_REQ       = (1U << 0),
     EFPGA_SLOT_CTRL_DECOUPLE_FORCE     = (1U << 1),
+    EFPGA_SLOT_CTRL_USR_IRQ_EN         = (1U << 2),
+    EFPGA_SLOT_CTRL_PMOD_EN            = (1U << 3),
     EFPGA_SLOT_CTRL_PMP_EN             = (1U << 8),
     EFPGA_SLOT_CTRL_AWPROT_SHIFT       = 10U,
     EFPGA_SLOT_CTRL_AWPROT_MASK        = (0x7U << 10),

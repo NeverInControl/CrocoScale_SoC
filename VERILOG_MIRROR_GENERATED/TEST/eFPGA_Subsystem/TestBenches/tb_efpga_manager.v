@@ -25,8 +25,8 @@ module tb_efpga_manager;
 	reg s_axil_rready;
 	wire [31:0] efpga_config_data_o;
 	wire efpga_config_we_o;
-	wire [31:0] slot_reset_o;
 	reg efpga_com_active_i;
+	reg efpga_bitbang_active_i;
 	reg [31:0] slot_debug_in_i;
 	wire [31:0] slot_debug_out_o;
 	wire [0:0] decoupler_req_o;
@@ -34,6 +34,8 @@ module tb_efpga_manager;
 	reg [0:0] decoupler_is_decoupled_i;
 	reg [0:0] decoupler_host_act_i;
 	reg [0:0] decoupler_dma_act_i;
+	wire [0:0] slot_usr_irq_en_o;
+	wire [0:0] slot_pmod_en_o;
 	reg [0:0] slot_pmp_r_violation_i;
 	reg [0:0] slot_pmp_w_violation_i;
 	reg [0:0] slot_wdog_cs_to_w_i;
@@ -98,8 +100,8 @@ module tb_efpga_manager;
 		.s_axil_rready(s_axil_rready),
 		.efpga_config_data_o(efpga_config_data_o),
 		.efpga_config_we_o(efpga_config_we_o),
-		.slot_reset_o(slot_reset_o),
 		.efpga_com_active_i(efpga_com_active_i),
+		.efpga_bitbang_active_i(efpga_bitbang_active_i),
 		.slot_debug_in_i(slot_debug_in_i),
 		.slot_debug_out_o(slot_debug_out_o),
 		.decoupler_req_o(decoupler_req_o),
@@ -107,6 +109,8 @@ module tb_efpga_manager;
 		.decoupler_is_decoupled_i(decoupler_is_decoupled_i),
 		.decoupler_host_act_i(decoupler_host_act_i),
 		.decoupler_dma_act_i(decoupler_dma_act_i),
+		.slot_usr_irq_en_o(slot_usr_irq_en_o),
+		.slot_pmod_en_o(slot_pmod_en_o),
 		.slot_pmp_r_violation_i(slot_pmp_r_violation_i),
 		.slot_pmp_w_violation_i(slot_pmp_w_violation_i),
 		.slot_wdog_cs_to_w_i(slot_wdog_cs_to_w_i),
@@ -223,6 +227,7 @@ module tb_efpga_manager;
 		s_axil_arvalid = 0;
 		s_axil_rready = 0;
 		efpga_com_active_i = 0;
+		efpga_bitbang_active_i = 0;
 		slot_debug_in_i = 0;
 		decoupler_is_decoupled_i = 0;
 		decoupler_host_act_i = 0;
@@ -255,45 +260,26 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] HW_VERSION (0x0000): 0x%08X matches expected FAB magic", rdata);
-		axi_write(32'h00000004, 32'h00000004);
+		axi_write(32'h00000004, 32'h00000005);
 		#(10)
 			;
 		axi_read(32'h00000004, rdata);
-		if (rdata[2] !== 1'b1) begin
-			$display("[FAIL] GLOBAL_CTRL: USER_DESIGN_LOADED bit not set!");
+		if ((rdata[2] !== 1'b1) || (rdata[0] !== 1'b0)) begin
+			$display("[FAIL] GLOBAL_CTRL: Expected rdata[2]=1 and reserved rdata[0]=0! Got rdata=0x%08X", rdata);
 			errors = errors + 1;
 		end
 		else
-			$display("[PASS] GLOBAL_CTRL (0x0004): USER_DESIGN_LOADED active");
-		if (slot_reset_o[0+:32] !== 32'h00000000) begin
-			$display("[FAIL] SLOT_RESET: Initial reset state not 0! Got 0x%08X", slot_reset_o[0+:32]);
-			errors = errors + 1;
-		end
+			$display("[PASS] GLOBAL_CTRL (0x0004): USER_DESIGN_LOADED set, vacant bit 0 reads 0");
 		axi_write(32'h00001000, 32'h0301001f);
 		#(10)
 			;
-		if (slot_reset_o[0+:32] !== 32'h0301001f) begin
-			$display("[FAIL] SLOT_RESET (0x1000): slot_reset_o[0] mismatch! Got 0x%08X", slot_reset_o[0+:32]);
-			errors = errors + 1;
-		end
-		else
-			$display("[PASS] SLOT_RESET (0x1000): slot_reset_o[0] asserted high on write: 0x%08X", slot_reset_o[0+:32]);
 		axi_read(32'h00001000, rdata);
-		if (rdata !== 32'h0301001f) begin
-			$display("[FAIL] SLOT_RESET (0x1000): Readback mismatch! Got 0x%08X", rdata);
+		if (rdata !== 32'h00000000) begin
+			$display("[FAIL] SLOT_RESET (0x1000): Expected 0x00000000 on vacant register readback! Got 0x%08X", rdata);
 			errors = errors + 1;
 		end
 		else
-			$display("[PASS] SLOT_RESET (0x1000): Readback matched 0x%08X", rdata);
-		axi_write(32'h00001000, 32'h00000000);
-		#(10)
-			;
-		if (slot_reset_o[0+:32] !== 32'h00000000) begin
-			$display("[FAIL] SLOT_RESET: slot_reset_o[0] not deasserted! Got 0x%08X", slot_reset_o[0+:32]);
-			errors = errors + 1;
-		end
-		else
-			$display("[PASS] SLOT_RESET (0x1000): slot_reset_o[0] released low");
+			$display("[PASS] SLOT_RESET (0x1000): Vacant register write accepted (driver compatible) and reads back 0x00000000");
 		axi_read(32'h0000000c, rdata);
 		if (rdata !== 32'd0) begin
 			$display("[FAIL] Initial CONFIG_COUNT not 0! Got %0d", rdata);
@@ -319,15 +305,26 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] CONFIG_COUNT (0x000C): Word counter accurately incremented to 2");
-		axi_write_strb(32'h00001004, 32'h00000001, 4'b0001);
-		#(10)
-			;
-		if (decoupler_req_o[0] !== 1'b1) begin
-			$display("[FAIL] SLOT_CTRL: decoupler_req_o[0] not asserted!");
+		if ((slot_usr_irq_en_o[0] !== 1'b0) || (slot_pmod_en_o[0] !== 1'b0)) begin
+			$display("[FAIL] SLOT_CTRL Reset Default: slot_usr_irq_en_o=%b, slot_pmod_en_o=%b (expected 0, 0)", slot_usr_irq_en_o[0], slot_pmod_en_o[0]);
 			errors = errors + 1;
 		end
 		else
-			$display("[PASS] SLOT_CTRL (0x1004): Decouple request asserted to connector");
+			$display("[PASS] SLOT_CTRL (0x1004): USR_IRQ_EN and PMOD_EN reset safely to 0");
+		axi_write_strb(32'h00001004, 32'h0000000d, 4'b0001);
+		#(10)
+			;
+		if (((decoupler_req_o[0] !== 1'b1) || (slot_usr_irq_en_o[0] !== 1'b1)) || (slot_pmod_en_o[0] !== 1'b1)) begin
+			$display("[FAIL] SLOT_CTRL: decoupler_req_o=%b, slot_usr_irq_en_o=%b, slot_pmod_en_o=%b (expected 1, 1, 1)", decoupler_req_o[0], slot_usr_irq_en_o[0], slot_pmod_en_o[0]);
+			errors = errors + 1;
+		end
+		else
+			$display("[PASS] SLOT_CTRL (0x1004): Decouple req, USR_IRQ_EN, and PMOD_EN asserted to connector");
+		axi_read(32'h00001004, rdata);
+		if (rdata[3:0] !== 4'b1101) begin
+			$display("[FAIL] SLOT_CTRL readback byte 0 mismatch! Got 0x%X (expected 0xD)", rdata[3:0]);
+			errors = errors + 1;
+		end
 		decoupler_is_decoupled_i[0] = 1'b1;
 		#(10)
 			;
@@ -439,17 +436,16 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] Watchdog Fault: Timeout latched into STATUS[19]");
-		axi_write(32'h00001000, 32'h00010000);
+		axi_write(32'h0000100c, 32'h00080000);
 		#(10)
 			;
 		axi_read(32'h00001008, rdata);
 		if (rdata[19] !== 1'b0) begin
-			$display("[FAIL] WDOG_RST did not auto-clear sticky fault flag in STATUS[19]!");
+			$display("[FAIL] FAULT_CLEAR (0x100C[19]) did not clear sticky fault flag in STATUS[19]!");
 			errors = errors + 1;
 		end
 		else
-			$display("[PASS] WDOG_RST (0x1000[16]): Soft reset automatically cleared sticky watchdog fault flag");
-		axi_write(32'h00001000, 32'h00000000);
+			$display("[PASS] FAULT_CLEAR (0x100C[19]): Strobe cleared sticky watchdog fault flag");
 		if ((slot_dma_awprot_o[2:0] !== 3'b000) || (slot_dma_arprot_o[2:0] !== 3'b000)) begin
 			$display("[FAIL] DMA PROT Reset Default failed! AWPROT=%b, ARPROT=%b", slot_dma_awprot_o[2:0], slot_dma_arprot_o[2:0]);
 			errors = errors + 1;

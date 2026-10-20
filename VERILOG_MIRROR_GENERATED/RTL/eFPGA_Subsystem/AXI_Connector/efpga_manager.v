@@ -26,12 +26,13 @@ module efpga_manager (
 	efpga_bitbang_active_i,
 	slot_debug_in_i,
 	slot_debug_out_o,
-	slot_reset_o,
 	decoupler_req_o,
 	decoupler_force_o,
 	decoupler_is_decoupled_i,
 	decoupler_host_act_i,
 	decoupler_dma_act_i,
+	slot_usr_irq_en_o,
+	slot_pmod_en_o,
 	slot_pmp_r_violation_i,
 	slot_pmp_w_violation_i,
 	slot_wdog_cs_to_w_i,
@@ -99,12 +100,13 @@ module efpga_manager (
 	input wire efpga_bitbang_active_i;
 	input wire [(NUM_SLOTS * 32) - 1:0] slot_debug_in_i;
 	output wire [(NUM_SLOTS * 32) - 1:0] slot_debug_out_o;
-	output wire [(NUM_SLOTS * 32) - 1:0] slot_reset_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_req_o;
 	output wire [NUM_SLOTS - 1:0] decoupler_force_o;
 	input wire [NUM_SLOTS - 1:0] decoupler_is_decoupled_i;
 	input wire [NUM_SLOTS - 1:0] decoupler_host_act_i;
 	input wire [NUM_SLOTS - 1:0] decoupler_dma_act_i;
+	output wire [NUM_SLOTS - 1:0] slot_usr_irq_en_o;
+	output wire [NUM_SLOTS - 1:0] slot_pmod_en_o;
 	input wire [NUM_SLOTS - 1:0] slot_pmp_r_violation_i;
 	input wire [NUM_SLOTS - 1:0] slot_pmp_w_violation_i;
 	input wire [NUM_SLOTS - 1:0] slot_wdog_cs_to_w_i;
@@ -164,18 +166,17 @@ module efpga_manager (
 	reg com_active_q;
 	reg bitbang_active_q;
 	reg bitbang_sticky_reg;
-	reg [(NUM_SLOTS * 4) - 1:0] slot_reset_fabric_reg;
-	reg [NUM_SLOTS - 1:0] slot_reset_npu_reg;
-	reg [NUM_SLOTS - 1:0] slot_reset_wdog_reg;
-	reg [NUM_SLOTS - 1:0] slot_reset_bridge_ctrl_reg;
-	reg [NUM_SLOTS - 1:0] slot_reset_bridge_dma_reg;
 	reg [NUM_SLOTS - 1:0] dec_req_reg;
 	reg [NUM_SLOTS - 1:0] dec_force_reg;
+	reg [NUM_SLOTS - 1:0] usr_irq_en_reg;
+	reg [NUM_SLOTS - 1:0] pmod_en_reg;
 	reg [(NUM_SLOTS * 32) - 1:0] slot_debug_out_reg;
 	reg [(NUM_SLOTS * 3) - 1:0] dma_awprot_reg;
 	reg [(NUM_SLOTS * 3) - 1:0] dma_arprot_reg;
 	assign slot_debug_out_o = slot_debug_out_reg;
 	assign decoupler_req_o = dec_req_reg;
+	assign slot_usr_irq_en_o = usr_irq_en_reg;
+	assign slot_pmod_en_o = pmod_en_reg;
 	assign slot_dma_awprot_o = dma_awprot_reg;
 	assign slot_dma_arprot_o = dma_arprot_reg;
 	wire axi_write_en = (((s_axil_awvalid && s_axil_wvalid) && !axi_awready) && !axi_wready) && !axi_bvalid;
@@ -349,11 +350,11 @@ module efpga_manager (
 							begin
 								if (raw_dm_pr[j])
 									wdog_dm_pr_reg[j] <= 1'b1;
-								else if (slot_reset_wdog_reg[j] || ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[16]))
+								else if ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[16])
 									wdog_dm_pr_reg[j] <= 1'b0;
 								if (raw_dm_to[j])
 									wdog_dm_to_reg[j] <= 1'b1;
-								else if (slot_reset_wdog_reg[j] || ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[17]))
+								else if ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[17])
 									wdog_dm_to_reg[j] <= 1'b0;
 							end
 					end
@@ -394,11 +395,11 @@ module efpga_manager (
 							begin
 								if (raw_cs_pr[j])
 									wdog_cs_pr_reg[j] <= 1'b1;
-								else if (slot_reset_wdog_reg[j] || ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[18]))
+								else if ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[18])
 									wdog_cs_pr_reg[j] <= 1'b0;
 								if (raw_cs_to[j])
 									wdog_cs_to_reg[j] <= 1'b1;
-								else if (slot_reset_wdog_reg[j] || ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[19]))
+								else if ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[19])
 									wdog_cs_to_reg[j] <= 1'b0;
 							end
 					end
@@ -455,7 +456,7 @@ module efpga_manager (
 					for (j = 0; j < NUM_SLOTS; j = j + 1)
 						if (raw_soc[j])
 							wdog_soc_reg[j] <= 1'b1;
-						else if (slot_reset_wdog_reg[j] || ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[20]))
+						else if ((((is_slot_write && (aw_slot_sel == sv2v_cast_9A159_signed(j))) && (slot_aw_offset == 12'h00c)) && s_axil_wstrb[2]) && s_axil_wdata[20])
 							wdog_soc_reg[j] <= 1'b0;
 				end
 		end
@@ -500,7 +501,6 @@ module efpga_manager (
 	generate
 		for (_gv_i_1 = 0; _gv_i_1 < NUM_SLOTS; _gv_i_1 = _gv_i_1 + 1) begin : gen_slot_outputs
 			localparam i = _gv_i_1;
-			assign slot_reset_o[i * 32+:32] = {6'd0, slot_reset_bridge_dma_reg[i], slot_reset_bridge_ctrl_reg[i], 7'd0, slot_reset_wdog_reg[i], 11'd0, slot_reset_npu_reg[i], slot_reset_fabric_reg[i * 4+:4]};
 			assign decoupler_force_o[i] = (((((((((((((dec_force_reg[i] | raw_dm_pr[i]) | raw_dm_to[i]) | raw_cs_pr[i]) | raw_cs_to[i]) | raw_soc[i]) | wdog_dm_pr_wire[i]) | wdog_dm_to_wire[i]) | wdog_cs_pr_wire[i]) | wdog_cs_to_wire[i]) | wdog_soc_wire[i]) | slot_pmp_r_violation_i[i]) | pmp_r_flag_wire[i]) | slot_pmp_w_violation_i[i]) | pmp_w_flag_wire[i];
 			assign slot_fault_irq_o[i] = (((((pmp_r_flag_wire[i] | pmp_w_flag_wire[i]) | wdog_dm_to_wire[i]) | wdog_dm_pr_wire[i]) | wdog_cs_to_wire[i]) | wdog_cs_pr_wire[i]) | wdog_soc_wire[i];
 		end
@@ -517,13 +517,10 @@ module efpga_manager (
 			com_active_q <= 1'b0;
 			bitbang_active_q <= 1'b0;
 			bitbang_sticky_reg <= 1'b0;
-			slot_reset_fabric_reg <= 1'sb0;
-			slot_reset_npu_reg <= 1'sb0;
-			slot_reset_wdog_reg <= 1'sb0;
-			slot_reset_bridge_ctrl_reg <= 1'sb0;
-			slot_reset_bridge_dma_reg <= 1'sb0;
 			dec_req_reg <= 1'sb1;
 			dec_force_reg <= 1'sb1;
+			usr_irq_en_reg <= 1'sb0;
+			pmod_en_reg <= 1'sb0;
 			slot_debug_out_reg <= 1'sb0;
 			dma_awprot_reg <= 1'sb0;
 			dma_arprot_reg <= 1'sb0;
@@ -557,22 +554,14 @@ module efpga_manager (
 					endcase
 				else if (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))
 					case (slot_aw_offset)
-						12'h000: begin
-							if (s_axil_wstrb[0]) begin
-								slot_reset_fabric_reg[aw_slot_sel * 4+:4] <= s_axil_wdata[3:0];
-								slot_reset_npu_reg[aw_slot_sel] <= s_axil_wdata[4];
-							end
-							if (s_axil_wstrb[2])
-								slot_reset_wdog_reg[aw_slot_sel] <= s_axil_wdata[16];
-							if (s_axil_wstrb[3]) begin
-								slot_reset_bridge_ctrl_reg[aw_slot_sel] <= s_axil_wdata[24];
-								slot_reset_bridge_dma_reg[aw_slot_sel] <= s_axil_wdata[25];
-							end
-						end
+						12'h000:
+							;
 						12'h004: begin
 							if (s_axil_wstrb[0]) begin
 								dec_req_reg[aw_slot_sel] <= s_axil_wdata[0];
 								dec_force_reg[aw_slot_sel] <= s_axil_wdata[1];
+								usr_irq_en_reg[aw_slot_sel] <= s_axil_wdata[2];
+								pmod_en_reg[aw_slot_sel] <= s_axil_wdata[3];
 							end
 							if (s_axil_wstrb[1]) begin
 								dma_awprot_reg[aw_slot_sel * 3+:3] <= s_axil_wdata[12:10];
@@ -620,8 +609,8 @@ module efpga_manager (
 			else if (ar_slot_idx < sv2v_cast_4_signed(NUM_SLOTS)) begin
 				if ((local_araddr[11:0] & 12'hffc) < 12'h018)
 					case (local_araddr[11:0] & 12'hffc)
-						12'h000: axi_rdata <= slot_reset_o[ar_slot_sel * 32+:32];
-						12'h004: axi_rdata <= {6'd0, wb_m_enable_wire[ar_slot_sel], wb_s_enable_wire[ar_slot_sel], 4'd0, wdog_en_cm_wire[ar_slot_sel], wdog_en_ds_wire[ar_slot_sel], wdog_en_cs_wire[ar_slot_sel], wdog_en_dm_wire[ar_slot_sel], dma_arprot_reg[ar_slot_sel * 3+:3], dma_awprot_reg[ar_slot_sel * 3+:3], 1'b0, pmp_g_en_wire[ar_slot_sel], 6'd0, dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]};
+						12'h000: axi_rdata <= 32'h00000000;
+						12'h004: axi_rdata <= {6'd0, wb_m_enable_wire[ar_slot_sel], wb_s_enable_wire[ar_slot_sel], 4'd0, wdog_en_cm_wire[ar_slot_sel], wdog_en_ds_wire[ar_slot_sel], wdog_en_cs_wire[ar_slot_sel], wdog_en_dm_wire[ar_slot_sel], dma_arprot_reg[ar_slot_sel * 3+:3], dma_awprot_reg[ar_slot_sel * 3+:3], 1'b0, pmp_g_en_wire[ar_slot_sel], 4'd0, pmod_en_reg[ar_slot_sel], usr_irq_en_reg[ar_slot_sel], dec_force_reg[ar_slot_sel], dec_req_reg[ar_slot_sel]};
 						12'h008: axi_rdata <= {11'd0, wdog_soc_wire[ar_slot_sel], wdog_cs_to_wire[ar_slot_sel], wdog_cs_pr_wire[ar_slot_sel], wdog_dm_to_wire[ar_slot_sel], wdog_dm_pr_wire[ar_slot_sel], 6'd0, pmp_w_flag_wire[ar_slot_sel], pmp_r_flag_wire[ar_slot_sel], 5'd0, decoupler_dma_act_i[ar_slot_sel], decoupler_host_act_i[ar_slot_sel], decoupler_is_decoupled_i[ar_slot_sel]};
 						12'h00c: axi_rdata <= 32'h00000000;
 						12'h010: axi_rdata <= slot_debug_out_reg[ar_slot_sel * 32+:32];

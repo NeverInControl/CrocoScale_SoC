@@ -1,5 +1,21 @@
 `timescale 1ns / 1ps
 
+/* ===============================================================================================
+ * File: RTL/eFPGA_Subsystem/AXI_Connector/axi_watchdog_master_monitor.sv
+ * Module: axi_watchdog_master_monitor
+ * Project: CrocoScale SoC — Fabric AXI4 Master Protocol & Security Monitor
+ *
+ * Architectural Note on Outstanding Write Tracking & Backpressure:
+ *   - Outstanding write tracking in awlen_fifo strictly serves WLAST protocol
+ *     verification (ENABLE_WLAST_CHECK).
+ *   - In compliance with the AXI4 specification, a master asserting AWVALID when
+ *     downstream buffers are occupied is standard request behavior and is NOT a
+ *     protocol violation. The downstream interconnect / slave is responsible for
+ *     holding AWREADY = 0 (backpressure) until queue slots become available.
+ *   - MAX_OUTSTANDING_WRITES must remain synchronized with the maximum transaction
+ *     acceptance depth of the downstream slave (e.g. crossbar write routing limit).
+ * =============================================================================================== */
+
 module axi_watchdog_master_monitor #(
     parameter bit ENABLE_TIMEOUT           = 1'b1,
     parameter bit ENABLE_DROPPED_VALID     = 1'b1,
@@ -219,24 +235,6 @@ module axi_watchdog_master_monitor #(
         end
     endgenerate
 
-    // ===================================================================
-    // Burst Beat Count & WLAST Tracking (Outstanding Burst Queue)
-    // ===================================================================
-    // Outstanding write tracking in awlen_fifo strictly serves WLAST protocol
-    // verification (ENABLE_WLAST_CHECK).
-    //
-    // In compliance with the AXI4 specification, a master asserting AWVALID when
-    // downstream buffers are occupied is standard request behavior and is not a
-    // protocol violation. The downstream interconnect / slave is responsible for
-    // holding AWREADY = 0 (backpressure) until queue slots become available.
-    //
-    // MAX_OUTSTANDING_WRITES must remain synchronized with the maximum transaction
-    // acceptance depth of the downstream interconnect (e.g. crossbar write routing limit).
-    //
-    // Architectural Note for Slave-Side Verification:
-    // When expanding the slave monitor in the reverse direction, an assertion should
-    // verify that the downstream interconnect/slave correctly asserts backpressure
-    // (holding AWREADY = 0) whenever the outstanding write capacity limit is reached.
     generate
         if (ENABLE_WLAST_CHECK) begin : gen_burst_tracking
             localparam int FIFO_DEPTH = (MAX_OUTSTANDING_WRITES < 1) ? 1 : MAX_OUTSTANDING_WRITES;
