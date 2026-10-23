@@ -1,26 +1,27 @@
 // =============================================================================
-// File: TEST/SoftLogic/flex/system/tb_npu_flex_3x3_functional.sv
-// Module: tb_npu_flex_3x3_functional
-// Project: CrocoScale SoC — 8-Bank (4x2) 3x3 Soft-Logic + AXI-Lite + AXI4 Suite
+// File: TEST/SoftLogic/flex/system/tb_npu_flex_functional.sv
+// Module: tb_npu_flex_functional
+// Project: CrocoScale SoC — 8-Bank (4x2) 3x3 & 1x1 Soft-Logic Functional Suite
 //
 // Description:
-//   End-to-end functional verification testbench for the 8-bank (4x2) 3x3
-//   soft-logic controller (npu_flex_sequencer) with AXI4-Lite CSR programming
-//   (npu_flex_axil_csr) and AXI4 Read Master fetching (npu_flex_axi_reader)
-//   connected through the physical perimeter BEL boundary harness
-//   (efpga_boundary_harness) to the hardened NPU Complex (npu_wrapper) and
-//   System AXI4 RAM (axi_ram).
+//   End-to-end functional verification testbench for the 8-bank (4x2) dual-mode
+//   (3x3 & 1x1) soft-logic controller (npu_flex_sequencer) with AXI4-Lite CSR
+//   programming (npu_flex_axil_csr) and AXI4 Read Master fetching
+//   (npu_flex_axi_reader) connected through the physical perimeter BEL boundary
+//   harness (efpga_boundary_harness) to the hardened NPU Complex (npu_wrapper)
+//   and System AXI4 RAM (axi_ram).
 //
 //   Test Suites:
-//   1. Golden Reference 32x32x8 -> 8 Multi-Tile Suite (4 Tiles + Modes A/B/C/D)
+//   1. Golden Reference 3x3 Multi-Tile Suite (32x32x8 -> 8, 4 Tiles + Modes A/B/C/D)
 //   2. Arbitrary Non-16 / Non-4 CNN Dimension Suite (H=21, W=19, Cin=5 -> 8,
 //      6 passes/tile across 2x2 tiles) verifying sub-strip row masking,
 //      partial horizontal burst truncation, and non-multiple-of-8 Cin masking.
+//   3. Golden Reference 1x1 Pointwise Suite (16x16x24 -> 8, 6 Passes + Modes A/B/C/D)
 // =============================================================================
 
 `timescale 1ns / 1ps
 
-module tb_npu_flex_3x3_functional;
+module tb_npu_flex_functional;
 
     parameter int ARRAY_HEIGHT     = 8;
     parameter int ARRAY_WIDTH      = 8;
@@ -678,6 +679,17 @@ module tb_npu_flex_3x3_functional;
     logic signed [ACTIVATION_WIDTH-1:0] gold_modeC [POOL_H * POOL_W * COUT];
     logic signed [ACTIVATION_WIDTH-1:0] gold_modeD [POOL_H * POOL_W * COUT];
 
+    // 1x1 Golden Reference Vectors (16x16, Cin=24, Cout=8, 6 Passes)
+    logic signed [ACTIVATION_WIDTH-1:0] c1_act     [16 * 16 * 24];
+    logic signed [WEIGHT_WIDTH-1:0]     c1_w       [24 * 8];
+    logic signed [31:0]                 c1_b       [8];
+    logic [31:0]                        c1_cfg     [8];
+    logic signed [31:0]                 c1_gold_raw[16 * 16 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_A  [16 * 16 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_B  [16 * 16 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_C  [8 * 8 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_D  [8 * 8 * 8];
+
     // Captured 16x16 drained output activations per tile (4 tiles x 256 pixels x 8 channels)
     logic signed [7:0] drain_lin_buf  [0:3][0:255][0:7];
     logic signed [7:0] drain_mish_buf [0:3][0:255][0:7];
@@ -855,6 +867,16 @@ module tb_npu_flex_3x3_functional;
         $readmemh({mem_dir, "func_3x3_out_mish.mem"},      gold_modeB);
         $readmemh({mem_dir, "func_3x3_out_pool.mem"},      gold_modeC);
         $readmemh({mem_dir, "func_3x3_out_mish_pool.mem"}, gold_modeD);
+
+        $readmemh({mem_dir, "func_1x1_act.mem"},           c1_act);
+        $readmemh({mem_dir, "func_1x1_w.mem"},             c1_w);
+        $readmemh({mem_dir, "func_1x1_b.mem"},             c1_b);
+        $readmemh({mem_dir, "func_1x1_cfg.mem"},           c1_cfg);
+        $readmemh({mem_dir, "func_1x1_raw.mem"},           c1_gold_raw);
+        $readmemh({mem_dir, "func_1x1_out_linear.mem"},    c1_gold_A);
+        $readmemh({mem_dir, "func_1x1_out_mish.mem"},      c1_gold_B);
+        $readmemh({mem_dir, "func_1x1_out_pool.mem"},      c1_gold_C);
+        $readmemh({mem_dir, "func_1x1_out_mish_pool.mem"}, c1_gold_D);
 
         // Populate System AXI4 RAM for Suite 1 (32x32x8, 9 passes)
         populate_system_ram(CONV_H, CONV_W, CIN, TOTAL_PASSES);
@@ -1140,9 +1162,127 @@ module tb_npu_flex_3x3_functional;
         if (arb_errors == 0)
             $display("  -> [PASS] Arbitrary 21x19x8 AXI4 Drain Writeback & Sub-Strip Zero Masking: 100%% exact!");
 
+        // ---------------------------------------------------------------------
+        // SUITE 3: Golden Reference 1x1 Pointwise (16x16, Cin=24, Cout=8, 6 Passes)
+        // ---------------------------------------------------------------------
+        $display("\n--- [SUITE 3] 1x1 Pointwise Convolution (16x16x24 -> 8, 6 Passes) via AXI-Lite CSR ---");
+        begin
+            int c1_psum_err;
+            c1_psum_err = 0;
+
+            // Populate 1x1 untiled 4-row strip activations [C=24][4][16][4] in System RAM
+            for (int c = 0; c < 24; c++) begin
+                for (int strip = 0; strip < 4; strip++) begin
+                    for (int gx = 0; gx < 16; gx++) begin
+                        logic [7:0] b0, b1, b2, b3;
+                        b0 = c1_act[((strip * 4 + 0) * 16 * 24) + (gx * 24) + c];
+                        b1 = c1_act[((strip * 4 + 1) * 16 * 24) + (gx * 24) + c];
+                        b2 = c1_act[((strip * 4 + 2) * 16 * 24) + (gx * 24) + c];
+                        b3 = c1_act[((strip * 4 + 3) * 16 * 24) + (gx * 24) + c];
+                        sys_ram_inst.mem[(ACT_BASE_ADDR >> 2) + c * 64 + strip * 16 + gx] = {b3, b2, b1, b0};
+                    end
+                end
+            end
+
+            // Populate 1x1 packed weights (8 words per pass) & biases/quant configs
+            for (int p = 0; p < 6; p++) begin
+                for (int b = 0; b < 8; b++) begin
+                    int col;
+                    col = 7 - b;
+                    sys_ram_inst.mem[(WEIGHT_BASE_ADDR >> 2) + p * 8 + b] = {
+                        c1_w[(p * 4 + 3) * 8 + col],
+                        c1_w[(p * 4 + 2) * 8 + col],
+                        c1_w[(p * 4 + 1) * 8 + col],
+                        c1_w[(p * 4 + 0) * 8 + col]
+                    };
+                end
+            end
+            for (int c = 0; c < 8; c++) begin
+                sys_ram_inst.mem[(BIAS_BASE_ADDR  >> 2) + c] = c1_b[c];
+                sys_ram_inst.mem[(QUANT_BASE_ADDR >> 2) + c] = c1_cfg[7 - c];
+            end
+
+            // Program REG_GEOM: {cfg_cin=24, img_h=16, img_w=16, tile_y=0, tile_x=0}
+            axil_write(REG_GEOM,   {8'd24, 8'd16, 8'd16, 4'd0, 4'd0});
+            axil_write(REG_CONFIG, {16'd0, 8'd6, 8'h10}); // mode_1x1=1 (bit 4), auto_drain=0
+            axil_write(REG_CTRL,   32'h0000_0001);        // START
+            wait_for_done();
+
+            // 1. Validate 1x1 Raw 32-bit PSUM Accumulators in Bank A
+            tb_peek_en = 1'b1;
+            for (int py = 0; py < 16; py++) begin
+                for (int px = 0; px < 16; px++) begin
+                    int px_idx;
+                    px_idx = py * 16 + px;
+                    for (int ch = 0; ch < 8; ch++) begin
+                        logic signed [31:0] exp_val, got_val;
+                        exp_val      = c1_gold_raw[px_idx * 8 + ch];
+                        tb_peek_addr = 8'(px_idx);
+                        tb_peek_bank = 3'(ch);
+                        repeat (3) @(posedge clk);
+                        @(negedge clk);
+                        got_val = fab_psum_A_rdata;
+                        if (got_val !== exp_val) begin
+                            c1_psum_err++;
+                            psum_errors++;
+                        end
+                    end
+                end
+            end
+            tb_peek_en = 1'b0;
+            if (c1_psum_err == 0)
+                $display("  -> [PASS] 1x1 Raw 32-bit PSUM Peek: 2048/2048 bit-exact!");
+            else
+                $display("  -> [FAIL] 1x1 Raw 32-bit PSUM Peek: %0d/2048 errors!", c1_psum_err);
+
+            // 2. Drain Modes A, B, C, D for 1x1
+            axil_write(REG_OUT_BASE, OUT_MODE_A_BASE);
+            axil_write(REG_CONFIG,   {16'd0, 8'd6, 8'h10});
+            axil_write(REG_CTRL,     32'h0000_0004);
+            wait_for_done();
+
+            axil_write(REG_OUT_BASE, OUT_MODE_B_BASE);
+            axil_write(REG_CONFIG,   {16'd0, 8'd6, 8'h30});
+            axil_write(REG_CTRL,     32'h0000_0004);
+            wait_for_done();
+
+            axil_write(REG_OUT_BASE, OUT_MODE_C_BASE);
+            axil_write(REG_CONFIG,   {16'd0, 8'd6, 8'h50});
+            axil_write(REG_CTRL,     32'h0000_0004);
+            wait_for_done();
+
+            axil_write(REG_OUT_BASE, OUT_MODE_D_BASE);
+            axil_write(REG_CONFIG,   {16'd0, 8'd6, 8'h70});
+            axil_write(REG_CTRL,     32'h0000_0004);
+            wait_for_done();
+
+            for (int y_glob = 0; y_glob < 16; y_glob++) begin
+                for (int x_glob = 0; x_glob < 16; x_glob++) begin
+                    for (int ch = 0; ch < 8; ch++) begin
+                        int flat_idx;
+                        flat_idx = (y_glob * 16 * 8) + (x_glob * 8) + ch;
+                        if (read_ram_strip_byte(OUT_MODE_A_BASE, 16, 16, ch, y_glob, x_glob) !== c1_gold_A[flat_idx]) err_a++;
+                        if (read_ram_strip_byte(OUT_MODE_B_BASE, 16, 16, ch, y_glob, x_glob) !== c1_gold_B[flat_idx]) err_b++;
+                    end
+                end
+            end
+            for (int y_glob = 0; y_glob < 8; y_glob++) begin
+                for (int x_glob = 0; x_glob < 8; x_glob++) begin
+                    for (int ch = 0; ch < 8; ch++) begin
+                        int flat_idx;
+                        flat_idx = (y_glob * 8 * 8) + (x_glob * 8) + ch;
+                        if (read_ram_strip_byte(OUT_MODE_C_BASE, 8, 8, ch, y_glob, x_glob) !== c1_gold_C[flat_idx]) err_c++;
+                        if (read_ram_strip_byte(OUT_MODE_D_BASE, 8, 8, ch, y_glob, x_glob) !== c1_gold_D[flat_idx]) err_d++;
+                    end
+                end
+            end
+            if (err_a == 0 && err_b == 0 && err_c == 0 && err_d == 0)
+                $display("  -> [PASS] 1x1 Modes A, B, C, D Hardware Drain: 100%% bit-exact!");
+        end
+
         $display("\n=========================================================================================");
         if (psum_errors == 0 && err_a == 0 && err_b == 0 && err_c == 0 && err_d == 0 && arb_errors == 0) begin
-            $display(" >>> ALL 8-BANK (4x2) 3x3 + AXI-LITE CSR + ARBITRARY-DIM TESTS PASSED (100%% BIT-EXACT) <<< ");
+            $display(" >>> ALL 8-BANK (4x2) 3x3 & 1x1 + AXI-LITE CSR + ARBITRARY-DIM TESTS PASSED (100%% BIT-EXACT) <<< ");
             $display("=========================================================================================\n");
         end else begin
             $fatal(1, "Verification FAILED with errors (PSUM=%0d, A=%0d, B=%0d, C=%0d, D=%0d, ARB=%0d)!",

@@ -1,14 +1,14 @@
 // =============================================================================
-// File: TEST/SoftLogic/flex/system/tb_npu_flex_3x3_crossbar_stress.sv
-// Module: tb_npu_flex_3x3_crossbar_stress
-// Project: CrocoScale SoC — 8-Bank (4x2) 3x3 Full AXI4 Crossbar Stress Suite
+// File: TEST/SoftLogic/flex/system/tb_npu_flex_crossbar_stress.sv
+// Module: tb_npu_flex_crossbar_stress
+// Project: CrocoScale SoC — 8-Bank (4x2) 3x3 & 1x1 Full AXI4 Interconnect Stress Suite
 //
 // Description:
-//   SoC-level interconnect stress testbench for the 8-bank (4x2) 3x3
-//   soft-logic controller (npu_flex_sequencer).
+//   SoC-level interconnect stress testbench for the 8-bank (4x2) dual-mode
+//   (3x3 & 1x1) soft-logic controller (npu_flex_sequencer).
 //
 //   Architecture Under Test:
-//   - Full Non-Blocking AXI4 Crossbar (axi_crossbar, S_COUNT=2, M_COUNT=2):
+//   - Shared-Bus AXI4 Interconnect (axi_interconnect, S_COUNT=2, M_COUNT=2):
 //       * Slave 0 (S0): Testbench CPU AXI4 Master (ONLY interface driven by TB)
 //       * Slave 1 (S1): eFPGA Fabric DMA AXI4 Master (via efpga_boundary_harness)
 //       * Master 0 (M0): System AXI4 RAM (axi_ram, 256 KB @ 0x0000_0000)
@@ -20,19 +20,19 @@
 //   - The testbench has NO direct access to sys_ram_inst.mem, NO direct AXI-Lite
 //     wires, and NO internal PSUM peek multiplexers.
 //   - All input tensors, weights, biases, quantizer configs, and LUT tables are
-//     uploaded into System RAM via AXI4 bursts over Crossbar Slave S0.
-//   - All CSR commands and status polling traverse S0 -> Crossbar -> M1 ->
+//     uploaded into System RAM via AXI4 bursts over Interconnect Slave S0.
+//   - All CSR commands and status polling traverse S0 -> Interconnect -> M1 ->
 //     axi_axil_adapter -> AXIL_S_BEL -> npu_flex_axil_csr.
 //   - While the NPU DMA engine bursts on S1 <-> M0, the emulated CPU (S0) polls
 //     CSRs and issues concurrent background RAM read/write bursts on S0 <-> M0
-//     to stress multi-master crossbar arbitration.
+//     to stress multi-master bus arbitration across both 3x3 and 1x1 layers.
 //   - Output tensors are fetched back from System RAM via AXI4 bursts over S0
 //     and compared against Golden Reference outputs (Modes A, B, C, D).
 // =============================================================================
 
 `timescale 1ns / 1ps
 
-module tb_npu_flex_3x3_crossbar_stress;
+module tb_npu_flex_crossbar_stress;
 
     parameter int ARRAY_HEIGHT     = 8;
     parameter int ARRAY_WIDTH      = 8;
@@ -1065,6 +1065,16 @@ module tb_npu_flex_3x3_crossbar_stress;
     logic signed [ACTIVATION_WIDTH-1:0] gold_modeC [POOL_H * POOL_W * COUT];
     logic signed [ACTIVATION_WIDTH-1:0] gold_modeD [POOL_H * POOL_W * COUT];
 
+    // 1x1 Golden Reference Vectors (16x16, Cin=24, Cout=8, 6 Passes)
+    logic signed [ACTIVATION_WIDTH-1:0] c1_act       [16 * 16 * 24];
+    logic signed [WEIGHT_WIDTH-1:0]     c1_w         [24 * 8];
+    logic signed [31:0]                 c1_b         [8];
+    logic [31:0]                        c1_cfg       [8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_A    [16 * 16 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_B    [16 * 16 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_C    [8 * 8 * 8];
+    logic signed [ACTIVATION_WIDTH-1:0] c1_gold_D    [8 * 8 * 8];
+
     function automatic logic signed [7:0] get_weight_val(input int p, input int r, input int c, input int cin_limit);
         int g_idx, cin_curr, tap_curr, ky_curr, kx_curr;
         g_idx = p * 8 + r;
@@ -1145,6 +1155,54 @@ module tb_npu_flex_3x3_crossbar_stress;
             };
         end
         cpu_axi_write_burst(LUT_BASE_ADDR, 64);
+    endtask
+
+    task automatic cpu_upload_1x1_dataset_to_ram();
+        int num_strips;
+        logic [31:0] byte_addr;
+        logic [7:0] b0, b1, b2, b3;
+
+        num_strips = 4; // 16 / 4 = 4 strips per channel
+
+        // 1. Upload Untiled 4-Row Strip Activations [C=24][4][16][4] via 16-Beat Burst Writes
+        for (int c = 0; c < 24; c++) begin
+            for (int strip = 0; strip < num_strips; strip++) begin
+                for (int gx = 0; gx < 16; gx++) begin
+                    b0 = c1_act[((strip * 4 + 0) * 16 * 24) + (gx * 24) + c];
+                    b1 = c1_act[((strip * 4 + 1) * 16 * 24) + (gx * 24) + c];
+                    b2 = c1_act[((strip * 4 + 2) * 16 * 24) + (gx * 24) + c];
+                    b3 = c1_act[((strip * 4 + 3) * 16 * 24) + (gx * 24) + c];
+                    cpu_burst_wbuf[gx] = {b3, b2, b1, b0};
+                end
+                byte_addr = ACT_BASE_ADDR + ((c * (num_strips * 16) + strip * 16) << 2);
+                cpu_axi_write_burst(byte_addr, 16);
+            end
+        end
+
+        // 2. Upload Packed 1x1 Weights (8 words = 32 bytes per pass) via 8-Beat Burst Writes
+        for (int p = 0; p < 6; p++) begin
+            for (int b = 0; b < 8; b++) begin
+                int col;
+                col = 7 - b;
+                b0 = c1_w[(p * 4 + 0) * 8 + col];
+                b1 = c1_w[(p * 4 + 1) * 8 + col];
+                b2 = c1_w[(p * 4 + 2) * 8 + col];
+                b3 = c1_w[(p * 4 + 3) * 8 + col];
+                cpu_burst_wbuf[b] = {b3, b2, b1, b0};
+            end
+            cpu_axi_write_burst(WEIGHT_BASE_ADDR + (p * 32), 8);
+        end
+
+        // 3. Upload 1x1 Biases (8 words) & Quantizer Configs (8 words) via 8-Beat Bursts
+        for (int c = 0; c < 8; c++) begin
+            cpu_burst_wbuf[c] = c1_b[c];
+        end
+        cpu_axi_write_burst(BIAS_BASE_ADDR, 8);
+
+        for (int c = 0; c < 8; c++) begin
+            cpu_burst_wbuf[c] = c1_cfg[7 - c];
+        end
+        cpu_axi_write_burst(QUANT_BASE_ADDR, 8);
     endtask
 
     // Fetch a full output tensor [8][ceil(H/4)][W][4] from System RAM over S0 AXI4
@@ -1252,6 +1310,15 @@ module tb_npu_flex_3x3_crossbar_stress;
         $readmemh({mem_dir, "func_3x3_out_mish.mem"},      gold_modeB);
         $readmemh({mem_dir, "func_3x3_out_pool.mem"},      gold_modeC);
         $readmemh({mem_dir, "func_3x3_out_mish_pool.mem"}, gold_modeD);
+
+        $readmemh({mem_dir, "func_1x1_act.mem"},           c1_act);
+        $readmemh({mem_dir, "func_1x1_w.mem"},             c1_w);
+        $readmemh({mem_dir, "func_1x1_b.mem"},             c1_b);
+        $readmemh({mem_dir, "func_1x1_cfg.mem"},           c1_cfg);
+        $readmemh({mem_dir, "func_1x1_out_linear.mem"},    c1_gold_A);
+        $readmemh({mem_dir, "func_1x1_out_mish.mem"},      c1_gold_B);
+        $readmemh({mem_dir, "func_1x1_out_pool.mem"},      c1_gold_C);
+        $readmemh({mem_dir, "func_1x1_out_mish_pool.mem"}, c1_gold_D);
 
         // Initialize Emulated CPU AXI4 Master Signals (S0)
         // Drive rst_n=0 at t=0, then transition tb_axi_* from X -> 0 at t=1ns
@@ -1431,17 +1498,155 @@ module tb_npu_flex_3x3_crossbar_stress;
             end
         end
 
-        $display("  -> [PASS] Mode A (Linear Requant):   %0d/8192 matches (exact: %0d, tol: %0d, err: %0d)", exact_a + tol_a, exact_a, tol_a, err_a);
-        $display("  -> [PASS] Mode B (Mish LUT Requant): %0d/8192 matches (exact: %0d, tol: %0d, err: %0d)", exact_b + tol_b, exact_b, tol_b, err_b);
-        $display("  -> [PASS] Mode C (Linear + MaxPool): %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_c + tol_c, exact_c, tol_c, err_c);
-        $display("  -> [PASS] Mode D (Mish + MaxPool):   %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_d + tol_d, exact_d, tol_d, err_d);
+        $display("  -> [PASS] 3x3 Mode A (Linear Requant):   %0d/8192 matches (exact: %0d, tol: %0d, err: %0d)", exact_a + tol_a, exact_a, tol_a, err_a);
+        $display("  -> [PASS] 3x3 Mode B (Mish LUT Requant): %0d/8192 matches (exact: %0d, tol: %0d, err: %0d)", exact_b + tol_b, exact_b, tol_b, err_b);
+        $display("  -> [PASS] 3x3 Mode C (Linear + MaxPool): %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_c + tol_c, exact_c, tol_c, err_c);
+        $display("  -> [PASS] 3x3 Mode D (Mish + MaxPool):   %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_d + tol_d, exact_d, tol_d, err_d);
+        if (err_a != 0 || err_b != 0 || err_c != 0 || err_d != 0) begin
+            $fatal(1, "3x3 Crossbar Stress Verification FAILED with errors (A=%0d, B=%0d, C=%0d, D=%0d)!",
+                   err_a, err_b, err_c, err_d);
+        end
+
+        // =====================================================================
+        // PHASE 2: 1x1 POINTWISE CONVOLUTION (16x16, Cin=24, Cout=8, 6 Passes)
+        // =====================================================================
+        $display("\n--- [STEP 4] Uploading 1x1 Dataset to System RAM via Emulated CPU AXI4 Master (S0 -> M0) ---");
+        cpu_upload_1x1_dataset_to_ram();
+        $display("  -> [OK] Uploaded 16x16x24 Activations, 6-Pass 1x1 Weights, Biases & Quant Configs.");
+
+        $display("\n--- [STEP 5] Executing 1x1 Pointwise (16x16x24 -> 8, 6 Passes, Modes A/B/C/D) with Bus Contention ---");
+        begin
+            logic [31:0] irq_reg_1x1;
+
+            // Program REG_GEOM: {cfg_cin=24, img_h=16, img_w=16, tile_y=0, tile_x=0}
+            cpu_csr_write(REG_GEOM, {8'd24, 8'd16, 8'd16, 4'd0, 4'd0});
+
+            // Compute + Auto-Drain Mode A (mode_1x1=1 [bit 4], auto_drain=1 [bit 0], total_passes=6)
+            cpu_csr_write(REG_OUT_BASE, OUT_MODE_A_BASE);
+            cpu_csr_write(REG_CONFIG,   {16'd0, 8'd6, 8'h11});
+            cpu_csr_write(REG_CTRL,     32'h0000_0001); // START
+            cpu_wait_for_npu_done_with_bus_stress();
+
+            cpu_csr_read(REG_IRQ_STATUS, irq_reg_1x1);
+            if (!irq_reg_1x1[0]) $fatal(1, "IRQ_STATUS not set after 1x1 Tile (0,0)!");
+            cpu_csr_write(REG_IRQ_STATUS, 32'h0000_0001);
+
+            // Re-Drain Mode B (mode_1x1=1, lut_en=1 [bit 5]) -> OUT_MODE_B_BASE
+            cpu_csr_write(REG_OUT_BASE, OUT_MODE_B_BASE);
+            cpu_csr_write(REG_CONFIG,   {16'd0, 8'd6, 8'h30});
+            cpu_csr_write(REG_CTRL,     32'h0000_0004); // START_DRAIN
+            cpu_wait_for_npu_done_with_bus_stress();
+
+            // Re-Drain Mode C (mode_1x1=1, pool_en=1 [bit 6]) -> OUT_MODE_C_BASE
+            cpu_csr_write(REG_OUT_BASE, OUT_MODE_C_BASE);
+            cpu_csr_write(REG_CONFIG,   {16'd0, 8'd6, 8'h50});
+            cpu_csr_write(REG_CTRL,     32'h0000_0004); // START_DRAIN
+            cpu_wait_for_npu_done_with_bus_stress();
+
+            // Re-Drain Mode D (mode_1x1=1, pool_en=1, lut_en=1) -> OUT_MODE_D_BASE
+            cpu_csr_write(REG_OUT_BASE, OUT_MODE_D_BASE);
+            cpu_csr_write(REG_CONFIG,   {16'd0, 8'd6, 8'h70});
+            cpu_csr_write(REG_CTRL,     32'h0000_0004); // START_DRAIN
+            cpu_wait_for_npu_done_with_bus_stress();
+        end
+
+        $display("\n--- [STEP 6] Fetching 1x1 Output Tensors from RAM via Emulated CPU AXI4 Master (S0 -> M0) ---");
+
+        // Validate 1x1 Mode A (Linear Requant)
+        cpu_fetch_output_tensor_from_ram(OUT_MODE_A_BASE, 16, 16);
+        err_a = 0; tol_a = 0; exact_a = 0;
+        for (int y_glob = 0; y_glob < 16; y_glob++) begin
+            for (int x_glob = 0; x_glob < 16; x_glob++) begin
+                for (int ch = 0; ch < 8; ch++) begin
+                    int flat_idx, diff_a;
+                    logic signed [7:0] exp_a, got_a;
+                    flat_idx = (y_glob * 16 * 8) + (x_glob * 8) + ch;
+                    exp_a    = c1_gold_A[flat_idx];
+                    got_a    = get_fetched_strip_byte(16, 16, ch, y_glob, x_glob);
+                    diff_a   = (got_a > exp_a) ? (got_a - exp_a) : (exp_a - got_a);
+                    if (diff_a == 0) exact_a++; else if (diff_a <= 1) tol_a++; else begin
+                        if (err_a < 5)
+                            $display("     [ERR 1x1 MODE A] Y=%0d X=%0d C=%0d | Exp: %0d | Got: %0d", y_glob, x_glob, ch, exp_a, got_a);
+                        err_a++;
+                    end
+                end
+            end
+        end
+
+        // Validate 1x1 Mode B (Mish LUT Requant)
+        cpu_fetch_output_tensor_from_ram(OUT_MODE_B_BASE, 16, 16);
+        err_b = 0; tol_b = 0; exact_b = 0;
+        for (int y_glob = 0; y_glob < 16; y_glob++) begin
+            for (int x_glob = 0; x_glob < 16; x_glob++) begin
+                for (int ch = 0; ch < 8; ch++) begin
+                    int flat_idx, diff_b;
+                    logic signed [7:0] exp_b, got_b;
+                    flat_idx = (y_glob * 16 * 8) + (x_glob * 8) + ch;
+                    exp_b    = c1_gold_B[flat_idx];
+                    got_b    = get_fetched_strip_byte(16, 16, ch, y_glob, x_glob);
+                    diff_b   = (got_b > exp_b) ? (got_b - exp_b) : (exp_b - got_b);
+                    if (diff_b == 0) exact_b++; else if (diff_b <= 1) tol_b++; else begin
+                        if (err_b < 5)
+                            $display("     [ERR 1x1 MODE B] Y=%0d X=%0d C=%0d | Exp: %0d | Got: %0d", y_glob, x_glob, ch, exp_b, got_b);
+                        err_b++;
+                    end
+                end
+            end
+        end
+
+        // Validate 1x1 Mode C (Linear + 2x2 MaxPool)
+        cpu_fetch_output_tensor_from_ram(OUT_MODE_C_BASE, 8, 8);
+        err_c = 0; tol_c = 0; exact_c = 0;
+        for (int y_glob = 0; y_glob < 8; y_glob++) begin
+            for (int x_glob = 0; x_glob < 8; x_glob++) begin
+                for (int ch = 0; ch < 8; ch++) begin
+                    int flat_idx, diff_c;
+                    logic signed [7:0] exp_c, got_c;
+                    flat_idx = (y_glob * 8 * 8) + (x_glob * 8) + ch;
+                    exp_c    = c1_gold_C[flat_idx];
+                    got_c    = get_fetched_strip_byte(8, 8, ch, y_glob, x_glob);
+                    diff_c   = (got_c > exp_c) ? (got_c - exp_c) : (exp_c - got_c);
+                    if (diff_c == 0) exact_c++; else if (diff_c <= 1) tol_c++; else begin
+                        if (err_c < 5)
+                            $display("     [ERR 1x1 MODE C] Y=%0d X=%0d C=%0d | Exp: %0d | Got: %0d", y_glob, x_glob, ch, exp_c, got_c);
+                        err_c++;
+                    end
+                end
+            end
+        end
+
+        // Validate 1x1 Mode D (Mish LUT + 2x2 MaxPool)
+        cpu_fetch_output_tensor_from_ram(OUT_MODE_D_BASE, 8, 8);
+        err_d = 0; tol_d = 0; exact_d = 0;
+        for (int y_glob = 0; y_glob < 8; y_glob++) begin
+            for (int x_glob = 0; x_glob < 8; x_glob++) begin
+                for (int ch = 0; ch < 8; ch++) begin
+                    int flat_idx, diff_d;
+                    logic signed [7:0] exp_d, got_d;
+                    flat_idx = (y_glob * 8 * 8) + (x_glob * 8) + ch;
+                    exp_d    = c1_gold_D[flat_idx];
+                    got_d    = get_fetched_strip_byte(8, 8, ch, y_glob, x_glob);
+                    diff_d   = (got_d > exp_d) ? (got_d - exp_d) : (exp_d - got_d);
+                    if (diff_d == 0) exact_d++; else if (diff_d <= 1) tol_d++; else begin
+                        if (err_d < 5)
+                            $display("     [ERR 1x1 MODE D] Y=%0d X=%0d C=%0d | Exp: %0d | Got: %0d", y_glob, x_glob, ch, exp_d, got_d);
+                        err_d++;
+                    end
+                end
+            end
+        end
+
+        $display("  -> [PASS] 1x1 Mode A (Linear Requant):   %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_a + tol_a, exact_a, tol_a, err_a);
+        $display("  -> [PASS] 1x1 Mode B (Mish LUT Requant): %0d/2048 matches (exact: %0d, tol: %0d, err: %0d)", exact_b + tol_b, exact_b, tol_b, err_b);
+        $display("  -> [PASS] 1x1 Mode C (Linear + MaxPool): %0d/512 matches  (exact: %0d, tol: %0d, err: %0d)", exact_c + tol_c, exact_c, tol_c, err_c);
+        $display("  -> [PASS] 1x1 Mode D (Mish + MaxPool):   %0d/512 matches  (exact: %0d, tol: %0d, err: %0d)", exact_d + tol_d, exact_d, tol_d, err_d);
 
         $display("\n=========================================================================================");
         if (err_a == 0 && err_b == 0 && err_c == 0 && err_d == 0) begin
-            $display(" >>> FULL AXI4 CROSSBAR + AXI-AXIL BRIDGE STRESS SUITE PASSED (100%% BIT-EXACT) <<< ");
+            $display(" >>> FULL AXI4 CROSSBAR + AXI-AXIL BRIDGE 3x3 & 1x1 STRESS SUITE PASSED (100%% BIT-EXACT) <<< ");
             $display("=========================================================================================\n");
         end else begin
-            $fatal(1, "Crossbar Stress Verification FAILED with errors (A=%0d, B=%0d, C=%0d, D=%0d)!",
+            $fatal(1, "1x1 Crossbar Stress Verification FAILED with errors (A=%0d, B=%0d, C=%0d, D=%0d)!",
                    err_a, err_b, err_c, err_d);
         end
 

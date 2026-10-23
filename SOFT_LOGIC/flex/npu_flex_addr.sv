@@ -1,25 +1,28 @@
 // =============================================================================
-// File: SOFT_LOGIC/flex/npu_flex_addr_3x3.sv
-// Module: npu_flex_addr_3x3
-// Project: CrocoScale SoC — Direct-Bank 8-SRAM (4x2) 3x3 Address & Crossbar Driver
+// File: SOFT_LOGIC/flex/npu_flex_addr.sv
+// Module: npu_flex_addr
+// Project: CrocoScale SoC — Direct-Bank 8-SRAM (4x2) 3x3 & 1x1 Address & Crossbar Driver
 //
 // Description:
-//   Generates 3x3 im2col activation SRAM addresses and 8x8 crossbar selections
-//   across all 8 activation SRAM banks configured as a 4x2 grid:
-//     bank = {target_ly[1:0], target_lx >= 9}
-//   Eliminates the 8-row x 8-bank 9-bit combinational address crossbar by
-//   computing each bank's read address directly from its fixed bank coordinates
-//   (G = bank[2:1], H = bank[0]) and the shared scanline wrap state.
-//   Supports runtime input channel count (cfg_cin_i) without multipliers.
+//   Generates dual-mode (3x3 im2col and 1x1 pointwise) activation SRAM read
+//   addresses and 8x8 crossbar selections across all 8 activation SRAM banks:
+//   - 3x3 Mode (mode_1x1_i == 0): 4x2 bank grid (bank = {target_ly[1:0], target_lx >= 9}),
+//     computing each bank's read address directly from its fixed bank coordinates
+//     (G = bank[2:1], H = bank[0]) and the shared scanline wrap state without an
+//     8x8 9-bit address crossbar.
+//   - 1x1 Mode (mode_1x1_i == 1): Half-array ping-pong double buffering across
+//     Banks 0..3 (even passes) and Banks 4..7 (odd passes) using only 2 crossbar
+//     configurations while the opposite 4 banks are filled by AXI.
 // =============================================================================
 
 `timescale 1ns / 1ps
 
-module npu_flex_addr_3x3 #(
+module npu_flex_addr #(
     parameter int ARRAY_HEIGHT = 8
 ) (
     input  wire        clk_i,
     input  wire        rst_n,
+    input  wire        mode_1x1_i,
     input  wire [2:0]  state_i,
     input  wire [7:0]  pass_cnt_i,
     input  wire [8:0]  k_cnt_i,
@@ -27,7 +30,7 @@ module npu_flex_addr_3x3 #(
     input  wire        preload_done_i,
     input  wire        pass_advance_i,
 
-    // Background DMA / Preload Write Interface (all 8 banks active in 4x2 layout)
+    // Background DMA / Preload Write Interface (all 8 banks)
     input  wire [7:0]      dma_we_i,
     input  wire [7:0][8:0] dma_addr_i,
     output logic [7:0]     bank_read_used_o,
@@ -65,6 +68,8 @@ module npu_flex_addr_3x3 #(
     // -------------------------------------------------------------------------
     logic [ARRAY_HEIGHT-1:0]      row_active;
     logic [ARRAY_HEIGHT-1:0][2:0] row_target_bank;
+    logic [ARRAY_HEIGHT-1:0][7:0] row_m_p;
+    logic [ARRAY_HEIGHT-1:0]      row_m_p_valid;
 
     always_comb begin
         for (int r = 0; r < ARRAY_HEIGHT; r++) begin
@@ -74,20 +79,27 @@ module npu_flex_addr_3x3 #(
             logic       tap_wrap;
             logic [3:0] tap_curr;
             logic [8:0] cin_r;
+            logic [8:0] cin_1x1;
             logic [3:0] tap_data;
             logic [1:0] ky_curr, kx_curr;
             logic [1:0] ly_mod4;
             logic [4:0] target_lx;
             logic       h;
-            logic [2:0] bank;
+            logic [2:0] bank_3x3;
+            logic [2:0] bank_1x1;
+            logic       active_3x3;
+            logic       active_1x1;
 
-            m_p       = k_cnt_i - 9'(r);
-            m_p_valid = (k_cnt_i >= 9'(r)) && !m_p[8];
+            m_p              = k_cnt_i - 9'(r);
+            m_p_valid        = (k_cnt_i >= 9'(r)) && !m_p[8];
+            row_m_p[r]       = m_p[7:0];
+            row_m_p_valid[r] = m_p_valid;
 
             tap_sum   = {1'b0, tap_0} + 5'(r);
             tap_wrap  = (tap_sum >= 5'd9);
             tap_curr  = tap_wrap ? 4'(tap_sum - 5'd9) : tap_sum[3:0];
             cin_r     = {1'b0, cin_0} + {8'd0, tap_wrap};
+            cin_1x1   = {pass_cnt_i[6:0], 2'(r)};
 
             tap_data  = get_tap_data(tap_curr);
             ky_curr   = tap_data[3:2];
@@ -97,11 +109,15 @@ module npu_flex_addr_3x3 #(
             ly_mod4   = m_p[5:4] + ky_curr;
             target_lx = 5'({1'b0, m_p[3:0]} + {3'b000, kx_curr});
             h         = (target_lx >= 5'd9);
-            bank      = {ly_mod4, h};
+            bank_3x3  = {ly_mod4, h};
+            bank_1x1  = {pass_cnt_i[0], 2'(r)};
 
-            row_active[r]      = (state_i == SEQ_COMPUTE) && m_p_valid && (cin_r < {1'b0, cfg_cin_i});
-            row_target_bank[r] = bank;
-            crossbar_sel_o[r]  = row_active[r] ? {1'b0, bank} : 4'b1000;
+            active_3x3 = (state_i == SEQ_COMPUTE) && m_p_valid && (cin_r < {1'b0, cfg_cin_i});
+            active_1x1 = (state_i == SEQ_COMPUTE) && (r < 4) && m_p_valid && (cin_1x1 < {1'b0, cfg_cin_i});
+
+            row_active[r]      = mode_1x1_i ? active_1x1 : active_3x3;
+            row_target_bank[r] = mode_1x1_i ? bank_1x1   : bank_3x3;
+            crossbar_sel_o[r]  = row_active[r] ? {1'b0, row_target_bank[r]} : 4'b1000;
         end
     end
 
@@ -140,11 +156,14 @@ module npu_flex_addr_3x3 #(
             logic [3:0] x_off;
             logic [2:0] cin_slot;
             logic [5:0] page_addr;
+            logic [1:0] r_1x1;
+            logic [8:0] addr_1x1;
 
             for (int r = 0; r < ARRAY_HEIGHT; r++) begin
                 match[r] = row_active[r] && (row_target_bank[r] == 3'(b));
             end
-            bank_read_used[b] = |match;
+            bank_read_used[b] = mode_1x1_i ? ((state_i == SEQ_COMPUTE) && (b[2] == pass_cnt_i[0]))
+                                           : (|match);
 
             g_idx_b  = 2'(b >> 1);
             h_b      = b[0];
@@ -162,8 +181,11 @@ module npu_flex_addr_3x3 #(
             x_off    = cin_inc ? 4'(rel_x[4:0] - 5'd9) : rel_x[3:0];
             cin_slot = cin_0[2:0] + {2'b00, cin_inc};
 
-            page_addr         = ly_mul9 + {2'b00, x_off};
-            bank_read_addr[b] = {cin_slot, page_addr};
+            page_addr = ly_mul9 + {2'b00, x_off};
+            r_1x1     = b[1:0];
+            addr_1x1  = row_m_p_valid[r_1x1] ? {1'b0, row_m_p[r_1x1]} : 9'd0;
+
+            bank_read_addr[b] = mode_1x1_i ? addr_1x1 : {cin_slot, page_addr};
         end
     end
 
@@ -192,3 +214,4 @@ module npu_flex_addr_3x3 #(
     end
 
 endmodule
+

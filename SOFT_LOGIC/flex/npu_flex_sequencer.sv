@@ -1,15 +1,17 @@
 // =============================================================================
 // File: SOFT_LOGIC/flex/npu_flex_sequencer.sv
 // Module: npu_flex_sequencer
-// Project: CrocoScale SoC — 8-Bank (4x2) 3x3 eFPGA Soft-Logic Controller
+// Project: CrocoScale SoC — 8-Bank (4x2) Dual-Mode (3x3 & 1x1) Soft-Logic Controller
 //
 // Description:
-//   Top-level 8-bank (4x2) 3x3 convolution soft-logic controller integrating:
+//   Top-level 8-bank (4x2) dual-mode (3x3 & 1x1) convolution soft-logic controller
+//   integrating:
 //   - AXI4-Lite Slave CSR register file (npu_flex_axil_csr)
 //   - Central FSM & progression counters (npu_flex_fsm)
-//   - Direct per-bank 8-SRAM 3x3 address & crossbar driver (npu_flex_addr_3x3)
+//   - Direct per-bank 8-SRAM 3x3 & 1x1 address & crossbar driver (npu_flex_addr)
 //   - AXI4 Read Master burst engine & 8-bank staging FIFO (npu_flex_axi_reader)
 //   - PSUM ping-pong accumulation, LUT load & drain scheduler (npu_flex_psum)
+//   - Skewed drain, optional 2x2 MaxPool & AXI4 burst writer (npu_flex_axi_writer)
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -174,10 +176,10 @@ module npu_flex_sequencer #(
 
     wire                          dma_pass_ready;
     wire [7:0]                    bank_read_used;
-    wire [7:0]                    dma_ch_3x3;
-    wire [7:0]                    dma_we_3x3;
-    wire [7:0][8:0]               dma_addr_3x3;
-    wire [7:0][7:0]               dma_wdata_3x3;
+    wire [7:0]                    dma_ch;
+    wire [7:0]                    dma_we;
+    wire [7:0][8:0]               dma_addr;
+    wire [7:0][7:0]               dma_wdata;
 
     wire [7:0]                    comp_act_we;
     wire [7:0][8:0]               comp_act_addr;
@@ -193,7 +195,7 @@ module npu_flex_sequencer #(
     assign current_pass_o        = pass_cnt;
     assign cycle_in_pass_o       = k_cnt;
     assign drain_step_o          = drain_cnt;
-    assign dma_channel_to_load_o = (state == SEQ_COMPUTE && dma_ch_3x3 > 8'd0) ? $signed(dma_ch_3x3) : -8'sd1;
+    assign dma_channel_to_load_o = (state == SEQ_COMPUTE && dma_ch > 8'd0) ? $signed(dma_ch) : -8'sd1;
 
     assign array_en_o            = (state == SEQ_COMPUTE);
     assign psum_systolic_en_o    = (state == SEQ_COMPUTE);
@@ -202,7 +204,7 @@ module npu_flex_sequencer #(
 
     assign act_sram_we_o         = (state == SEQ_DRAIN) ? drain_act_we    : comp_act_we;
     assign act_sram_addr_o       = (state == SEQ_DRAIN) ? drain_act_addr  : comp_act_addr;
-    assign act_sram_wdata_o      = (state == SEQ_DRAIN) ? drain_act_wdata : dma_wdata_3x3;
+    assign act_sram_wdata_o      = (state == SEQ_DRAIN) ? drain_act_wdata : dma_wdata;
 
     // 1. AXI4-Lite Control & Status Register File
     npu_flex_axil_csr #(
@@ -303,6 +305,7 @@ module npu_flex_sequencer #(
         .rst_n                (sys_rst_n),
         .start_i              (start_pulse),
         .start_drain_i        (start_drain_pulse),
+        .mode_1x1_i           (mode_1x1),
         .lut_en_i             (lut_en),
         .state_i              (state),
         .pass_cnt_i           (pass_cnt),
@@ -314,7 +317,7 @@ module npu_flex_sequencer #(
         .drain_cnt_i          (drain_cnt),
         .bank_read_used_i     (bank_read_used),
         .dma_pass_ready_o     (dma_pass_ready),
-        .dma_channel_to_load_o(dma_ch_3x3),
+        .dma_channel_to_load_o(dma_ch),
         .dma_bank_ptr_o       (dma_bank_ptr_o),
         .act_base_i           (act_base),
         .weight_base_i        (weight_base),
@@ -335,9 +338,9 @@ module npu_flex_sequencer #(
         .m_axi_rlast          (m_axi_rlast),
         .m_axi_rvalid         (m_axi_rvalid),
         .m_axi_rready         (m_axi_rready),
-        .dma_act_we_o         (dma_we_3x3),
-        .dma_act_addr_o       (dma_addr_3x3),
-        .dma_act_wdata_o      (dma_wdata_3x3),
+        .dma_act_we_o         (dma_we),
+        .dma_act_addr_o       (dma_addr),
+        .dma_act_wdata_o      (dma_wdata),
         .weight_shift_in_o    (weight_shift_in_o),
         .weight_shift_en_o    (weight_shift_en_o),
         .quant_shift_in_o     (quant_shift_in_o),
@@ -375,20 +378,21 @@ module npu_flex_sequencer #(
         .psum_B_wdata_o     (psum_B_wdata_o)
     );
 
-    // 5. Direct-Bank 8-SRAM (4x2) 3x3 Address Generator & Crossbar Driver
-    npu_flex_addr_3x3 #(
+    // 5. Direct-Bank 8-SRAM (4x2) 3x3 & 1x1 Address Generator & Crossbar Driver
+    npu_flex_addr #(
         .ARRAY_HEIGHT(ARRAY_HEIGHT)
-    ) addr_3x3_inst (
+    ) addr_inst (
         .clk_i           (clk_i),
         .rst_n           (sys_rst_n),
+        .mode_1x1_i      (mode_1x1),
         .state_i         (state),
         .pass_cnt_i      (pass_cnt),
         .k_cnt_i         (k_cnt),
         .cfg_cin_i       (cfg_cin),
         .preload_done_i  (preload_done),
         .pass_advance_i  (pass_advance),
-        .dma_we_i        (dma_we_3x3),
-        .dma_addr_i      (dma_addr_3x3),
+        .dma_we_i        (dma_we),
+        .dma_addr_i      (dma_addr),
         .bank_read_used_o(bank_read_used),
         .crossbar_sel_o  (crossbar_sel_o),
         .act_sram_we_o   (comp_act_we),

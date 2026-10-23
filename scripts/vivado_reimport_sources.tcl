@@ -137,8 +137,8 @@ set sim_only_files [concat \
         [file normalize "$repo_root/TEST/SoftLogic/full/modules/tb_npu_full_sequencer.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv"] \
-        [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_3x3_functional.sv"] \
-        [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_3x3_crossbar_stress.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_functional.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_crossbar_stress.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_3x3_benchmark.sv"] \
         [file normalize "$repo_root/TEST/eFPGA_Subsystem/TestBenches/tb_efpga_manager.sv"] \
     ] \
