@@ -252,9 +252,11 @@ module npu_flex_axil_csr #(
         end
     end
 
-    // Combinational Read Channel Multiplexing
+    // Read Channel Multiplexing from Latched Read Address
+    logic [3:0] raddr_q;
+
     always_comb begin
-        case (s_axil_araddr[5:2])
+        case (raddr_q)
             REG_IDX_CTRL:       s_axil_rdata = {30'b0, reg_soft_reset, 1'b0};
             REG_IDX_STATUS:     s_axil_rdata = {30'b0, reg_done, fsm_busy_i};
             REG_IDX_CONFIG:     s_axil_rdata = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
@@ -270,9 +272,11 @@ module npu_flex_axil_csr #(
     always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             s_axil_rvalid <= 1'b0;
+            raddr_q       <= 4'd0;
         end else begin
             if (s_axil_arvalid && s_axil_arready) begin
                 s_axil_rvalid <= 1'b1;
+                raddr_q       <= s_axil_araddr[5:2];
             end else if (s_axil_rvalid && s_axil_rready) begin
                 s_axil_rvalid <= 1'b0;
             end

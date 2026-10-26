@@ -723,17 +723,27 @@ module tb_npu_flex_functional;
         return ($signed(m0) > $signed(m1)) ? m0 : m1;
     endfunction
 
+    function automatic int get_w_stride(input int w_dim);
+        if      (w_dim <= 16)  return 16;
+        else if (w_dim <= 32)  return 32;
+        else if (w_dim <= 64)  return 64;
+        else if (w_dim <= 128) return 128;
+        else                   return 256;
+    endfunction
+
     // =========================================================================
-    // Populate System AXI4 RAM (Untiled [C][ceil(H/4)][W][4] + Weights/Bias)
+    // Populate System AXI4 RAM (Untiled [C][ceil(H/4)][W_stride][4] + Weights/Bias)
     // =========================================================================
     task automatic populate_system_ram(input int h_dim, input int w_dim, input int cin_dim, input int num_passes);
         int word_addr;
         int num_strips;
+        int w_stride;
         logic [7:0] b0, b1, b2, b3;
 
         num_strips = (h_dim + 3) / 4;
+        w_stride   = get_w_stride(w_dim);
 
-        // 1. Untiled 4-Row Vertical Strip Activations: [C][ceil(H/4)][W][4]
+        // 1. Untiled 4-Row Vertical Strip Activations: [C][ceil(H/4)][W_stride][4]
         for (int c = 0; c < cin_dim; c++) begin
             for (int strip = 0; strip < num_strips; strip++) begin
                 for (int gx = 0; gx < w_dim; gx++) begin
@@ -741,7 +751,7 @@ module tb_npu_flex_functional;
                     b1 = ((strip * 4 + 1) < h_dim) ? fmap_in[((strip * 4 + 1) * CONV_W * CIN) + (gx * CIN) + c] : 8'hAA;
                     b2 = ((strip * 4 + 2) < h_dim) ? fmap_in[((strip * 4 + 2) * CONV_W * CIN) + (gx * CIN) + c] : 8'hAA;
                     b3 = ((strip * 4 + 3) < h_dim) ? fmap_in[((strip * 4 + 3) * CONV_W * CIN) + (gx * CIN) + c] : 8'hAA;
-                    word_addr = (ACT_BASE_ADDR >> 2) + c * (num_strips * w_dim) + strip * w_dim + gx;
+                    word_addr = (ACT_BASE_ADDR >> 2) + c * (num_strips * w_stride) + strip * w_stride + gx;
                     sys_ram_inst.mem[word_addr] = {b3, b2, b1, b0};
                 end
             end
@@ -783,7 +793,7 @@ module tb_npu_flex_functional;
         end
     endtask
 
-    // Helper to read a byte from [C][ceil(H/4)][W][4] layout in System AXI4 RAM
+    // Helper to read a byte from [C][ceil(H/4)][W_stride][4] layout in System AXI4 RAM
     function automatic logic signed [7:0] read_ram_strip_byte(
         input int base_addr,
         input int h_dim,
@@ -792,12 +802,13 @@ module tb_npu_flex_functional;
         input int gy,
         input int gx
     );
-        int num_strips, strip_idx, r_sub, word_addr;
+        int num_strips, w_stride, strip_idx, r_sub, word_addr;
         logic [31:0] w_val;
         num_strips = (h_dim + 3) / 4;
+        w_stride   = get_w_stride(w_dim);
         strip_idx  = gy / 4;
         r_sub      = gy % 4;
-        word_addr  = (base_addr >> 2) + c * (num_strips * w_dim) + strip_idx * w_dim + gx;
+        word_addr  = (base_addr >> 2) + c * (num_strips * w_stride) + strip_idx * w_stride + gx;
         w_val      = sys_ram_inst.mem[word_addr];
         case (r_sub)
             0: return $signed(w_val[7:0]);
@@ -1071,7 +1082,7 @@ module tb_npu_flex_functional;
         // ---------------------------------------------------------------------
         $display("\n--- [SUITE 2] Arbitrary Non-16/Non-4 CNN Dimensions (H=21, W=19, Cin=5 -> 8, 6 Passes) ---");
         populate_system_ram(21, 19, 5, 6);
-        for (int w = 0; w < 8 * 6 * 19; w++) begin
+        for (int w = 0; w < 8 * 6 * 32; w++) begin
             sys_ram_inst.mem[(OUT_MODE_A_BASE >> 2) + w] = 32'hDEAD_BEEF;
         end
         arb_errors = 0;

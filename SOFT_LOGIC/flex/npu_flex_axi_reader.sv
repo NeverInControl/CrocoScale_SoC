@@ -121,14 +121,18 @@ module npu_flex_axi_reader #(
     rd_state_t rd_state;
 
     // -------------------------------------------------------------------------
-    // Arbitrary-Dimension Address Pitches & Boundary Windows
+    // Power-of-Two Strip Stride Address Pitches & Boundary Windows
     // -------------------------------------------------------------------------
     wire        has_left_pad    = !mode_1x1_i && (tile_x_i == 4'd0);
+    wire [3:0]  w_shift         = (img_w_i <= 8'd16)  ? 4'd4 :
+                                  (img_w_i <= 8'd32)  ? 4'd5 :
+                                  (img_w_i <= 8'd64)  ? 4'd6 :
+                                  (img_w_i <= 8'd128) ? 4'd7 : 4'd8;
     wire [6:0]  num_strips_y    = 7'(({1'b0, img_h_i} + 9'd3) >> 2);
-    wire [31:0] strip_stride    = {22'd0, img_w_i, 2'b00};
-    wire [14:0] ch_words        = num_strips_y * img_w_i;
+    wire [31:0] strip_stride    = 32'd4 << w_shift;
+    wire [14:0] ch_words        = 15'(num_strips_y) << w_shift;
     wire [31:0] ch_stride       = {15'd0, ch_words, 2'b00};
-    wire [11:0] ty_words        = tile_y_i * img_w_i;
+    wire [11:0] ty_words        = 12'(tile_y_i) << w_shift;
     wire [31:0] ty_bytes        = {16'd0, ty_words, 4'b0000};
     wire [31:0] gx_start_3x3    = (tile_x_i == 4'd0) ? 32'd0 : {22'd0, tile_x_i - 4'd1, 6'b111100};
     wire [31:0] gx_start_1x1    = {22'd0, tile_x_i, 6'b000000};

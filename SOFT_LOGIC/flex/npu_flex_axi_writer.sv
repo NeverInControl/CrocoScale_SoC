@@ -162,6 +162,10 @@ module npu_flex_axi_writer #(
 
     wire [7:0]  h_out            = pool_en_i ? {1'b0, img_h_i[7:1]} : img_h_i;
     wire [7:0]  w_out            = pool_en_i ? {1'b0, img_w_i[7:1]} : img_w_i;
+    wire [3:0]  w_out_shift      = (w_out <= 8'd16)  ? 4'd4 :
+                                   (w_out <= 8'd32)  ? 4'd5 :
+                                   (w_out <= 8'd64)  ? 4'd6 :
+                                   (w_out <= 8'd128) ? 4'd7 : 4'd8;
     wire [8:0]  tile_x0_out      = pool_en_i ? {2'b00, tile_x_i, 3'b000} : {1'b0, tile_x_i, 4'b0000};
     wire [8:0]  tile_y0_out      = pool_en_i ? {2'b00, tile_y_i, 3'b000} : {1'b0, tile_y_i, 4'b0000};
     wire [4:0]  tile_w_max       = pool_en_i ? 5'd8 : 5'd16;
@@ -172,12 +176,12 @@ module npu_flex_axi_writer #(
     wire [7:0]  wb_awlen         = {3'd0, valid_w_beats - 5'd1};
 
     wire [6:0]  num_strips_y_out = 7'(({1'b0, h_out} + 9'd3) >> 2);
-    wire [31:0] strip_stride_out = {22'd0, w_out, 2'b00};
-    wire [14:0] ch_words_out     = num_strips_y_out * w_out;
+    wire [31:0] strip_stride_out = 32'd4 << w_out_shift;
+    wire [14:0] ch_words_out     = 15'(num_strips_y_out) << w_out_shift;
     wire [31:0] ch_stride_out    = {15'd0, ch_words_out, 2'b00};
 
     wire [5:0]  tile_strip_y0    = pool_en_i ? {1'b0, tile_y_i, 1'b0} : {tile_y_i, 2'b00};
-    wire [13:0] ty_words_out     = tile_strip_y0 * w_out;
+    wire [13:0] ty_words_out     = 14'(tile_strip_y0) << w_out_shift;
     wire [31:0] ty_bytes_out     = {16'd0, ty_words_out, 2'b00};
     wire [31:0] tx_bytes_out     = {21'd0, tile_x0_out, 2'b00};
     wire [31:0] init_wb_addr     = out_base_i + ty_bytes_out + tx_bytes_out;

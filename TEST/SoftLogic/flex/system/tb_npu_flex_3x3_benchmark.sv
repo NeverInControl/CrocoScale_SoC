@@ -29,10 +29,12 @@ module tb_npu_flex_3x3_benchmark;
     parameter int CIN              = 128;
     parameter int COUT             = 32;
 
-    localparam int CONV_H = 48;
-    localparam int CONV_W = 48;
-    localparam int POOL_H = 24;
-    localparam int POOL_W = 24;
+    localparam int CONV_H        = 48;
+    localparam int CONV_W        = 48;
+    localparam int CONV_W_STRIDE = 64;
+    localparam int POOL_H        = 24;
+    localparam int POOL_W        = 24;
+    localparam int POOL_W_STRIDE = 32;
 
     // AXI-Lite Register Byte Offsets
     localparam logic [9:0] REG_CTRL        = 10'h000;
@@ -48,11 +50,11 @@ module tb_npu_flex_3x3_benchmark;
     localparam logic [9:0] REG_GEOM        = 10'h028;
 
     localparam logic [31:0] ACT_BASE_ADDR    = 32'h0000_0000;
+    localparam logic [31:0] WEIGHT_BASE_ADDR = 32'h0006_0000;
+    localparam logic [31:0] BIAS_BASE_ADDR   = 32'h0006_A000;
+    localparam logic [31:0] QUANT_BASE_ADDR  = 32'h0006_B000;
+    localparam logic [31:0] LUT_BASE_ADDR    = 32'h0006_C000;
     localparam logic [31:0] OUT_BASE_ADDR    = 32'h0007_0000;
-    localparam logic [31:0] WEIGHT_BASE_ADDR = 32'h0005_0000;
-    localparam logic [31:0] BIAS_BASE_ADDR   = 32'h0006_0000;
-    localparam logic [31:0] QUANT_BASE_ADDR  = 32'h0006_1000;
-    localparam logic [31:0] LUT_BASE_ADDR    = 32'h0006_2000;
 
     logic clk;
     logic rst_n;
@@ -670,7 +672,7 @@ module tb_npu_flex_3x3_benchmark;
         int word_addr;
         logic [7:0] b0, b1, b2, b3;
 
-        // 1. Untiled 4-Row Vertical Strip Activations: [C=128][H/4=12][W=48][4]
+        // 1. Untiled 4-Row Vertical Strip Activations: [C=128][H/4=12][W_stride=64][4]
         for (int c = 0; c < CIN; c++) begin
             for (int strip = 0; strip < (CONV_H / 4); strip++) begin
                 for (int gx = 0; gx < CONV_W; gx++) begin
@@ -678,7 +680,7 @@ module tb_npu_flex_3x3_benchmark;
                     b1 = fmap_in[((strip * 4 + 1) * CONV_W * CIN) + (gx * CIN) + c];
                     b2 = fmap_in[((strip * 4 + 2) * CONV_W * CIN) + (gx * CIN) + c];
                     b3 = fmap_in[((strip * 4 + 3) * CONV_W * CIN) + (gx * CIN) + c];
-                    word_addr = (ACT_BASE_ADDR >> 2) + c * ((CONV_H / 4) * CONV_W) + strip * CONV_W + gx;
+                    word_addr = (ACT_BASE_ADDR >> 2) + c * ((CONV_H / 4) * CONV_W_STRIDE) + strip * CONV_W_STRIDE + gx;
                     sys_ram_inst.mem[word_addr] = {b3, b2, b1, b0};
                 end
             end
@@ -716,11 +718,11 @@ module tb_npu_flex_3x3_benchmark;
         end
     endtask
 
-    // Helper to read a byte from [C][ceil(H/4)][W][4] layout in System AXI4 RAM
+    // Helper to read a byte from [C][ceil(H/4)][W_stride][4] layout in System AXI4 RAM
     function automatic logic signed [7:0] read_ram_strip_byte(
         input int base_addr,
         input int h_dim,
-        input int w_dim,
+        input int w_stride,
         input int c,
         input int gy,
         input int gx
@@ -730,7 +732,7 @@ module tb_npu_flex_3x3_benchmark;
         num_strips = (h_dim + 3) / 4;
         strip_idx  = gy / 4;
         r_sub      = gy % 4;
-        word_addr  = (base_addr >> 2) + c * (num_strips * w_dim) + strip_idx * w_dim + gx;
+        word_addr  = (base_addr >> 2) + c * (num_strips * w_stride) + strip_idx * w_stride + gx;
         w_val      = sys_ram_inst.mem[word_addr];
         case (r_sub)
             0: return $signed(w_val[7:0]);
@@ -831,7 +833,7 @@ module tb_npu_flex_3x3_benchmark;
 
                         axil_write(REG_GEOM,        {8'(CIN), 8'(CONV_H), 8'(CONV_W), 4'(ty), 4'(tx)});
                         axil_write(REG_WEIGHT_BASE, WEIGHT_BASE_ADDR + cout_b * (TOTAL_PASSES * 64));
-                        axil_write(REG_OUT_BASE,    OUT_BASE_ADDR    + cout_b * (8 * (POOL_H / 4) * POOL_W * 4));
+                        axil_write(REG_OUT_BASE,    OUT_BASE_ADDR    + cout_b * (8 * (POOL_H / 4) * POOL_W_STRIDE * 4));
                         axil_write(REG_BIAS_BASE,   BIAS_BASE_ADDR   + cout_b * 32);
                         axil_write(REG_QUANT_BASE,  QUANT_BASE_ADDR  + cout_b * 32);
                         axil_write(REG_CTRL,        32'h0000_0001);
@@ -848,7 +850,7 @@ module tb_npu_flex_3x3_benchmark;
         end
         total_cycles = ($time - start_time) / 10;
 
-        // Validate Pooled Outputs directly from System AXI4 RAM [C_out][POOL_H/4][POOL_W][4]
+        // Validate Pooled Outputs directly from System AXI4 RAM [C_out][POOL_H/4][POOL_W_STRIDE][4]
         errs = 0; tol_ok = 0; exact_ok = 0; max_diff = 0;
         for (int b_idx = 0; b_idx < max_blocks; b_idx++) begin
             int ty, tx, cout_b;
@@ -864,9 +866,9 @@ module tb_npu_flex_3x3_benchmark;
                         flat_idx  = (y_global * POOL_W * COUT) + (x_global * COUT) + ch_global;
                         gold_val  = gold_l1[flat_idx];
                         act_val   = read_ram_strip_byte(
-                            OUT_BASE_ADDR + cout_b * (8 * (POOL_H / 4) * POOL_W * 4),
+                            OUT_BASE_ADDR + cout_b * (8 * (POOL_H / 4) * POOL_W_STRIDE * 4),
                             POOL_H,
-                            POOL_W,
+                            POOL_W_STRIDE,
                             ch_idx,
                             y_global,
                             x_global
