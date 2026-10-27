@@ -92,7 +92,7 @@ module npu_flex_sequencer #(
     // Status & Progression Outputs
     output logic                                         busy_o,
     output logic                                         done_o,
-    output logic [7:0]                                   current_pass_o,
+    output logic [10:0]                                  current_pass_o,
     output logic [8:0]                                   cycle_in_pass_o,
 
     // Array Mode Controls
@@ -129,11 +129,11 @@ module npu_flex_sequencer #(
 
     // Phase & Drain Synchronization
     output logic                                         preload_phase_o,
-    output logic signed [7:0]                            dma_channel_to_load_o,
+    output logic signed [11:0]                           dma_channel_to_load_o,
     output logic [7:0][5:0]                              dma_bank_ptr_o,
     output logic                                         lut_phase_o,
     output logic                                         drain_phase_o,
-    output logic [8:0]                                   drain_step_o
+    output logic [10:0]                                  drain_step_o
 );
 
     localparam logic [2:0] SEQ_COMPUTE = 3'd2;
@@ -147,12 +147,13 @@ module npu_flex_sequencer #(
     wire        mode_1x1;
     wire        lut_en;
     wire        pool_en;
-    wire [7:0]  csr_total_passes;
-    wire [3:0]  tile_x;
-    wire [3:0]  tile_y;
-    wire [7:0]  img_w;
-    wire [7:0]  img_h;
-    wire [7:0]  cfg_cin;
+    wire        pool_s1_en;
+    wire [10:0] csr_total_passes;
+    wire [4:0]  tile_x;
+    wire [4:0]  tile_y;
+    wire [8:0]  img_w;
+    wire [8:0]  img_h;
+    wire [10:0] cfg_cin;
     wire [31:0] act_base;
     wire [31:0] weight_base;
     wire [31:0] out_base;
@@ -160,13 +161,13 @@ module npu_flex_sequencer #(
     wire [31:0] quant_base;
     wire [31:0] lut_base;
 
-    wire [7:0]  total_passes = (csr_total_passes != 8'd0) ? csr_total_passes : 8'(TOTAL_PASSES);
+    wire [10:0] total_passes = (csr_total_passes != 11'd0) ? csr_total_passes : 11'(TOTAL_PASSES);
     wire        sys_rst_n    = rst_n && !soft_reset;
 
     wire [2:0]                    state;
-    wire [7:0]                    pass_cnt;
+    wire [10:0]                   pass_cnt;
     wire [8:0]                    k_cnt;
-    wire [8:0]                    drain_cnt;
+    wire [10:0]                   drain_cnt;
     wire                          preload_done;
     wire                          pass_advance;
     wire                          enter_lut_load;
@@ -176,7 +177,7 @@ module npu_flex_sequencer #(
 
     wire                          dma_pass_ready;
     wire [7:0]                    bank_read_used;
-    wire [7:0]                    dma_ch;
+    wire [10:0]                   dma_ch;
     wire [7:0]                    dma_we;
     wire [7:0][8:0]               dma_addr;
     wire [7:0][7:0]               dma_wdata;
@@ -195,7 +196,7 @@ module npu_flex_sequencer #(
     assign current_pass_o        = pass_cnt;
     assign cycle_in_pass_o       = k_cnt;
     assign drain_step_o          = drain_cnt;
-    assign dma_channel_to_load_o = (state == SEQ_COMPUTE && dma_ch > 8'd0) ? $signed(dma_ch) : -8'sd1;
+    assign dma_channel_to_load_o = (state == SEQ_COMPUTE && dma_ch > 11'd0) ? $signed({1'b0, dma_ch}) : -12'sd1;
 
     assign array_en_o            = (state == SEQ_COMPUTE);
     assign psum_systolic_en_o    = (state == SEQ_COMPUTE);
@@ -242,6 +243,7 @@ module npu_flex_sequencer #(
         .mode_1x1_o         (mode_1x1),
         .lut_en_o           (lut_en),
         .pool_en_o          (pool_en),
+        .pool_s1_en_o       (pool_s1_en),
         .total_passes_o     (csr_total_passes),
         .tile_x_o           (tile_x),
         .tile_y_o           (tile_y),
@@ -270,6 +272,7 @@ module npu_flex_sequencer #(
         .start_drain_i      (start_drain_pulse),
         .auto_drain_i       (auto_drain),
         .lut_en_i           (lut_en),
+        .pool_s1_en_i       (pool_s1_en),
         .total_passes_i     (total_passes),
         .dma_pass_ready_i   (dma_pass_ready),
         .lut_we_i           (lut_we),
@@ -363,6 +366,11 @@ module npu_flex_sequencer #(
         .total_passes_i     (total_passes),
         .lut_en_i           (lut_en),
         .pool_en_i          (pool_en),
+        .pool_s1_en_i       (pool_s1_en),
+        .tile_y_i           (tile_y),
+        .tile_x_i           (tile_x),
+        .img_h_i            (img_h),
+        .img_w_i            (img_w),
         .prev_pass_drained_i(prev_pass_drained),
         .bias_wdata_i       (bias_wdata),
         .bias_we_i          (bias_we),
@@ -413,6 +421,7 @@ module npu_flex_sequencer #(
         .drain_cnt_i      (drain_cnt),
         .lut_en_i         (lut_en),
         .pool_en_i        (pool_en),
+        .pool_s1_en_i     (pool_s1_en),
         .out_base_i       (out_base),
         .tile_y_i         (tile_y),
         .tile_x_i         (tile_x),

@@ -113,14 +113,14 @@ module tb_npu_flex_functional;
     // Sequencer Status & Step Outputs
     wire               seq_busy;
     wire               seq_done;
-    wire [7:0]         current_pass;
+    wire [10:0]        current_pass;
     wire [8:0]         cycle_in_pass;
     wire               preload_phase;
-    wire signed [7:0]  dma_channel_to_load;
+    wire signed [11:0] dma_channel_to_load;
     wire [7:0][5:0]    dma_bank_ptr;
     wire               lut_phase;
     wire               drain_phase;
-    wire [8:0]         drain_step;
+    wire [10:0]        drain_step;
     wire [3:0]         fab_usr_irq;
     wire [3:0]         soc_usr_irq;
 
@@ -1289,6 +1289,45 @@ module tb_npu_flex_functional;
             end
             if (err_a == 0 && err_b == 0 && err_c == 0 && err_d == 0)
                 $display("  -> [PASS] 1x1 Modes A, B, C, D Hardware Drain: 100%% bit-exact!");
+
+            // 3. Mode E: 2x2 Stride-1 Asymmetric MaxPool (pool_s1_en = 1) on 13x13 window
+            axil_write(REG_GEOM,     {8'd24, 8'd13, 8'd13, 4'd0, 4'd0});
+            axil_write(REG_OUT_BASE, OUT_MODE_C_BASE);
+            axil_write(REG_CONFIG,   {16'd0, 8'd6, 8'hB0}); // mode_1x1=1, lut_en=1, pool_s1_en=1
+            axil_write(REG_CTRL,     32'h0000_0004);
+            wait_for_done();
+
+            begin
+                int err_s1;
+                err_s1 = 0;
+                for (int y_glob = 0; y_glob < 13; y_glob++) begin
+                    for (int x_glob = 0; x_glob < 13; x_glob++) begin
+                        int y1, x1;
+                        y1 = (y_glob + 1 < 13) ? (y_glob + 1) : y_glob;
+                        x1 = (x_glob + 1 < 13) ? (x_glob + 1) : x_glob;
+                        for (int ch = 0; ch < 8; ch++) begin
+                            logic signed [7:0] v00, v01, v10, v11, exp_s1, got_s1;
+                            v00 = $signed(c1_gold_B[(y_glob * 16 * 8) + (x_glob * 8) + ch]);
+                            v01 = $signed(c1_gold_B[(y_glob * 16 * 8) + (x1     * 8) + ch]);
+                            v10 = $signed(c1_gold_B[(y1     * 16 * 8) + (x_glob * 8) + ch]);
+                            v11 = $signed(c1_gold_B[(y1     * 16 * 8) + (x1     * 8) + ch]);
+                            exp_s1 = v00;
+                            if (v01 > exp_s1) exp_s1 = v01;
+                            if (v10 > exp_s1) exp_s1 = v10;
+                            if (v11 > exp_s1) exp_s1 = v11;
+                            got_s1 = $signed(read_ram_strip_byte(OUT_MODE_C_BASE, 13, 13, ch, y_glob, x_glob));
+                            if (got_s1 !== exp_s1) begin
+                                err_s1++;
+                                arb_errors++;
+                            end
+                        end
+                    end
+                end
+                if (err_s1 == 0)
+                    $display("  -> [PASS] Mode E (13x13 Stride-1 Asymmetric 2x2 MaxPool): 1352/1352 bit-exact!");
+                else
+                    $display("  -> [FAIL] Mode E (13x13 Stride-1 Asymmetric 2x2 MaxPool): %0d/1352 errors!", err_s1);
+            end
         end
 
         $display("\n=========================================================================================");

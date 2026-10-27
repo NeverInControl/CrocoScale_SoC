@@ -45,14 +45,15 @@ module npu_flex_axi_writer #(
 
     // Sequencer State & Configuration Inputs
     input  wire  [2:0]                                   state_i,
-    input  wire  [8:0]                                   drain_cnt_i,
+    input  wire  [10:0]                                  drain_cnt_i,
     input  wire                                          lut_en_i,
     input  wire                                          pool_en_i,
+    input  wire                                          pool_s1_en_i,
     input  wire  [31:0]                                  out_base_i,
-    input  wire  [3:0]                                   tile_y_i,
-    input  wire  [3:0]                                   tile_x_i,
-    input  wire  [7:0]                                   img_h_i,
-    input  wire  [7:0]                                   img_w_i,
+    input  wire  [4:0]                                   tile_y_i,
+    input  wire  [4:0]                                   tile_x_i,
+    input  wire  [8:0]                                   img_h_i,
+    input  wire  [8:0]                                   img_w_i,
     output logic                                         writer_done_o,
 
     // NPU Requantized Output & Activation SRAM Interfaces
@@ -93,18 +94,20 @@ module npu_flex_axi_writer #(
     // =========================================================================
     // Phase 1: Skewed Drain & Optional 2x2 MaxPool into 8 Activation SRAM Banks
     // =========================================================================
-    wire [9:0] pipe_lat = lut_en_i ? 10'd6 : 10'd5;
-    wire [9:0] base_t   = {1'b0, drain_cnt_i} - pipe_lat;
+    wire [10:0] pipe_lat       = lut_en_i ? 11'd6 : 11'd5;
+    wire [10:0] base_t         = drain_cnt_i - pipe_lat;
+    wire [10:0] drain_p1_limit = pool_s1_en_i ? 11'd1038 : 11'd270;
+    wire        any_pool       = pool_en_i || pool_s1_en_i;
 
-    logic [9:0]       full_idx   [ARRAY_WIDTH];
-    logic             idx_valid  [ARRAY_WIDTH];
+    logic [10:0]       full_idx   [ARRAY_WIDTH];
+    logic              idx_valid  [ARRAY_WIDTH];
     logic signed [7:0] max_accum  [ARRAY_WIDTH];
     logic signed [7:0] pooled_val [ARRAY_WIDTH];
 
     for (genvar gc = 0; gc < ARRAY_WIDTH; gc++) begin : gen_ch_pool
-        assign full_idx[gc]   = base_t - 10'(gc);
-        assign idx_valid[gc]  = (state_i == SEQ_DRAIN) && (drain_cnt_i < 9'd270) &&
-                                (full_idx[gc][9:8] == 2'b00);
+        assign full_idx[gc]   = base_t - 11'(gc);
+        assign idx_valid[gc]  = (state_i == SEQ_DRAIN) && (drain_cnt_i < drain_p1_limit) &&
+                                (pool_s1_en_i ? !full_idx[gc][10] : (full_idx[gc][10:8] == 3'b000));
         assign pooled_val[gc] = (full_idx[gc][1:0] == 2'd0) ? $signed(out_act_i[gc])
                                                             : signed_max8(max_accum[gc], $signed(out_act_i[gc]));
 
@@ -122,29 +125,31 @@ module npu_flex_axi_writer #(
     logic [7:0][7:0] p1_act_wdata;
 
     for (genvar gg = 0; gg < 4; gg++) begin : gen_sram_transpose
-        wire [1:0] sel_c    = pool_en_i ? (base_t[1:0] + 2'd1) : (base_t[1:0] - 2'(gg));
-        wire [2:0] ch_even  = {1'b0, sel_c};
-        wire [2:0] ch_odd   = {1'b1, sel_c};
+        wire [1:0]  sel_c       = any_pool ? (base_t[1:0] + 2'd1) : (base_t[1:0] - 2'(gg));
+        wire [2:0]  ch_even     = {1'b0, sel_c};
+        wire [2:0]  ch_odd      = {1'b1, sel_c};
 
-        wire [9:0] idx_even = full_idx[ch_even];
-        wire [9:0] idx_odd  = full_idx[ch_odd];
+        wire [10:0] idx_even    = full_idx[ch_even];
+        wire [10:0] idx_odd     = full_idx[ch_odd];
+        wire        idx_even_ok = pool_s1_en_i ? !idx_even[10] : (idx_even[10:8] == 3'b000);
+        wire        idx_odd_ok  = pool_s1_en_i ? !idx_odd[10]  : (idx_odd[10:8] == 3'b000);
 
-        assign p1_act_we[2*gg] = (state_i == SEQ_DRAIN) && (drain_cnt_i < 9'd270) &&
-                                 (idx_even[9:8] == 2'b00) &&
-                                 (!pool_en_i || (idx_even[3:2] == 2'(gg)));
+        assign p1_act_we[2*gg] = (state_i == SEQ_DRAIN) && (drain_cnt_i < drain_p1_limit) &&
+                                 idx_even_ok && (!any_pool || (idx_even[3:2] == 2'(gg)));
 
-        assign p1_act_we[2*gg + 1] = (state_i == SEQ_DRAIN) && (drain_cnt_i < 9'd270) &&
-                                     (idx_odd[9:8] == 2'b00) &&
-                                     (!pool_en_i || (idx_odd[3:2] == 2'(gg)));
+        assign p1_act_we[2*gg + 1] = (state_i == SEQ_DRAIN) && (drain_cnt_i < drain_p1_limit) &&
+                                     idx_odd_ok && (!any_pool || (idx_odd[3:2] == 2'(gg)));
 
-        assign p1_act_addr[2*gg] = pool_en_i ? {2'b00, idx_even[7], sel_c, idx_even[6:4]}
-                                             : {1'b0,  idx_even[7:6], sel_c, idx_even[5:2]};
+        assign p1_act_addr[2*gg] = pool_s1_en_i ? {1'b0,  idx_even[9:8], sel_c, idx_even[7:4]} :
+                                   pool_en_i    ? {2'b00, idx_even[7],   sel_c, idx_even[6:4]} :
+                                                  {1'b0,  idx_even[7:6], sel_c, idx_even[5:2]};
 
-        assign p1_act_addr[2*gg + 1] = pool_en_i ? {2'b00, idx_odd[7], sel_c, idx_odd[6:4]}
-                                                 : {1'b0,  idx_odd[7:6], sel_c, idx_odd[5:2]};
+        assign p1_act_addr[2*gg + 1] = pool_s1_en_i ? {1'b0,  idx_odd[9:8], sel_c, idx_odd[7:4]} :
+                                       pool_en_i    ? {2'b00, idx_odd[7],   sel_c, idx_odd[6:4]} :
+                                                      {1'b0,  idx_odd[7:6], sel_c, idx_odd[5:2]};
 
-        assign p1_act_wdata[2*gg]     = pool_en_i ? pooled_val[ch_even] : out_act_i[ch_even];
-        assign p1_act_wdata[2*gg + 1] = pool_en_i ? pooled_val[ch_odd]  : out_act_i[ch_odd];
+        assign p1_act_wdata[2*gg]     = any_pool ? pooled_val[ch_even] : out_act_i[ch_even];
+        assign p1_act_wdata[2*gg + 1] = any_pool ? pooled_val[ch_odd]  : out_act_i[ch_odd];
     end
 
     // =========================================================================
@@ -160,30 +165,31 @@ module npu_flex_axi_writer #(
 
     wb_state_t wb_state;
 
-    wire [7:0]  h_out            = pool_en_i ? {1'b0, img_h_i[7:1]} : img_h_i;
-    wire [7:0]  w_out            = pool_en_i ? {1'b0, img_w_i[7:1]} : img_w_i;
-    wire [3:0]  w_out_shift      = (w_out <= 8'd16)  ? 4'd4 :
-                                   (w_out <= 8'd32)  ? 4'd5 :
-                                   (w_out <= 8'd64)  ? 4'd6 :
-                                   (w_out <= 8'd128) ? 4'd7 : 4'd8;
-    wire [8:0]  tile_x0_out      = pool_en_i ? {2'b00, tile_x_i, 3'b000} : {1'b0, tile_x_i, 4'b0000};
-    wire [8:0]  tile_y0_out      = pool_en_i ? {2'b00, tile_y_i, 3'b000} : {1'b0, tile_y_i, 4'b0000};
+    wire [8:0]  h_out            = pool_en_i ? {1'b0, img_h_i[8:1]} : img_h_i;
+    wire [8:0]  w_out            = pool_en_i ? {1'b0, img_w_i[8:1]} : img_w_i;
+    wire [3:0]  w_out_shift      = (w_out <= 9'd16)  ? 4'd4 :
+                                   (w_out <= 9'd32)  ? 4'd5 :
+                                   (w_out <= 9'd64)  ? 4'd6 :
+                                   (w_out <= 9'd128) ? 4'd7 :
+                                   (w_out <= 9'd256) ? 4'd8 : 4'd9;
+    wire [9:0]  tile_x0_out      = pool_en_i ? {2'b00, tile_x_i, 3'b000} : {1'b0, tile_x_i, 4'b0000};
+    wire [9:0]  tile_y0_out      = pool_en_i ? {2'b00, tile_y_i, 3'b000} : {1'b0, tile_y_i, 4'b0000};
     wire [4:0]  tile_w_max       = pool_en_i ? 5'd8 : 5'd16;
     wire [1:0]  max_s_rel        = pool_en_i ? 2'd1 : 2'd3;
 
-    wire [8:0]  rem_w            = ({1'b0, w_out} > tile_x0_out) ? ({1'b0, w_out} - tile_x0_out) : 9'd0;
-    wire [4:0]  valid_w_beats    = (rem_w >= {4'd0, tile_w_max}) ? tile_w_max : rem_w[4:0];
+    wire [9:0]  rem_w            = ({1'b0, w_out} > tile_x0_out) ? ({1'b0, w_out} - tile_x0_out) : 10'd0;
+    wire [4:0]  valid_w_beats    = (rem_w >= {5'd0, tile_w_max}) ? tile_w_max : rem_w[4:0];
     wire [7:0]  wb_awlen         = {3'd0, valid_w_beats - 5'd1};
 
-    wire [6:0]  num_strips_y_out = 7'(({1'b0, h_out} + 9'd3) >> 2);
+    wire [7:0]  num_strips_y_out = 8'(({1'b0, h_out} + 10'd3) >> 2);
     wire [31:0] strip_stride_out = 32'd4 << w_out_shift;
-    wire [14:0] ch_words_out     = 15'(num_strips_y_out) << w_out_shift;
-    wire [31:0] ch_stride_out    = {15'd0, ch_words_out, 2'b00};
+    wire [16:0] ch_words_out     = 17'(num_strips_y_out) << w_out_shift;
+    wire [31:0] ch_stride_out    = {13'd0, ch_words_out, 2'b00};
 
-    wire [5:0]  tile_strip_y0    = pool_en_i ? {1'b0, tile_y_i, 1'b0} : {tile_y_i, 2'b00};
-    wire [13:0] ty_words_out     = 14'(tile_strip_y0) << w_out_shift;
-    wire [31:0] ty_bytes_out     = {16'd0, ty_words_out, 2'b00};
-    wire [31:0] tx_bytes_out     = {21'd0, tile_x0_out, 2'b00};
+    wire [6:0]  tile_strip_y0    = pool_en_i ? {1'b0, tile_y_i, 1'b0} : {tile_y_i, 2'b00};
+    wire [15:0] ty_words_out     = 16'(tile_strip_y0) << w_out_shift;
+    wire [31:0] ty_bytes_out     = {14'd0, ty_words_out, 2'b00};
+    wire [31:0] tx_bytes_out     = {20'd0, tile_x0_out, 2'b00};
     wire [31:0] init_wb_addr     = out_base_i + ty_bytes_out + tx_bytes_out;
 
     logic [2:0]  wb_cout;
@@ -205,19 +211,19 @@ module npu_flex_axi_writer #(
     logic [3:0] strip_valid_vec;
     always_comb begin
         for (int s = 0; s < 4; s++) begin
-            logic [8:0] s_gy0;
-            s_gy0 = tile_y0_out + {3'd0, 2'(s), 2'b00};
+            logic [9:0] s_gy0;
+            s_gy0 = tile_y0_out + {4'd0, 2'(s), 2'b00};
             strip_valid_vec[s] = (valid_w_beats != 5'd0) && (2'(s) <= max_s_rel) &&
                                  (s_gy0 < {1'b0, h_out});
         end
     end
 
-    wire [8:0] cur_out_gy0 = tile_y0_out + {3'd0, wb_s_rel, 2'b00};
+    wire [9:0] cur_out_gy0 = tile_y0_out + {4'd0, wb_s_rel, 2'b00};
     wire [3:0] out_row_in_bounds;
-    assign out_row_in_bounds[0] = (cur_out_gy0 + 9'd0) < {1'b0, h_out};
-    assign out_row_in_bounds[1] = (cur_out_gy0 + 9'd1) < {1'b0, h_out};
-    assign out_row_in_bounds[2] = (cur_out_gy0 + 9'd2) < {1'b0, h_out};
-    assign out_row_in_bounds[3] = (cur_out_gy0 + 9'd3) < {1'b0, h_out};
+    assign out_row_in_bounds[0] = (cur_out_gy0 + 10'd0) < {1'b0, h_out};
+    assign out_row_in_bounds[1] = (cur_out_gy0 + 10'd1) < {1'b0, h_out};
+    assign out_row_in_bounds[2] = (cur_out_gy0 + 10'd2) < {1'b0, h_out};
+    assign out_row_in_bounds[3] = (cur_out_gy0 + 10'd3) < {1'b0, h_out};
 
     wire [7:0] raw_b0 = wb_cout[2] ? act_sram_rdata_i[1] : act_sram_rdata_i[0];
     wire [7:0] raw_b1 = wb_cout[2] ? act_sram_rdata_i[3] : act_sram_rdata_i[2];
@@ -241,7 +247,7 @@ module npu_flex_axi_writer #(
     // Multiplex Activation SRAM Ports between Phase 1 (Write) and Phase 2 (Read)
     always_comb begin
         for (int b = 0; b < ARRAY_HEIGHT; b++) begin
-            if (drain_cnt_i < 9'd270) begin
+            if (drain_cnt_i < drain_p1_limit) begin
                 drain_act_we_o[b]    = p1_act_we[b];
                 drain_act_addr_o[b]  = p1_act_addr[b];
                 drain_act_wdata_o[b] = p1_act_wdata[b];
@@ -284,7 +290,7 @@ module npu_flex_axi_writer #(
         end else begin
             case (wb_state)
                 WB_IDLE: begin
-                    if (drain_cnt_i == 9'd269) begin
+                    if (drain_cnt_i == (drain_p1_limit - 11'd1)) begin
                         wb_cout       <= 3'd0;
                         wb_s_rel      <= 2'd0;
                         ch_wb_addr    <= init_wb_addr;

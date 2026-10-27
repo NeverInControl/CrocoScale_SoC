@@ -11,7 +11,9 @@
 //     0x00 (0): REG_CTRL        [0]=START (W1P), [1]=SOFT_RESET, [2]=START_DRAIN (W1P)
 //     0x04 (1): REG_STATUS      [0]=BUSY (RO), [1]=DONE (RO, sticky)
 //     0x08 (2): REG_CONFIG      [0]=AUTO_DRAIN, [4]=MODE_1X1, [5]=LUT_EN,
-//                               [6]=POOL_EN, [15:8]=TOTAL_PASSES
+//                               [6]=POOL_EN, [7]=POOL_S1_EN, [18:8]=TOTAL_PASSES[10:0],
+//                               [26:24]=CFG_CIN[10:8], [27]=TILE_X[4], [28]=TILE_Y[4],
+//                               [29]=IMG_W[8], [30]=IMG_H[8]
 //     0x0C (3): REG_IRQ_STATUS  [0]=IRQ_STATUS (R/W1C)
 //     0x10 (4): REG_ACT_BASE    Activation tensor base address (word-aligned)
 //     0x14 (5): REG_WEIGHT_BASE Weight tensor base address (word-aligned)
@@ -19,8 +21,8 @@
 //     0x1C (7): REG_BIAS_BASE   Bias vector base address (word-aligned)
 //     0x20 (8): REG_QUANT_BASE  Quantizer config base address (word-aligned)
 //     0x24 (9): REG_LUT_BASE    Non-linear LUT table base address (word-aligned)
-//     0x28(10): REG_GEOM        [3:0]=TILE_X, [7:4]=TILE_Y, [15:8]=IMG_W,
-//                               [23:16]=IMG_H, [31:24]=CFG_CIN
+//     0x28(10): REG_GEOM        [3:0]=TILE_X[3:0], [7:4]=TILE_Y[3:0], [15:8]=IMG_W[7:0],
+//                               [23:16]=IMG_H[7:0], [31:24]=CFG_CIN[7:0]
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -68,12 +70,13 @@ module npu_flex_axil_csr #(
     output logic                         mode_1x1_o,
     output logic                         lut_en_o,
     output logic                         pool_en_o,
-    output logic [7:0]                   total_passes_o,
-    output logic [3:0]                   tile_x_o,
-    output logic [3:0]                   tile_y_o,
-    output logic [7:0]                   img_w_o,
-    output logic [7:0]                   img_h_o,
-    output logic [7:0]                   cfg_cin_o,
+    output logic                         pool_s1_en_o,
+    output logic [10:0]                  total_passes_o,
+    output logic [4:0]                   tile_x_o,
+    output logic [4:0]                   tile_y_o,
+    output logic [8:0]                   img_w_o,
+    output logic [8:0]                   img_h_o,
+    output logic [10:0]                  cfg_cin_o,
     output logic [31:0]                  act_base_o,
     output logic [31:0]                  weight_base_o,
     output logic [31:0]                  out_base_o,
@@ -105,29 +108,31 @@ module npu_flex_axil_csr #(
     logic        reg_mode_1x1;
     logic        reg_lut_en;
     logic        reg_pool_en;
-    logic [7:0]  reg_total_passes;
+    logic        reg_pool_s1_en;
+    logic [10:0] reg_total_passes;
     logic        reg_irq_status;
     logic        reg_done;
 
-    logic [3:0]  reg_tile_x;
-    logic [3:0]  reg_tile_y;
-    logic [7:0]  reg_img_w;
-    logic [7:0]  reg_img_h;
-    logic [7:0]  reg_cfg_cin;
+    logic [4:0]  reg_tile_x;
+    logic [4:0]  reg_tile_y;
+    logic [8:0]  reg_img_w;
+    logic [8:0]  reg_img_h;
+    logic [10:0] reg_cfg_cin;
 
-    logic [11:0] reg_ram_base_high;
-    logic [19:2] reg_act_base;
-    logic [19:2] reg_weight_base;
-    logic [19:2] reg_out_base;
-    logic [19:2] reg_bias_base;
-    logic [19:2] reg_quant_base;
-    logic [19:2] reg_lut_base;
+    logic [6:0]  reg_ram_base_high;
+    logic [24:2] reg_act_base;
+    logic [24:2] reg_weight_base;
+    logic [24:2] reg_out_base;
+    logic [24:2] reg_bias_base;
+    logic [24:2] reg_quant_base;
+    logic [24:2] reg_lut_base;
 
     assign soft_reset_o   = reg_soft_reset;
     assign auto_drain_o   = reg_auto_drain;
     assign mode_1x1_o     = reg_mode_1x1;
     assign lut_en_o       = reg_lut_en;
     assign pool_en_o      = reg_pool_en;
+    assign pool_s1_en_o   = reg_pool_s1_en;
     assign total_passes_o = reg_total_passes;
 
     assign tile_x_o       = reg_tile_x;
@@ -160,21 +165,22 @@ module npu_flex_axil_csr #(
             reg_mode_1x1        <= 1'b0;
             reg_lut_en          <= 1'b0;
             reg_pool_en         <= 1'b0;
-            reg_total_passes    <= 8'd0;
+            reg_pool_s1_en      <= 1'b0;
+            reg_total_passes    <= 11'd0;
             reg_irq_status      <= 1'b0;
             reg_done            <= 1'b0;
-            reg_tile_x          <= 4'd0;
-            reg_tile_y          <= 4'd0;
-            reg_img_w           <= 8'(DEFAULT_W);
-            reg_img_h           <= 8'(DEFAULT_H);
-            reg_cfg_cin         <= 8'(DEFAULT_CIN);
-            reg_ram_base_high   <= 12'h000;
-            reg_act_base        <= 18'h0_0000;
-            reg_weight_base     <= 18'h0_8000;
-            reg_out_base        <= 18'h1_0000;
-            reg_bias_base       <= 18'h0_C000;
-            reg_quant_base      <= 18'h0_C400;
-            reg_lut_base        <= 18'h0_C800;
+            reg_tile_x          <= 5'd0;
+            reg_tile_y          <= 5'd0;
+            reg_img_w           <= 9'(DEFAULT_W);
+            reg_img_h           <= 9'(DEFAULT_H);
+            reg_cfg_cin         <= 11'(DEFAULT_CIN);
+            reg_ram_base_high   <= 7'h00;
+            reg_act_base        <= 23'h00_0000;
+            reg_weight_base     <= 23'h00_8000;
+            reg_out_base        <= 23'h01_0000;
+            reg_bias_base       <= 23'h00_C000;
+            reg_quant_base      <= 23'h00_C400;
+            reg_lut_base        <= 23'h00_C800;
         end else begin
             start_pulse_o       <= 1'b0;
             start_drain_pulse_o <= 1'b0;
@@ -204,45 +210,51 @@ module npu_flex_axil_csr #(
                         end
                     end
                     REG_IDX_CONFIG: begin
-                        reg_auto_drain   <= s_axil_wdata[0];
-                        reg_mode_1x1     <= s_axil_wdata[4];
-                        reg_lut_en       <= s_axil_wdata[5];
-                        reg_pool_en      <= s_axil_wdata[6];
-                        reg_total_passes <= s_axil_wdata[15:8];
+                        reg_auto_drain    <= s_axil_wdata[0];
+                        reg_mode_1x1      <= s_axil_wdata[4];
+                        reg_lut_en        <= s_axil_wdata[5];
+                        reg_pool_en       <= s_axil_wdata[6];
+                        reg_pool_s1_en    <= s_axil_wdata[7];
+                        reg_total_passes  <= s_axil_wdata[18:8];
+                        reg_cfg_cin[10:8] <= s_axil_wdata[26:24];
+                        reg_tile_x[4]     <= s_axil_wdata[27];
+                        reg_tile_y[4]     <= s_axil_wdata[28];
+                        reg_img_w[8]      <= s_axil_wdata[29];
+                        reg_img_h[8]      <= s_axil_wdata[30];
                     end
                     REG_IDX_IRQ_STATUS: begin
                         if (s_axil_wdata[0]) reg_irq_status <= 1'b0;
                     end
                     REG_IDX_ACT_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_act_base      <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_act_base      <= s_axil_wdata[24:2];
                     end
                     REG_IDX_WEIGHT_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_weight_base   <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_weight_base   <= s_axil_wdata[24:2];
                     end
                     REG_IDX_OUT_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_out_base      <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_out_base      <= s_axil_wdata[24:2];
                     end
                     REG_IDX_BIAS_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_bias_base     <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_bias_base     <= s_axil_wdata[24:2];
                     end
                     REG_IDX_QUANT_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_quant_base    <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_quant_base    <= s_axil_wdata[24:2];
                     end
                     REG_IDX_LUT_BASE: begin
-                        reg_ram_base_high <= s_axil_wdata[31:20];
-                        reg_lut_base      <= s_axil_wdata[19:2];
+                        reg_ram_base_high <= s_axil_wdata[31:25];
+                        reg_lut_base      <= s_axil_wdata[24:2];
                     end
                     REG_IDX_GEOM: begin
-                        reg_tile_x  <= s_axil_wdata[3:0];
-                        reg_tile_y  <= s_axil_wdata[7:4];
-                        reg_img_w   <= s_axil_wdata[15:8];
-                        reg_img_h   <= s_axil_wdata[23:16];
-                        reg_cfg_cin <= s_axil_wdata[31:24];
+                        reg_tile_x[3:0]  <= s_axil_wdata[3:0];
+                        reg_tile_y[3:0]  <= s_axil_wdata[7:4];
+                        reg_img_w[7:0]   <= s_axil_wdata[15:8];
+                        reg_img_h[7:0]   <= s_axil_wdata[23:16];
+                        reg_cfg_cin[7:0] <= s_axil_wdata[31:24];
                     end
                     default: ;
                 endcase
@@ -259,9 +271,9 @@ module npu_flex_axil_csr #(
         case (raddr_q)
             REG_IDX_CTRL:       s_axil_rdata = {30'b0, reg_soft_reset, 1'b0};
             REG_IDX_STATUS:     s_axil_rdata = {30'b0, reg_done, fsm_busy_i};
-            REG_IDX_CONFIG:     s_axil_rdata = {16'b0, reg_total_passes, 1'b0, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
+            REG_IDX_CONFIG:     s_axil_rdata = {1'b0, reg_img_h[8], reg_img_w[8], reg_tile_y[4], reg_tile_x[4], reg_cfg_cin[10:8], 5'b0, reg_total_passes, reg_pool_s1_en, reg_pool_en, reg_lut_en, reg_mode_1x1, 3'b0, reg_auto_drain};
             REG_IDX_IRQ_STATUS: s_axil_rdata = {31'b0, reg_irq_status};
-            REG_IDX_GEOM:       s_axil_rdata = {reg_cfg_cin, reg_img_h, reg_img_w, reg_tile_y, reg_tile_x};
+            REG_IDX_GEOM:       s_axil_rdata = {reg_cfg_cin[7:0], reg_img_h[7:0], reg_img_w[7:0], reg_tile_y[3:0], reg_tile_x[3:0]};
             default:            s_axil_rdata = 32'd0;
         endcase
     end

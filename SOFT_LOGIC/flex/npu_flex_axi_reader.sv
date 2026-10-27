@@ -42,17 +42,17 @@ module npu_flex_axi_reader #(
     input  wire                                          mode_1x1_i,
     input  wire                                          lut_en_i,
     input  wire [2:0]                                    state_i,
-    input  wire [7:0]                                    pass_cnt_i,
+    input  wire [10:0]                                   pass_cnt_i,
     input  wire [8:0]                                    k_cnt_i,
-    input  wire [7:0]                                    total_passes_i,
+    input  wire [10:0]                                   total_passes_i,
     input  wire                                          preload_done_i,
     input  wire                                          pass_advance_i,
     input  wire                                          enter_lut_load_i,
-    input  wire [8:0]                                    drain_cnt_i,
+    input  wire [10:0]                                   drain_cnt_i,
     input  wire [7:0]                                    bank_read_used_i,
 
     output logic                                         dma_pass_ready_o,
-    output logic [7:0]                                   dma_channel_to_load_o,
+    output logic [10:0]                                  dma_channel_to_load_o,
     output logic [7:0][5:0]                              dma_bank_ptr_o,
 
     // Memory Base Addresses & Arbitrary Layer/Tile Geometry
@@ -61,11 +61,11 @@ module npu_flex_axi_reader #(
     input  wire [AXI_ADDR_WIDTH-1:0]                     bias_base_i,
     input  wire [AXI_ADDR_WIDTH-1:0]                     quant_base_i,
     input  wire [AXI_ADDR_WIDTH-1:0]                     lut_base_i,
-    input  wire [3:0]                                    tile_y_i,
-    input  wire [3:0]                                    tile_x_i,
-    input  wire [7:0]                                    img_h_i,
-    input  wire [7:0]                                    img_w_i,
-    input  wire [7:0]                                    cfg_cin_i,
+    input  wire [4:0]                                    tile_y_i,
+    input  wire [4:0]                                    tile_x_i,
+    input  wire [8:0]                                    img_h_i,
+    input  wire [8:0]                                    img_w_i,
+    input  wire [10:0]                                   cfg_cin_i,
 
     // AXI4 Read Master Interface
     output logic [AXI_ADDR_WIDTH-1:0]                    m_axi_araddr,
@@ -123,42 +123,43 @@ module npu_flex_axi_reader #(
     // -------------------------------------------------------------------------
     // Power-of-Two Strip Stride Address Pitches & Boundary Windows
     // -------------------------------------------------------------------------
-    wire        has_left_pad    = !mode_1x1_i && (tile_x_i == 4'd0);
-    wire [3:0]  w_shift         = (img_w_i <= 8'd16)  ? 4'd4 :
-                                  (img_w_i <= 8'd32)  ? 4'd5 :
-                                  (img_w_i <= 8'd64)  ? 4'd6 :
-                                  (img_w_i <= 8'd128) ? 4'd7 : 4'd8;
-    wire [6:0]  num_strips_y    = 7'(({1'b0, img_h_i} + 9'd3) >> 2);
+    wire        has_left_pad    = !mode_1x1_i && (tile_x_i == 5'd0);
+    wire [3:0]  w_shift         = (img_w_i <= 9'd16)  ? 4'd4 :
+                                  (img_w_i <= 9'd32)  ? 4'd5 :
+                                  (img_w_i <= 9'd64)  ? 4'd6 :
+                                  (img_w_i <= 9'd128) ? 4'd7 :
+                                  (img_w_i <= 9'd256) ? 4'd8 : 4'd9;
+    wire [7:0]  num_strips_y    = 8'(({1'b0, img_h_i} + 10'd3) >> 2);
     wire [31:0] strip_stride    = 32'd4 << w_shift;
-    wire [14:0] ch_words        = 15'(num_strips_y) << w_shift;
-    wire [31:0] ch_stride       = {15'd0, ch_words, 2'b00};
-    wire [11:0] ty_words        = 12'(tile_y_i) << w_shift;
-    wire [31:0] ty_bytes        = {16'd0, ty_words, 4'b0000};
-    wire [31:0] gx_start_3x3    = (tile_x_i == 4'd0) ? 32'd0 : {22'd0, tile_x_i - 4'd1, 6'b111100};
-    wire [31:0] gx_start_1x1    = {22'd0, tile_x_i, 6'b000000};
+    wire [16:0] ch_words        = 17'(num_strips_y) << w_shift;
+    wire [31:0] ch_stride       = {13'd0, ch_words, 2'b00};
+    wire [13:0] ty_words        = 14'(tile_y_i) << w_shift;
+    wire [31:0] ty_bytes        = {14'd0, ty_words, 4'b0000};
+    wire [31:0] gx_start_3x3    = (tile_x_i == 5'd0) ? 32'd0 : {21'd0, tile_x_i - 5'd1, 6'b111100};
+    wire [31:0] gx_start_1x1    = {21'd0, tile_x_i, 6'b000000};
     wire [31:0] init_strip_addr = act_base_i + ty_bytes +
                                   (mode_1x1_i ? gx_start_1x1 : (gx_start_3x3 - strip_stride));
 
     // Horizontal valid beat limit for arbitrary img_w_i
-    wire [8:0]  tile_x0         = {1'b0, tile_x_i, 4'b0000};
-    wire [8:0]  max_gx_p1       = {1'b0, img_w_i} + {8'd0, !mode_1x1_i};
+    wire [9:0]  tile_x0         = {1'b0, tile_x_i, 4'b0000};
+    wire [9:0]  max_gx_p1       = {1'b0, img_w_i} + {9'd0, !mode_1x1_i};
     wire [4:0]  max_beats       = mode_1x1_i ? 5'd16 : 5'd18;
     wire [4:0]  end_beat_x      = (tile_x0 >= max_gx_p1) ? 5'd0 :
-                                  (((max_gx_p1 - tile_x0) >= {4'd0, max_beats}) ? max_beats : 5'(max_gx_p1 - tile_x0));
+                                  (((max_gx_p1 - tile_x0) >= {5'd0, max_beats}) ? max_beats : 5'(max_gx_p1 - tile_x0));
     wire [4:0]  valid_axi_beats = (end_beat_x > {4'd0, has_left_pad}) ?
                                   (end_beat_x - {4'd0, has_left_pad}) : 5'd0;
     wire [7:0]  strip_arlen     = {3'd0, valid_axi_beats - 5'd1};
 
     // Vertical valid strip flags for arbitrary img_h_i across s = 0..5
-    wire [8:0]  tile_y0         = {1'b0, tile_y_i, 4'b0000};
+    wire [9:0]  tile_y0         = {1'b0, tile_y_i, 4'b0000};
     logic [5:0] strip_is_zero;
 
     always_comb begin
-        strip_is_zero[0] = (valid_axi_beats == 5'd0) || (tile_y_i == 4'd0) ||
-                           ((tile_y0 - 9'd1) >= {1'b0, img_h_i});
+        strip_is_zero[0] = (valid_axi_beats == 5'd0) || (tile_y_i == 5'd0) ||
+                           ((tile_y0 - 10'd1) >= {1'b0, img_h_i});
         for (int s = 1; s < 6; s++) begin
-            logic [8:0] s_gy0;
-            s_gy0 = tile_y0 + {4'd0, 3'(s - 1), 2'b00};
+            logic [9:0] s_gy0;
+            s_gy0 = tile_y0 + {5'd0, 3'(s - 1), 2'b00};
             strip_is_zero[s] = (valid_axi_beats == 5'd0) || (s_gy0 >= {1'b0, img_h_i});
         end
     end
@@ -172,13 +173,13 @@ module npu_flex_axi_reader #(
     logic [1:0]  c_sub_1x1;
     logic [1:0]  byte_sub_1x1;
 
-    logic [7:0]  dma_channel_reg;
+    logic [10:0] dma_channel_reg;
     logic [3:0]  dma_mod9_cnt;
-    logic [7:0]  dma_next_ch;
+    logic [10:0] dma_next_ch;
     logic        has_act_to_load;
 
     wire [3:0]   next_mod_w    = (dma_mod9_cnt == 4'd8) ? 4'd0 : (dma_mod9_cnt + 4'd1);
-    wire [7:0]   next_ch_val_w = (dma_mod9_cnt == 4'd7) ? dma_next_ch : (dma_next_ch + 8'd1);
+    wire [10:0]  next_ch_val_w = (dma_mod9_cnt == 4'd7) ? dma_next_ch : (dma_next_ch + 11'd1);
 
     assign dma_channel_to_load_o = dma_channel_reg;
 
@@ -190,12 +191,12 @@ module npu_flex_axi_reader #(
     wire        is_zero_beat   = is_zero_strip || is_zero_x;
 
     // Sub-strip row bounds for non-multiple-of-4 img_h_i
-    wire [8:0]  cur_strip_gy0  = tile_y0 + {4'd0, cur_strip - 3'd1, 2'b00};
+    wire [9:0]  cur_strip_gy0  = tile_y0 + {5'd0, cur_strip - 3'd1, 2'b00};
     wire [3:0]  row_in_bounds;
-    assign row_in_bounds[0]    = (cur_strip == 3'd0) || ((cur_strip_gy0 + 9'd3) < {1'b0, img_h_i});
-    assign row_in_bounds[1]    = (cur_strip_gy0 + 9'd0) < {1'b0, img_h_i};
-    assign row_in_bounds[2]    = (cur_strip_gy0 + 9'd1) < {1'b0, img_h_i};
-    assign row_in_bounds[3]    = (cur_strip_gy0 + 9'd2) < {1'b0, img_h_i};
+    assign row_in_bounds[0]    = (cur_strip == 3'd0) || ((cur_strip_gy0 + 10'd3) < {1'b0, img_h_i});
+    assign row_in_bounds[1]    = (cur_strip_gy0 + 10'd0) < {1'b0, img_h_i};
+    assign row_in_bounds[2]    = (cur_strip_gy0 + 10'd1) < {1'b0, img_h_i};
+    assign row_in_bounds[3]    = (cur_strip_gy0 + 10'd2) < {1'b0, img_h_i};
 
     // In [C][ceil(H/4)][W][4]:
     //   word[31:24] -> gy%4 == 3 -> ly%4 == 0 in 3x3 (G=0: B0, B1) / ly%4 == 3 in 1x1
@@ -410,9 +411,9 @@ module npu_flex_axi_reader #(
             beat_idx         <= 5'd0;
             c_sub_1x1        <= 2'd0;
             byte_sub_1x1     <= 2'd0;
-            dma_channel_reg  <= 8'd0;
+            dma_channel_reg  <= 11'd0;
             dma_mod9_cnt     <= 4'd0;
-            dma_next_ch      <= 8'd0;
+            dma_next_ch      <= 11'd0;
             has_act_to_load  <= 1'b0;
         end else begin
             if (state_i == SEQ_IDLE) begin
@@ -424,9 +425,9 @@ module npu_flex_axi_reader #(
                     beat_idx         <= 5'd0;
                     c_sub_1x1        <= 2'd0;
                     byte_sub_1x1     <= 2'd0;
-                    dma_channel_reg  <= 8'd0;
+                    dma_channel_reg  <= 11'd0;
                     dma_mod9_cnt     <= 4'd0;
-                    dma_next_ch      <= 8'd0;
+                    dma_next_ch      <= 11'd0;
                     has_act_to_load  <= 1'b1;
                     rd_state         <= RD_BIAS_AR;
                 end else if (start_drain_i && lut_en_i) begin
@@ -442,22 +443,22 @@ module npu_flex_axi_reader #(
                 beat_idx     <= 5'd0;
                 c_sub_1x1    <= 2'd0;
                 byte_sub_1x1 <= 2'd0;
-                if (total_passes_i > 8'd1) begin
+                if (total_passes_i > 11'd1) begin
                     dma_mod9_cnt <= 4'd1;
-                    dma_next_ch  <= 8'd1;
-                    if ((mode_1x1_i ? 8'd4 : 8'd1) < cfg_cin_i) begin
-                        dma_channel_reg <= mode_1x1_i ? 8'd4 : 8'd1;
+                    dma_next_ch  <= 11'd1;
+                    if ((mode_1x1_i ? 11'd4 : 11'd1) < cfg_cin_i) begin
+                        dma_channel_reg <= mode_1x1_i ? 11'd4 : 11'd1;
                         has_act_to_load <= 1'b1;
                         ch_base_addr    <= ch_base_addr + ch_stride;
                         strip_addr      <= ch_base_addr + ch_stride;
                         rd_state        <= first_strip_zero ? RD_ACT_R : RD_ACT_AR;
                     end else begin
-                        dma_channel_reg <= 8'd0;
+                        dma_channel_reg <= 11'd0;
                         has_act_to_load <= 1'b0;
                         rd_state        <= RD_WEIGHT_AR;
                     end
                 end else begin
-                    dma_channel_reg <= 8'd0;
+                    dma_channel_reg <= 11'd0;
                     has_act_to_load <= 1'b0;
                     rd_state        <= RD_PASS_DONE;
                 end
@@ -467,14 +468,14 @@ module npu_flex_axi_reader #(
                 beat_idx     <= 5'd0;
                 c_sub_1x1    <= 2'd0;
                 byte_sub_1x1 <= 2'd0;
-                if ((pass_cnt_i + 8'd2) < total_passes_i) begin
-                    logic [7:0] next_ch_1x1;
-                    next_ch_1x1  = {pass_cnt_i[5:0] + 6'd2, 2'b00};
+                if ((pass_cnt_i + 11'd2) < total_passes_i) begin
+                    logic [10:0] next_ch_1x1;
+                    next_ch_1x1  = {pass_cnt_i[8:0] + 9'd2, 2'b00};
                     dma_mod9_cnt <= next_mod_w;
                     dma_next_ch  <= next_ch_val_w;
 
                     if (mode_1x1_i ? (next_ch_1x1 >= cfg_cin_i) : (next_mod_w == 4'd8 || next_ch_val_w >= cfg_cin_i)) begin
-                        dma_channel_reg <= 8'd0;
+                        dma_channel_reg <= 11'd0;
                         has_act_to_load <= 1'b0;
                         rd_state        <= RD_WEIGHT_AR;
                     end else begin
@@ -486,7 +487,7 @@ module npu_flex_axi_reader #(
                     end
                 end else begin
                     // Entering final pass: no further background fetches needed
-                    dma_channel_reg <= 8'd0;
+                    dma_channel_reg <= 11'd0;
                     has_act_to_load <= 1'b0;
                     rd_state        <= RD_PASS_DONE;
                 end
@@ -547,11 +548,11 @@ module npu_flex_axi_reader #(
                             if (beat_idx == last_beat_idx) begin
                                 beat_idx <= 5'd0;
                                 if (cur_strip == last_strip_idx) begin
-                                    if (!mode_1x1_i || (c_sub_1x1 == 2'd3) || ((dma_channel_reg + 8'd1) >= cfg_cin_i)) begin
+                                    if (!mode_1x1_i || (c_sub_1x1 == 2'd3) || ((dma_channel_reg + 11'd1) >= cfg_cin_i)) begin
                                         rd_state <= RD_WEIGHT_AR;
                                     end else begin
                                         c_sub_1x1       <= c_sub_1x1 + 2'd1;
-                                        dma_channel_reg <= dma_channel_reg + 8'd1;
+                                        dma_channel_reg <= dma_channel_reg + 11'd1;
                                         ch_base_addr    <= ch_base_addr + ch_stride;
                                         strip_addr      <= ch_base_addr + ch_stride;
                                         cur_strip       <= 3'd1;
@@ -604,7 +605,7 @@ module npu_flex_axi_reader #(
                     end
 
                     RD_LUT_R: begin
-                        if (m_axi_rvalid && drain_cnt_i == 9'd255) begin
+                        if (m_axi_rvalid && drain_cnt_i == 11'd255) begin
                             rd_state <= RD_IDLE;
                         end
                     end

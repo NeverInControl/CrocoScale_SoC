@@ -104,14 +104,14 @@ module tb_npu_flex_3x3_benchmark;
     // Sequencer Status & Step Outputs
     wire               seq_busy;
     wire               seq_done;
-    wire [7:0]         current_pass;
+    wire [10:0]        current_pass;
     wire [8:0]         cycle_in_pass;
     wire               preload_phase;
-    wire signed [7:0]  dma_channel_to_load;
+    wire signed [11:0] dma_channel_to_load;
     wire [7:0][5:0]    dma_bank_ptr;
     wire               lut_phase;
     wire               drain_phase;
-    wire [8:0]         drain_step;
+    wire [10:0]        drain_step;
     wire [3:0]         fab_usr_irq;
     wire [3:0]         soc_usr_irq;
 

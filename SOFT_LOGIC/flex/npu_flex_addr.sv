@@ -24,9 +24,9 @@ module npu_flex_addr #(
     input  wire        rst_n,
     input  wire        mode_1x1_i,
     input  wire [2:0]  state_i,
-    input  wire [7:0]  pass_cnt_i,
+    input  wire [10:0] pass_cnt_i,
     input  wire [8:0]  k_cnt_i,
-    input  wire [7:0]  cfg_cin_i,
+    input  wire [10:0] cfg_cin_i,
     input  wire        preload_done_i,
     input  wire        pass_advance_i,
 
@@ -60,8 +60,8 @@ module npu_flex_addr #(
         endcase
     endfunction
 
-    logic [7:0] cin_0;
-    logic [3:0] tap_0;
+    logic [10:0] cin_0;
+    logic [3:0]  tap_0;
 
     // -------------------------------------------------------------------------
     // Per-Row Crossbar Selection (Only 3-bit bank ID needed per row)
@@ -73,22 +73,22 @@ module npu_flex_addr #(
 
     always_comb begin
         for (int r = 0; r < ARRAY_HEIGHT; r++) begin
-            logic [8:0] m_p;
-            logic       m_p_valid;
-            logic [4:0] tap_sum;
-            logic       tap_wrap;
-            logic [3:0] tap_curr;
-            logic [8:0] cin_r;
-            logic [8:0] cin_1x1;
-            logic [3:0] tap_data;
-            logic [1:0] ky_curr, kx_curr;
-            logic [1:0] ly_mod4;
-            logic [4:0] target_lx;
-            logic       h;
-            logic [2:0] bank_3x3;
-            logic [2:0] bank_1x1;
-            logic       active_3x3;
-            logic       active_1x1;
+            logic [8:0]  m_p;
+            logic        m_p_valid;
+            logic [4:0]  tap_sum;
+            logic        tap_wrap;
+            logic [3:0]  tap_curr;
+            logic [11:0] cin_r;
+            logic [11:0] cin_1x1;
+            logic [3:0]  tap_data;
+            logic [1:0]  ky_curr, kx_curr;
+            logic [1:0]  ly_mod4;
+            logic [4:0]  target_lx;
+            logic        h;
+            logic [2:0]  bank_3x3;
+            logic [2:0]  bank_1x1;
+            logic        active_3x3;
+            logic        active_1x1;
 
             m_p              = k_cnt_i - 9'(r);
             m_p_valid        = (k_cnt_i >= 9'(r)) && !m_p[8];
@@ -98,8 +98,8 @@ module npu_flex_addr #(
             tap_sum   = {1'b0, tap_0} + 5'(r);
             tap_wrap  = (tap_sum >= 5'd9);
             tap_curr  = tap_wrap ? 4'(tap_sum - 5'd9) : tap_sum[3:0];
-            cin_r     = {1'b0, cin_0} + {8'd0, tap_wrap};
-            cin_1x1   = {pass_cnt_i[6:0], 2'(r)};
+            cin_r     = {1'b0, cin_0} + {11'd0, tap_wrap};
+            cin_1x1   = {1'b0, pass_cnt_i[8:0], 2'(r)};
 
             tap_data  = get_tap_data(tap_curr);
             ky_curr   = tap_data[3:2];
@@ -200,15 +200,15 @@ module npu_flex_addr #(
     // Pass and tap progression across the 9-iteration cycle
     always_ff @(posedge clk_i) begin
         if (!rst_n) begin
-            cin_0 <= 8'd0;
+            cin_0 <= 11'd0;
             tap_0 <= 4'd0;
         end else begin
             if (state_i == SEQ_IDLE || preload_done_i) begin
-                cin_0 <= 8'd0;
+                cin_0 <= 11'd0;
                 tap_0 <= 4'd0;
             end else if (pass_advance_i) begin
                 tap_0 <= (tap_0 == 4'd0) ? 4'd8 : (tap_0 - 4'd1);
-                cin_0 <= (tap_0 == 4'd0) ? cin_0 : (cin_0 + 8'd1);
+                cin_0 <= (tap_0 == 4'd0) ? cin_0 : (cin_0 + 11'd1);
             end
         end
     end

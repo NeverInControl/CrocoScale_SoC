@@ -132,6 +132,7 @@ set sim_only_files [concat \
     [glob -nocomplain "$repo_root/TEST/NPU/TestBenches/*.sv"] \
     [list \
         [file normalize "$repo_root/TEST/SoftLogic/common/efpga_boundary_harness.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/flex/eFPGA_top_flex_harness.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/full/modules/tb_npu_full_sequencer.sv"] \
@@ -140,6 +141,7 @@ set sim_only_files [concat \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_functional.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_crossbar_stress.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_3x3_benchmark.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_yolo_tiny.sv"] \
         [file normalize "$repo_root/TEST/eFPGA_Subsystem/TestBenches/tb_efpga_manager.sv"] \
     ] \
 ]
@@ -149,6 +151,19 @@ foreach sf $sim_only_files {
     }
 }
 puts "    Added Soft-Logic controllers, boundary harness, and all testbenches to sim_1."
+
+# Exclude full FABulous fabric top from simulation so sim_1 resolves eFPGA_top to eFPGA_top_flex_harness.sv
+set fab_synth_only [list \
+    [file normalize "$repo_root/FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_top.v"] \
+    [file normalize "$repo_root/FABulousProject/CrocoScale_Fabric/Fabric/eFPGA.v"] \
+]
+foreach ff $fab_synth_only {
+    set fobj [get_files -quiet -of_objects [get_filesets sources_1] $ff]
+    if {$fobj ne ""} {
+        set_property used_in_simulation false $fobj
+    }
+}
+puts "    Marked real eFPGA_top.v and eFPGA.v as USED_IN_SIMULATION = 0 (synthesis/implementation only)."
 
 # ------------------------------------------------------------------------------
 # 7. Configure Top Module (Zero compiler defines required; 100% filelist-driven)

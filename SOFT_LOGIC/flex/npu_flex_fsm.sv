@@ -22,22 +22,23 @@ module npu_flex_fsm #(
     input  wire        start_drain_i,
     input  wire        auto_drain_i,
     input  wire        lut_en_i,
-    input  wire [7:0]  total_passes_i,
+    input  wire        pool_s1_en_i,
+    input  wire [10:0] total_passes_i,
     input  wire        dma_pass_ready_i,
     input  wire        lut_we_i,
     input  wire        writer_done_i,
 
-    output logic [2:0] state_o,
-    output logic       busy_o,
-    output logic       done_o,
+    output logic [2:0]  state_o,
+    output logic        busy_o,
+    output logic        done_o,
 
-    output logic [7:0] pass_cnt_o,
-    output logic [8:0] k_cnt_o,
+    output logic [10:0] pass_cnt_o,
+    output logic [8:0]  k_cnt_o,
 
-    output logic       preload_phase_o,
-    output logic       lut_phase_o,
-    output logic       drain_phase_o,
-    output logic [8:0] drain_cnt_o,
+    output logic        preload_phase_o,
+    output logic        lut_phase_o,
+    output logic        drain_phase_o,
+    output logic [10:0] drain_cnt_o,
 
     output logic       preload_done_o,
     output logic       pass_advance_o,
@@ -55,15 +56,16 @@ module npu_flex_fsm #(
         SEQ_DONE     = 3'd5
     } seq_state_t;
 
-    localparam logic [8:0] LUT_LIMIT   = 9'd255;
-    localparam logic [8:0] DRAIN_LIMIT = 9'd270;
+    localparam logic [10:0] LUT_LIMIT = 11'd255;
 
     seq_state_t state_reg;
 
-    logic [7:0] pass_cnt;
-    logic [8:0] k_cnt;
-    logic [8:0] drain_cnt;
-    logic       prev_pass_drained;
+    logic [10:0] pass_cnt;
+    logic [8:0]  k_cnt;
+    logic [10:0] drain_cnt;
+    logic        prev_pass_drained;
+
+    wire [10:0] drain_limit = pool_s1_en_i ? 11'd1038 : 11'd270;
 
     wire is_final_pass  = (pass_cnt == total_passes_i - 1'b1);
     wire preload_done   = (state_reg == SEQ_PRELOAD) && dma_pass_ready_i;
@@ -158,7 +160,7 @@ module npu_flex_fsm #(
                 end
 
                 SEQ_DRAIN: begin
-                    if (drain_cnt < DRAIN_LIMIT) begin
+                    if (drain_cnt < drain_limit) begin
                         drain_cnt <= drain_cnt + 1'b1;
                     end
                     if (writer_done_i) begin

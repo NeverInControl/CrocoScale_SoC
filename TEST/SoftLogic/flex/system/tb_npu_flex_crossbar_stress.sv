@@ -58,17 +58,22 @@ module tb_npu_flex_crossbar_stress;
     // =========================================================================
     // Crossbar & Memory Map Parameters (Matching CrocoScale_SoC.sv)
     // =========================================================================
-    localparam int S_COUNT      = 2; // S0: TB CPU Master | S1: Fabric DMA Master
-    localparam int M_COUNT      = 2; // M0: System AXI RAM | M1: Slot 0 Control Bridge
+    localparam int S_COUNT      = 2; // S0: TB CPU Master | S1: eFPGA Subsystem DMA Master
+    localparam int M_COUNT      = 3; // M0: System AXI RAM | M1: Global eFPGA Manager | M2: Slot 0 Control
     localparam int AXI_ID_WIDTH = 8;
     localparam int M_ID_WIDTH   = AXI_ID_WIDTH;
     localparam int RAM_ADDR_W   = 19; // 512 KB System RAM for ping-pong buffers & weights
 
     localparam logic [31:0] RAM_BASE_ADDR  = 32'h0000_0000;
+    localparam logic [31:0] MGR_BASE_ADDR  = 32'h1000_0000;
     localparam logic [31:0] CTRL_BASE_ADDR = 32'h2000_0000;
 
-    localparam logic [M_COUNT*32-1:0] CROSSBAR_BASE_ADDRS  = {CTRL_BASE_ADDR, RAM_BASE_ADDR};
-    localparam logic [M_COUNT*32-1:0] CROSSBAR_ADDR_WIDTHS = {32'd16, 32'(RAM_ADDR_W)};
+    localparam logic [M_COUNT*32-1:0] CROSSBAR_BASE_ADDRS  = {CTRL_BASE_ADDR, MGR_BASE_ADDR, RAM_BASE_ADDR};
+    localparam logic [M_COUNT*32-1:0] CROSSBAR_ADDR_WIDTHS = {32'd16, 32'd16, 32'(RAM_ADDR_W)};
+
+    // eFPGA Manager Slot 0 Register Offsets (Accessed by CPU at MGR_BASE_ADDR + MGR_*)
+    localparam logic [31:0] MGR_SLOT0_CTRL   = 32'h0000_1004;
+    localparam logic [31:0] MGR_SLOT0_STATUS = 32'h0000_1008;
 
     // Slot 0 Control CSR Offsets (Accessed by CPU at CTRL_BASE_ADDR + REG_*)
     localparam logic [31:0] REG_CTRL        = 32'h0000_0000;
@@ -265,12 +270,6 @@ module tb_npu_flex_crossbar_stress;
     assign s_axi_arvalid[0]                              = tb_axi_arvalid;
     assign s_axi_rready [0]                              = tb_axi_rready;
 
-    // Bind S1 Tie-Offs (Fabric DMA Master ID & PROT)
-    assign s_axi_awid  [1*AXI_ID_WIDTH +: AXI_ID_WIDTH] = {AXI_ID_WIDTH{1'b0}};
-    assign s_axi_arid  [1*AXI_ID_WIDTH +: AXI_ID_WIDTH] = {AXI_ID_WIDTH{1'b0}};
-    assign s_axi_awprot[1*3 +: 3]                       = 3'b000;
-    assign s_axi_arprot[1*3 +: 3]                       = 3'b000;
-
     // =========================================================================
     // 1. Shared-Bus AXI4 Interconnect (axi_interconnect)
     // =========================================================================
@@ -386,8 +385,28 @@ module tb_npu_flex_crossbar_stress;
     );
 
     // =========================================================================
-    // 3. Crossbar Master 1: AXI4-to-AXI4-Lite Slot Control Bridge (@ 0x2000_0000)
+    // 3. Crossbar Masters M1 & M2: AXI4-to-AXI4-Lite Bridges (Manager & Slot 0)
     // =========================================================================
+    wire [31:0] axil_mgr_awaddr;
+    wire [2:0]  axil_mgr_awprot;
+    wire        axil_mgr_awvalid;
+    wire        axil_mgr_awready;
+    wire [31:0] axil_mgr_wdata;
+    wire [3:0]  axil_mgr_wstrb;
+    wire        axil_mgr_wvalid;
+    wire        axil_mgr_wready;
+    wire [1:0]  axil_mgr_bresp;
+    wire        axil_mgr_bvalid;
+    wire        axil_mgr_bready;
+    wire [31:0] axil_mgr_araddr;
+    wire [2:0]  axil_mgr_arprot;
+    wire        axil_mgr_arvalid;
+    wire        axil_mgr_arready;
+    wire [31:0] axil_mgr_rdata;
+    wire [1:0]  axil_mgr_rresp;
+    wire        axil_mgr_rvalid;
+    wire        axil_mgr_rready;
+
     wire [31:0] axil_ctrl_awaddr;
     wire [2:0]  axil_ctrl_awprot;
     wire        axil_ctrl_awvalid;
@@ -413,7 +432,7 @@ module tb_npu_flex_crossbar_stress;
         .AXI_DATA_WIDTH (32),
         .AXIL_DATA_WIDTH(32),
         .AXI_ID_WIDTH   (M_ID_WIDTH)
-    ) u_ctrl_bridge (
+    ) u_mgr_bridge (
         .clk           (clk),
         .rst           (rst),
         .s_axi_awid    (m_axi_awid   [1*M_ID_WIDTH +: M_ID_WIDTH]),
@@ -435,7 +454,7 @@ module tb_npu_flex_crossbar_stress;
         .s_axi_bresp   (m_axi_bresp  [1*2 +: 2]),
         .s_axi_bvalid  (m_axi_bvalid [1]),
         .s_axi_bready  (m_axi_bready [1]),
-        .s_axi_arid    (m_axi_arid   [1*M_ID_WIDTH +: M_ID_WIDTH]),
+        .s_axi_arid    (m_axi_arid    [1*M_ID_WIDTH +: M_ID_WIDTH]),
         .s_axi_araddr  (m_axi_araddr [1*32 +: 32]),
         .s_axi_arlen   (m_axi_arlen  [1*8 +: 8]),
         .s_axi_arsize  (m_axi_arsize [1*3 +: 3]),
@@ -451,6 +470,71 @@ module tb_npu_flex_crossbar_stress;
         .s_axi_rlast   (m_axi_rlast  [1]),
         .s_axi_rvalid  (m_axi_rvalid [1]),
         .s_axi_rready  (m_axi_rready [1]),
+
+        .m_axil_awaddr (axil_mgr_awaddr),
+        .m_axil_awprot (axil_mgr_awprot),
+        .m_axil_awvalid(axil_mgr_awvalid),
+        .m_axil_awready(axil_mgr_awready),
+        .m_axil_wdata  (axil_mgr_wdata),
+        .m_axil_wstrb  (axil_mgr_wstrb),
+        .m_axil_wvalid (axil_mgr_wvalid),
+        .m_axil_wready (axil_mgr_wready),
+        .m_axil_bresp  (axil_mgr_bresp),
+        .m_axil_bvalid (axil_mgr_bvalid),
+        .m_axil_bready (axil_mgr_bready),
+        .m_axil_araddr (axil_mgr_araddr),
+        .m_axil_arprot (axil_mgr_arprot),
+        .m_axil_arvalid(axil_mgr_arvalid),
+        .m_axil_arready(axil_mgr_arready),
+        .m_axil_rdata  (axil_mgr_rdata),
+        .m_axil_rresp  (axil_mgr_rresp),
+        .m_axil_rvalid (axil_mgr_rvalid),
+        .m_axil_rready (axil_mgr_rready)
+    );
+
+    axi_axil_adapter #(
+        .ADDR_WIDTH     (32),
+        .AXI_DATA_WIDTH (32),
+        .AXIL_DATA_WIDTH(32),
+        .AXI_ID_WIDTH   (M_ID_WIDTH)
+    ) u_ctrl_bridge (
+        .clk           (clk),
+        .rst           (rst),
+        .s_axi_awid    (m_axi_awid   [2*M_ID_WIDTH +: M_ID_WIDTH]),
+        .s_axi_awaddr  (m_axi_awaddr [2*32 +: 32]),
+        .s_axi_awlen   (m_axi_awlen  [2*8 +: 8]),
+        .s_axi_awsize  (m_axi_awsize [2*3 +: 3]),
+        .s_axi_awburst (m_axi_awburst[2*2 +: 2]),
+        .s_axi_awlock  (m_axi_awlock [2]),
+        .s_axi_awcache (m_axi_awcache[2*4 +: 4]),
+        .s_axi_awprot  (m_axi_awprot [2*3 +: 3]),
+        .s_axi_awvalid (m_axi_awvalid[2]),
+        .s_axi_awready (m_axi_awready[2]),
+        .s_axi_wdata   (m_axi_wdata  [2*32 +: 32]),
+        .s_axi_wstrb   (m_axi_wstrb  [2*4 +: 4]),
+        .s_axi_wlast   (m_axi_wlast  [2]),
+        .s_axi_wvalid  (m_axi_wvalid [2]),
+        .s_axi_wready  (m_axi_wready [2]),
+        .s_axi_bid     (m_axi_bid    [2*M_ID_WIDTH +: M_ID_WIDTH]),
+        .s_axi_bresp   (m_axi_bresp  [2*2 +: 2]),
+        .s_axi_bvalid  (m_axi_bvalid [2]),
+        .s_axi_bready  (m_axi_bready [2]),
+        .s_axi_arid    (m_axi_arid   [2*M_ID_WIDTH +: M_ID_WIDTH]),
+        .s_axi_araddr  (m_axi_araddr [2*32 +: 32]),
+        .s_axi_arlen   (m_axi_arlen  [2*8 +: 8]),
+        .s_axi_arsize  (m_axi_arsize [2*3 +: 3]),
+        .s_axi_arburst (m_axi_arburst[2*2 +: 2]),
+        .s_axi_arlock  (m_axi_arlock [2]),
+        .s_axi_arcache (m_axi_arcache[2*4 +: 4]),
+        .s_axi_arprot  (m_axi_arprot [2*3 +: 3]),
+        .s_axi_arvalid (m_axi_arvalid[2]),
+        .s_axi_arready (m_axi_arready[2]),
+        .s_axi_rid     (m_axi_rid    [2*M_ID_WIDTH +: M_ID_WIDTH]),
+        .s_axi_rdata   (m_axi_rdata  [2*32 +: 32]),
+        .s_axi_rresp   (m_axi_rresp  [2*2 +: 2]),
+        .s_axi_rlast   (m_axi_rlast  [2]),
+        .s_axi_rvalid  (m_axi_rvalid [2]),
+        .s_axi_rready  (m_axi_rready [2]),
 
         .m_axil_awaddr (axil_ctrl_awaddr),
         .m_axil_awprot (axil_ctrl_awprot),
@@ -474,417 +558,112 @@ module tb_npu_flex_crossbar_stress;
     );
 
     // =========================================================================
-    // 4. Perimeter BEL Boundary Harness + Soft-Logic Sequencer + Hardened NPU
+    // 4. Full eFPGA Subsystem Top (Connector + eFPGA_top Harness + NPU Complex)
     // =========================================================================
-    wire [9:0]   fab_axil_awaddr;
-    wire [2:0]   fab_axil_awprot;
-    wire         fab_axil_awvalid;
-    wire         fab_axil_awready;
-    wire [31:0]  fab_axil_wdata;
-    wire [3:0]   fab_axil_wstrb;
-    wire         fab_axil_wvalid;
-    wire         fab_axil_wready;
-    wire [1:0]   fab_axil_bresp;
-    wire         fab_axil_bvalid;
-    wire         fab_axil_bready;
-    wire [9:0]   fab_axil_araddr;
-    wire [2:0]   fab_axil_arprot;
-    wire         fab_axil_arvalid;
-    wire         fab_axil_arready;
-    wire [31:0]  fab_axil_rdata;
-    wire [1:0]   fab_axil_rresp;
-    wire         fab_axil_rvalid;
-    wire         fab_axil_rready;
+    wire [3:0] soc_usr_irq;
+    wire       soc_fault_irq;
 
-    wire [31:0]  fab_axi_awaddr;
-    wire [7:0]   fab_axi_awlen;
-    wire         fab_axi_awvalid;
-    wire         fab_axi_awready;
-    wire [31:0]  fab_axi_wdata;
-    wire [3:0]   fab_axi_wstrb;
-    wire         fab_axi_wlast;
-    wire         fab_axi_wvalid;
-    wire         fab_axi_wready;
-    wire [1:0]   fab_axi_bresp;
-    wire         fab_axi_bvalid;
-    wire         fab_axi_bready;
-    wire [31:0]  fab_axi_araddr;
-    wire [7:0]   fab_axi_arlen;
-    wire         fab_axi_arvalid;
-    wire         fab_axi_arready;
-    wire [31:0]  fab_axi_rdata;
-    wire [1:0]   fab_axi_rresp;
-    wire         fab_axi_rlast;
-    wire         fab_axi_rvalid;
-    wire         fab_axi_rready;
-
-    wire                                             fab_npu_array_en;
-    wire                                             fab_npu_psum_systolic_en;
-    wire                                             fab_npu_psum_skew_en;
-    wire                                             fab_npu_psum_lut_en;
-    wire                                             fab_npu_compute_bank_swap;
-    wire        [ARRAY_HEIGHT-1:0][3:0]              fab_crossbar_sel;
-    wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0] fab_weight_shift_in;
-    wire        [ARRAY_HEIGHT-1:0]                   fab_weight_shift_en;
-    wire                                             fab_npu_swap_weights;
-    wire        [29:0]                               fab_npu_quant_shift_in;
-    wire                                             fab_npu_quant_shift_en;
-    wire        [7:0]                                fab_psum_A_addr;
-    wire        [ARRAY_WIDTH-1:0]                    fab_psum_A_we;
-    wire signed [PSUM_WIDTH-1:0]                     fab_psum_A_wdata;
-    wire signed [PSUM_WIDTH-1:0]                     fab_psum_A_rdata;
-    wire        [7:0]                                fab_psum_B_addr;
-    wire        [ARRAY_WIDTH-1:0]                    fab_psum_B_we;
-    wire signed [PSUM_WIDTH-1:0]                     fab_psum_B_wdata;
-    wire signed [PSUM_WIDTH-1:0]                     fab_psum_B_rdata;
-    wire        [ARRAY_HEIGHT-1:0]                   fab_ext_act_sram_we;
-    wire        [ARRAY_HEIGHT-1:0][8:0]              fab_ext_act_sram_addr;
-    wire        [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] fab_ext_act_sram_wdata;
-    wire        [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] fab_act_sram_rdata;
-    wire        [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0]  fab_out_act;
-    wire        [3:0]                                fab_usr_irq;
-    wire        [3:0]                                soc_usr_irq;
-    wire        [3:0]                                fab_slot_soft_rst_n;
-
-    wire        [ARRAY_HEIGHT-1:0]                   npu_act_clk;
-    wire                                             npu_array_en;
-    wire                                             npu_psum_systolic_en;
-    wire                                             npu_psum_lut_en;
-    wire                                             npu_psum_skew_en;
-    wire                                             npu_compute_bank_swap;
-    wire                                             npu_swap_weights;
-    wire        [29:0]                               npu_quant_shift_in;
-    wire                                             npu_quant_shift_en;
-    wire        [ARRAY_HEIGHT-1:0][3:0]              npu_crossbar_sel;
-    wire signed [ARRAY_HEIGHT-1:0][WEIGHT_WIDTH-1:0] npu_weight_shift_in;
-    wire        [ARRAY_HEIGHT-1:0]                   npu_weight_shift_en;
-    wire        [ARRAY_HEIGHT-1:0]                   npu_ext_act_sram_we;
-    wire        [ARRAY_HEIGHT-1:0][8:0]              npu_ext_act_sram_addr;
-    wire        [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] npu_ext_act_sram_wdata;
-    wire        [ARRAY_HEIGHT-1:0][ACTIVATION_WIDTH-1:0] npu_act_sram_rdata;
-    wire        [ARRAY_WIDTH-1:0][ACTIVATION_WIDTH-1:0]  npu_out_act;
-    wire        [7:0]                                npu_psum_A_addr;
-    wire        [ARRAY_WIDTH-1:0]                    npu_psum_A_we;
-    wire signed [PSUM_WIDTH-1:0]                     npu_psum_A_wdata;
-    wire        [2:0]                                npu_psum_A_read_bank_sel;
-    wire signed [PSUM_WIDTH-1:0]                     npu_psum_A_rdata;
-    wire        [7:0]                                npu_psum_B_addr;
-    wire        [ARRAY_WIDTH-1:0]                    npu_psum_B_we;
-    wire signed [PSUM_WIDTH-1:0]                     npu_psum_B_wdata;
-    wire        [2:0]                                npu_psum_B_read_bank_sel;
-    wire signed [PSUM_WIDTH-1:0]                     npu_psum_B_rdata;
-
-    efpga_boundary_harness #(
-        .ARRAY_HEIGHT    (ARRAY_HEIGHT),
-        .ARRAY_WIDTH     (ARRAY_WIDTH),
-        .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
-        .WEIGHT_WIDTH    (WEIGHT_WIDTH),
-        .PSUM_WIDTH      (PSUM_WIDTH),
-        .CFG_AXI_M       (12'hF3E),
-        .CFG_NPU_CTRL    (1'b0),
-        .CFG_DEBUG       (16'h0004)
-    ) harness_inst (
+    efpga_subsystem_top #(
+        .NUM_SLOTS   (1),
+        .AXI_ID_WIDTH(AXI_ID_WIDTH),
+        .WEIGHT_SPLIT(WEIGHT_SPLIT)
+    ) u_efpga_subsystem (
         .clk_i                   (clk),
+        .rst_efpga_connector_n_i (rst_n),
+        .rst_efpga_connector_i   (rst),
+        .rst_efpga_fabric_n_i    (rst_n),
+        .rst_efpga_slot_n_i      ({4{rst_n}}),
+        .rst_efpga_npu_n_i       (rst_n),
 
-        // SoC Facing Ports: Connected to u_ctrl_bridge (M1) and u_axi_crossbar (S1)
-        .s_axil_awaddr           (axil_ctrl_awaddr[9:0]),
-        .s_axil_awprot           (axil_ctrl_awprot),
-        .s_axil_awvalid          (axil_ctrl_awvalid),
-        .s_axil_awready          (axil_ctrl_awready),
-        .s_axil_wdata            (axil_ctrl_wdata),
-        .s_axil_wstrb            (axil_ctrl_wstrb),
-        .s_axil_wvalid           (axil_ctrl_wvalid),
-        .s_axil_wready           (axil_ctrl_wready),
-        .s_axil_bresp            (axil_ctrl_bresp),
-        .s_axil_bvalid           (axil_ctrl_bvalid),
-        .s_axil_bready           (axil_ctrl_bready),
-        .s_axil_araddr           (axil_ctrl_araddr[9:0]),
-        .s_axil_arprot           (axil_ctrl_arprot),
-        .s_axil_arvalid          (axil_ctrl_arvalid),
-        .s_axil_arready          (axil_ctrl_arready),
-        .s_axil_rdata            (axil_ctrl_rdata),
-        .s_axil_rresp            (axil_ctrl_rresp),
-        .s_axil_rvalid           (axil_ctrl_rvalid),
-        .s_axil_rready           (axil_ctrl_rready),
+        // Global Manager Interface (from u_mgr_bridge M1 @ 0x1000_0000)
+        .s_axil_mgr_awaddr       (axil_mgr_awaddr),
+        .s_axil_mgr_awprot       (axil_mgr_awprot),
+        .s_axil_mgr_awvalid      (axil_mgr_awvalid),
+        .s_axil_mgr_awready      (axil_mgr_awready),
+        .s_axil_mgr_wdata        (axil_mgr_wdata),
+        .s_axil_mgr_wstrb        (axil_mgr_wstrb),
+        .s_axil_mgr_wvalid       (axil_mgr_wvalid),
+        .s_axil_mgr_wready       (axil_mgr_wready),
+        .s_axil_mgr_bresp        (axil_mgr_bresp),
+        .s_axil_mgr_bvalid       (axil_mgr_bvalid),
+        .s_axil_mgr_bready       (axil_mgr_bready),
+        .s_axil_mgr_araddr       (axil_mgr_araddr),
+        .s_axil_mgr_arprot       (axil_mgr_arprot),
+        .s_axil_mgr_arvalid      (axil_mgr_arvalid),
+        .s_axil_mgr_arready      (axil_mgr_arready),
+        .s_axil_mgr_rdata        (axil_mgr_rdata),
+        .s_axil_mgr_rresp        (axil_mgr_rresp),
+        .s_axil_mgr_rvalid       (axil_mgr_rvalid),
+        .s_axil_mgr_rready       (axil_mgr_rready),
 
-        .m_axi_awaddr            (s_axi_awaddr [1*32 +: 32]),
-        .m_axi_awlen             (s_axi_awlen  [1*8 +: 8]),
-        .m_axi_awsize            (s_axi_awsize [1*3 +: 3]),
-        .m_axi_awburst           (s_axi_awburst[1*2 +: 2]),
-        .m_axi_awlock            (s_axi_awlock [1]),
-        .m_axi_awcache           (s_axi_awcache[1*4 +: 4]),
-        .m_axi_awvalid           (s_axi_awvalid[1]),
-        .m_axi_awready           (s_axi_awready[1]),
-        .m_axi_wdata             (s_axi_wdata  [1*32 +: 32]),
-        .m_axi_wstrb             (s_axi_wstrb  [1*4 +: 4]),
-        .m_axi_wlast             (s_axi_wlast  [1]),
-        .m_axi_wvalid            (s_axi_wvalid [1]),
-        .m_axi_wready            (s_axi_wready [1]),
-        .m_axi_bresp             (s_axi_bresp  [1*2 +: 2]),
-        .m_axi_bvalid            (s_axi_bvalid [1]),
-        .m_axi_bready            (s_axi_bready [1]),
-        .m_axi_araddr            (s_axi_araddr [1*32 +: 32]),
-        .m_axi_arlen             (s_axi_arlen  [1*8 +: 8]),
-        .m_axi_arsize            (s_axi_arsize [1*3 +: 3]),
-        .m_axi_arburst           (s_axi_arburst[1*2 +: 2]),
-        .m_axi_arlock            (s_axi_arlock [1]),
-        .m_axi_arcache           (s_axi_arcache[1*4 +: 4]),
-        .m_axi_arvalid           (s_axi_arvalid[1]),
-        .m_axi_arready           (s_axi_arready[1]),
-        .m_axi_rdata             (s_axi_rdata  [1*32 +: 32]),
-        .m_axi_rresp             (s_axi_rresp  [1*2 +: 2]),
-        .m_axi_rlast             (s_axi_rlast  [1]),
-        .m_axi_rvalid            (s_axi_rvalid [1]),
-        .m_axi_rready            (s_axi_rready [1]),
+        // Slot 0 Control Interface (from u_ctrl_bridge M2 @ 0x2000_0000)
+        .s_axil_ctrl_awaddr      (axil_ctrl_awaddr),
+        .s_axil_ctrl_awprot      (axil_ctrl_awprot),
+        .s_axil_ctrl_awvalid     (axil_ctrl_awvalid),
+        .s_axil_ctrl_awready     (axil_ctrl_awready),
+        .s_axil_ctrl_wdata       (axil_ctrl_wdata),
+        .s_axil_ctrl_wstrb       (axil_ctrl_wstrb),
+        .s_axil_ctrl_wvalid      (axil_ctrl_wvalid),
+        .s_axil_ctrl_wready      (axil_ctrl_wready),
+        .s_axil_ctrl_bresp       (axil_ctrl_bresp),
+        .s_axil_ctrl_bvalid      (axil_ctrl_bvalid),
+        .s_axil_ctrl_bready      (axil_ctrl_bready),
+        .s_axil_ctrl_araddr      (axil_ctrl_araddr),
+        .s_axil_ctrl_arprot      (axil_ctrl_arprot),
+        .s_axil_ctrl_arvalid     (axil_ctrl_arvalid),
+        .s_axil_ctrl_arready     (axil_ctrl_arready),
+        .s_axil_ctrl_rdata       (axil_ctrl_rdata),
+        .s_axil_ctrl_rresp       (axil_ctrl_rresp),
+        .s_axil_ctrl_rvalid      (axil_ctrl_rvalid),
+        .s_axil_ctrl_rready      (axil_ctrl_rready),
 
-        .soc_debug_out_i         (32'd0),
-        .soc_debug_in_o          (),
-        .soc_usr_irq_o           (soc_usr_irq),
-        .soc_slot_soft_rst_n_i   ({3'b0, rst_n}),
+        // Slot 0 DMA Initiator Interface (to Crossbar S1)
+        .m_axi_dma_awid          (s_axi_awid   [1*AXI_ID_WIDTH +: AXI_ID_WIDTH]),
+        .m_axi_dma_awaddr        (s_axi_awaddr [1*32 +: 32]),
+        .m_axi_dma_awlen         (s_axi_awlen  [1*8 +: 8]),
+        .m_axi_dma_awsize        (s_axi_awsize [1*3 +: 3]),
+        .m_axi_dma_awburst       (s_axi_awburst[1*2 +: 2]),
+        .m_axi_dma_awlock        (s_axi_awlock [1]),
+        .m_axi_dma_awcache       (s_axi_awcache[1*4 +: 4]),
+        .m_axi_dma_awprot        (s_axi_awprot [1*3 +: 3]),
+        .m_axi_dma_awvalid       (s_axi_awvalid[1]),
+        .m_axi_dma_awready       (s_axi_awready[1]),
+        .m_axi_dma_wdata         (s_axi_wdata  [1*32 +: 32]),
+        .m_axi_dma_wstrb         (s_axi_wstrb  [1*4 +: 4]),
+        .m_axi_dma_wlast         (s_axi_wlast  [1]),
+        .m_axi_dma_wvalid        (s_axi_wvalid [1]),
+        .m_axi_dma_wready        (s_axi_wready [1]),
+        .m_axi_dma_bid           (s_axi_bid    [1*AXI_ID_WIDTH +: AXI_ID_WIDTH]),
+        .m_axi_dma_bresp         (s_axi_bresp  [1*2 +: 2]),
+        .m_axi_dma_bvalid        (s_axi_bvalid [1]),
+        .m_axi_dma_bready        (s_axi_bready [1]),
+        .m_axi_dma_arid          (s_axi_arid   [1*AXI_ID_WIDTH +: AXI_ID_WIDTH]),
+        .m_axi_dma_araddr        (s_axi_araddr [1*32 +: 32]),
+        .m_axi_dma_arlen         (s_axi_arlen  [1*8 +: 8]),
+        .m_axi_dma_arsize        (s_axi_arsize [1*3 +: 3]),
+        .m_axi_dma_arburst       (s_axi_arburst[1*2 +: 2]),
+        .m_axi_dma_arlock        (s_axi_arlock [1]),
+        .m_axi_dma_arcache       (s_axi_arcache[1*4 +: 4]),
+        .m_axi_dma_arprot        (s_axi_arprot [1*3 +: 3]),
+        .m_axi_dma_arvalid       (s_axi_arvalid[1]),
+        .m_axi_dma_arready       (s_axi_arready[1]),
+        .m_axi_dma_rid           (s_axi_rid    [1*AXI_ID_WIDTH +: AXI_ID_WIDTH]),
+        .m_axi_dma_rdata         (s_axi_rdata  [1*32 +: 32]),
+        .m_axi_dma_rresp         (s_axi_rresp  [1*2 +: 2]),
+        .m_axi_dma_rlast         (s_axi_rlast  [1]),
+        .m_axi_dma_rvalid        (s_axi_rvalid [1]),
+        .m_axi_dma_rready        (s_axi_rready [1]),
 
-        // NPU Facing Ports
-        .npu_act_clk             (npu_act_clk),
-        .npu_array_en            (npu_array_en),
-        .npu_psum_systolic_en    (npu_psum_systolic_en),
-        .npu_psum_lut_en         (npu_psum_lut_en),
-        .npu_psum_skew_en        (npu_psum_skew_en),
-        .npu_compute_bank_swap   (npu_compute_bank_swap),
-        .npu_swap_weights        (npu_swap_weights),
-        .npu_quant_shift_in      (npu_quant_shift_in),
-        .npu_quant_shift_en      (npu_quant_shift_en),
-        .npu_crossbar_sel        (npu_crossbar_sel),
-        .npu_weight_shift_in     (npu_weight_shift_in),
-        .npu_weight_shift_en     (npu_weight_shift_en),
-        .npu_ext_act_sram_we     (npu_ext_act_sram_we),
-        .npu_ext_act_sram_addr   (npu_ext_act_sram_addr),
-        .npu_ext_act_sram_wdata  (npu_ext_act_sram_wdata),
-        .npu_act_sram_rdata      (npu_act_sram_rdata),
-        .npu_out_act             (npu_out_act),
-        .npu_psum_A_addr         (npu_psum_A_addr),
-        .npu_psum_A_we           (npu_psum_A_we),
-        .npu_psum_A_wdata        (npu_psum_A_wdata),
-        .npu_psum_A_read_bank_sel(npu_psum_A_read_bank_sel),
-        .npu_psum_A_rdata        (npu_psum_A_rdata),
-        .npu_psum_B_addr         (npu_psum_B_addr),
-        .npu_psum_B_we           (npu_psum_B_we),
-        .npu_psum_B_wdata        (npu_psum_B_wdata),
-        .npu_psum_B_read_bank_sel(npu_psum_B_read_bank_sel),
-        .npu_psum_B_rdata        (npu_psum_B_rdata),
+        // External PMOD & BitBang Tie-Offs
+        .pmod_io_i               (8'h00),
+        .pmod_io_o               (),
+        .pmod_io_oe_o            (),
+        .efpga_cfg_sclk_i        (1'b0),
+        .efpga_cfg_sdata_i       (1'b0),
 
-        // Fabric Facing AXI-Lite & AXI4 Ports
-        .fab_axil_awaddr         (fab_axil_awaddr),
-        .fab_axil_awprot         (fab_axil_awprot),
-        .fab_axil_awvalid        (fab_axil_awvalid),
-        .fab_axil_awready        (fab_axil_awready),
-        .fab_axil_wdata          (fab_axil_wdata),
-        .fab_axil_wstrb          (fab_axil_wstrb),
-        .fab_axil_wvalid         (fab_axil_wvalid),
-        .fab_axil_wready         (fab_axil_wready),
-        .fab_axil_bresp          (fab_axil_bresp),
-        .fab_axil_bvalid         (fab_axil_bvalid),
-        .fab_axil_bready         (fab_axil_bready),
-        .fab_axil_araddr         (fab_axil_araddr),
-        .fab_axil_arprot         (fab_axil_arprot),
-        .fab_axil_arvalid        (fab_axil_arvalid),
-        .fab_axil_arready        (fab_axil_arready),
-        .fab_axil_rdata          (fab_axil_rdata),
-        .fab_axil_rresp          (fab_axil_rresp),
-        .fab_axil_rvalid         (fab_axil_rvalid),
-        .fab_axil_rready         (fab_axil_rready),
-
-        .fab_axi_awaddr          (fab_axi_awaddr),
-        .fab_axi_awlen           (fab_axi_awlen),
-        .fab_axi_awsize          (3'd2),
-        .fab_axi_awburst         (2'b01),
-        .fab_axi_awlock          (1'b0),
-        .fab_axi_awcache         (4'd0),
-        .fab_axi_awvalid         (fab_axi_awvalid),
-        .fab_axi_awready         (fab_axi_awready),
-        .fab_axi_wdata           (fab_axi_wdata),
-        .fab_axi_wstrb           (fab_axi_wstrb),
-        .fab_axi_wlast           (fab_axi_wlast),
-        .fab_axi_wvalid          (fab_axi_wvalid),
-        .fab_axi_wready          (fab_axi_wready),
-        .fab_axi_bresp           (fab_axi_bresp),
-        .fab_axi_bvalid          (fab_axi_bvalid),
-        .fab_axi_bready          (fab_axi_bready),
-        .fab_axi_araddr          (fab_axi_araddr),
-        .fab_axi_arlen           (fab_axi_arlen),
-        .fab_axi_arsize          (3'd2),
-        .fab_axi_arburst         (2'b01),
-        .fab_axi_arlock          (1'b0),
-        .fab_axi_arcache         (4'd0),
-        .fab_axi_arvalid         (fab_axi_arvalid),
-        .fab_axi_arready         (fab_axi_arready),
-        .fab_axi_rdata           (fab_axi_rdata),
-        .fab_axi_rresp           (fab_axi_rresp),
-        .fab_axi_rlast           (fab_axi_rlast),
-        .fab_axi_rvalid          (fab_axi_rvalid),
-        .fab_axi_rready          (fab_axi_rready),
-
-        // Fabric Facing NPU Control & Data Ports (No PSUM Peek Backdoor)
-        .fab_npu_array_en        (fab_npu_array_en),
-        .fab_npu_psum_systolic_en(fab_npu_psum_systolic_en),
-        .fab_npu_psum_lut_en     (fab_npu_psum_lut_en),
-        .fab_npu_psum_skew_en    (fab_npu_psum_skew_en),
-        .fab_npu_compute_bank_swap(fab_npu_compute_bank_swap),
-        .fab_npu_swap_weights    (fab_npu_swap_weights),
-        .fab_npu_quant_shift_in  (fab_npu_quant_shift_in),
-        .fab_npu_quant_shift_en  (fab_npu_quant_shift_en),
-        .fab_crossbar_sel        (fab_crossbar_sel),
-        .fab_weight_shift_in     (fab_weight_shift_in),
-        .fab_weight_shift_en     (fab_weight_shift_en),
-        .fab_ext_act_sram_we     (fab_ext_act_sram_we),
-        .fab_ext_act_sram_addr   (fab_ext_act_sram_addr),
-        .fab_ext_act_sram_wdata  (fab_ext_act_sram_wdata),
-        .fab_act_sram_rdata      (fab_act_sram_rdata),
-        .fab_out_act             (fab_out_act),
-        .fab_psum_A_addr         (fab_psum_A_addr),
-        .fab_psum_A_we           (fab_psum_A_we),
-        .fab_psum_A_wdata        (fab_psum_A_wdata),
-        .fab_psum_A_read_bank_sel(3'd0),
-        .fab_psum_A_rdata        (fab_psum_A_rdata),
-        .fab_psum_B_addr         (fab_psum_B_addr),
-        .fab_psum_B_we           (fab_psum_B_we),
-        .fab_psum_B_wdata        (fab_psum_B_wdata),
-        .fab_psum_B_read_bank_sel(3'd0),
-        .fab_psum_B_rdata        (fab_psum_B_rdata),
-
-        .fab_debug_out_o         (),
-        .fab_debug_in_i          (32'd0),
-        .fab_usr_irq_i           (fab_usr_irq),
-        .fab_slot_soft_rst_n_o   (fab_slot_soft_rst_n)
-    );
-
-    npu_flex_sequencer #(
-        .ARRAY_HEIGHT(ARRAY_HEIGHT),
-        .ARRAY_WIDTH (ARRAY_WIDTH),
-        .TILE_SIZE   (TILE_SIZE),
-        .ACT_HALO_PAD(ACT_HALO_PAD),
-        .TOTAL_PASSES(TOTAL_PASSES),
-        .CIN         (CIN),
-        .COUT        (COUT),
-        .DEFAULT_H   (L1_H),
-        .DEFAULT_W   (L1_W),
-        .FIFO_DEPTH  (4)
-    ) dut (
-        .clk_i                (clk),
-        .rst_n                (fab_slot_soft_rst_n[0]),
-        .s_axil_awaddr        (fab_axil_awaddr),
-        .s_axil_awprot        (fab_axil_awprot),
-        .s_axil_awvalid       (fab_axil_awvalid),
-        .s_axil_awready       (fab_axil_awready),
-        .s_axil_wdata         (fab_axil_wdata),
-        .s_axil_wstrb         (fab_axil_wstrb),
-        .s_axil_wvalid        (fab_axil_wvalid),
-        .s_axil_wready        (fab_axil_wready),
-        .s_axil_bresp         (fab_axil_bresp),
-        .s_axil_bvalid        (fab_axil_bvalid),
-        .s_axil_bready        (fab_axil_bready),
-        .s_axil_araddr        (fab_axil_araddr),
-        .s_axil_arprot        (fab_axil_arprot),
-        .s_axil_arvalid       (fab_axil_arvalid),
-        .s_axil_arready       (fab_axil_arready),
-        .s_axil_rdata         (fab_axil_rdata),
-        .s_axil_rresp         (fab_axil_rresp),
-        .s_axil_rvalid        (fab_axil_rvalid),
-        .s_axil_rready        (fab_axil_rready),
-        .m_axi_awaddr         (fab_axi_awaddr),
-        .m_axi_awlen          (fab_axi_awlen),
-        .m_axi_awvalid        (fab_axi_awvalid),
-        .m_axi_awready        (fab_axi_awready),
-        .m_axi_wdata          (fab_axi_wdata),
-        .m_axi_wstrb          (fab_axi_wstrb),
-        .m_axi_wlast          (fab_axi_wlast),
-        .m_axi_wvalid         (fab_axi_wvalid),
-        .m_axi_wready         (fab_axi_wready),
-        .m_axi_bresp          (fab_axi_bresp),
-        .m_axi_bvalid         (fab_axi_bvalid),
-        .m_axi_bready         (fab_axi_bready),
-        .m_axi_araddr         (fab_axi_araddr),
-        .m_axi_arlen          (fab_axi_arlen),
-        .m_axi_arvalid        (fab_axi_arvalid),
-        .m_axi_arready        (fab_axi_arready),
-        .m_axi_rdata          (fab_axi_rdata),
-        .m_axi_rresp          (fab_axi_rresp),
-        .m_axi_rlast          (fab_axi_rlast),
-        .m_axi_rvalid         (fab_axi_rvalid),
-        .m_axi_rready         (fab_axi_rready),
-        .usr_irq_o            (fab_usr_irq),
-        .busy_o               (),
-        .done_o               (),
-        .current_pass_o       (),
-        .cycle_in_pass_o      (),
-        .array_en_o           (fab_npu_array_en),
-        .psum_systolic_en_o   (fab_npu_psum_systolic_en),
-        .psum_skew_en_o       (fab_npu_psum_skew_en),
-        .psum_lut_en_o        (fab_npu_psum_lut_en),
-        .compute_bank_swap_o  (fab_npu_compute_bank_swap),
-        .crossbar_sel_o       (fab_crossbar_sel),
-        .act_sram_addr_o      (fab_ext_act_sram_addr),
-        .act_sram_we_o        (fab_ext_act_sram_we),
-        .act_sram_wdata_o     (fab_ext_act_sram_wdata),
-        .act_sram_rdata_i     (fab_act_sram_rdata),
-        .out_act_i            (fab_out_act),
-        .weight_shift_in_o    (fab_weight_shift_in),
-        .weight_shift_en_o    (fab_weight_shift_en),
-        .swap_weights_o       (fab_npu_swap_weights),
-        .quant_shift_in_o     (fab_npu_quant_shift_in),
-        .quant_shift_en_o     (fab_npu_quant_shift_en),
-        .psum_A_addr_o        (fab_psum_A_addr),
-        .psum_A_we_o          (fab_psum_A_we),
-        .psum_A_wdata_o       (fab_psum_A_wdata),
-        .psum_B_addr_o        (fab_psum_B_addr),
-        .psum_B_we_o          (fab_psum_B_we),
-        .psum_B_wdata_o       (fab_psum_B_wdata),
-        .preload_phase_o      (),
-        .dma_channel_to_load_o(),
-        .dma_bank_ptr_o       (),
-        .lut_phase_o          (),
-        .drain_phase_o        (),
-        .drain_step_o         ()
-    );
-
-    npu_wrapper #(
-        .ARRAY_HEIGHT    (ARRAY_HEIGHT),
-        .ARRAY_WIDTH     (ARRAY_WIDTH),
-        .TILE_SIZE       (TILE_SIZE),
-        .ACT_HALO_PAD    (ACT_HALO_PAD),
-        .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
-        .WEIGHT_WIDTH    (WEIGHT_WIDTH),
-        .PSUM_WIDTH      (PSUM_WIDTH),
-        .SCALE_WIDTH     (SCALE_WIDTH),
-        .WEIGHT_SPLIT    (WEIGHT_SPLIT)
-    ) npu_inst (
-        .clk_i               (clk),
-        .act_clk_i           (npu_act_clk),
-        .rst_n               (rst_n),
-        .array_en            (npu_array_en),
-        .psum_systolic_en    (npu_psum_systolic_en),
-        .psum_lut_en         (npu_psum_lut_en),
-        .psum_skew_en        (npu_psum_skew_en),
-        .compute_bank_swap   (npu_compute_bank_swap),
-        .crossbar_sel        (npu_crossbar_sel),
-        .weight_shift_in     (npu_weight_shift_in),
-        .weight_shift_en     (npu_weight_shift_en),
-        .swap_weights        (npu_swap_weights),
-        .quant_shift_in      (npu_quant_shift_in),
-        .quant_shift_en      (npu_quant_shift_en),
-        .psum_A_addr         (npu_psum_A_addr),
-        .psum_A_we           (npu_psum_A_we),
-        .psum_A_wdata        (npu_psum_A_wdata),
-        .psum_A_read_bank_sel(npu_psum_A_read_bank_sel),
-        .psum_A_rdata        (npu_psum_A_rdata),
-        .psum_B_addr         (npu_psum_B_addr),
-        .psum_B_we           (npu_psum_B_we),
-        .psum_B_wdata        (npu_psum_B_wdata),
-        .psum_B_read_bank_sel(npu_psum_B_read_bank_sel),
-        .psum_B_rdata        (npu_psum_B_rdata),
-        .ext_act_sram_we     (npu_ext_act_sram_we),
-        .ext_act_sram_addr   (npu_ext_act_sram_addr),
-        .ext_act_sram_wdata  (npu_ext_act_sram_wdata),
-        .act_sram_rdata      (npu_act_sram_rdata),
-        .out_act             (npu_out_act)
+        // Interrupt Outputs
+        .efpga_usr_irq_o         (soc_usr_irq),
+        .efpga_fault_irq_o       (soc_fault_irq)
     );
 
     // =========================================================================
@@ -1677,6 +1456,10 @@ module tb_npu_flex_crossbar_stress;
         repeat (10) @(negedge clk);
         rst_n = 1'b1;
         repeat (10) @(negedge clk);
+
+        // Un-decouple Slot 0 & enable user IRQs via Global eFPGA Manager (M1 @ 0x1000_0000)
+        cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
+        repeat (4) @(negedge clk);
 
         cpu_init_scratchpad_ram();
 
