@@ -166,12 +166,41 @@ foreach ff $fab_synth_only {
 puts "    Marked real eFPGA_top.v and eFPGA.v as USED_IN_SIMULATION = 0 (synthesis/implementation only)."
 
 # ------------------------------------------------------------------------------
+# 6. Configure VCU118 Target Constraints in constrs_1
+# ------------------------------------------------------------------------------
+puts "==> Step 6: Switching active constraints in constrs_1 to vcu118.xdc..."
+set proj_dir [get_property DIRECTORY [current_project]]
+
+set old_nexys_xdc [get_files -quiet -of_objects [get_filesets constrs_1] *nexys_video.xdc]
+if {[llength $old_nexys_xdc] > 0} {
+    set_property IS_ENABLED false $old_nexys_xdc
+    puts "    Disabled legacy nexys_video.xdc in constrs_1."
+}
+
+set vcu118_xdc [file normalize "$proj_dir/CrocoScale_SoC.srcs/constrs_1/imports/new/vcu118.xdc"]
+if {![file exists $vcu118_xdc]} {
+    set vcu118_xdc [file normalize "$repo_root/VIVADO/vcu118.xdc"]
+}
+
+if {[file exists $vcu118_xdc]} {
+    set cur_vcu_xdc [get_files -quiet -of_objects [get_filesets constrs_1] *vcu118.xdc]
+    if {[llength $cur_vcu_xdc] == 0} {
+        add_files -fileset constrs_1 -norecurse $vcu118_xdc
+        set cur_vcu_xdc [get_files -quiet -of_objects [get_filesets constrs_1] *vcu118.xdc]
+    }
+    set_property IS_ENABLED true $cur_vcu_xdc
+    puts "    Enabled active VCU118 constraints: $vcu118_xdc"
+} else {
+    puts "    WARNING: vcu118.xdc not found at $vcu118_xdc!"
+}
+
+# ------------------------------------------------------------------------------
 # 7. Configure Top Module (Zero compiler defines required; 100% filelist-driven)
 # ------------------------------------------------------------------------------
 puts "==> Step 7: Configuring top module (100% filelist-driven architecture)..."
 set_property verilog_define {} [get_filesets sources_1]
 set_property verilog_define {} [get_filesets sim_1]
-set_property top crocoscale_soc [get_filesets sources_1]
+set_property top crocoscale_soc_vcu118 [get_filesets sources_1]
 update_compile_order -fileset sources_1
 
 # ------------------------------------------------------------------------------
@@ -182,10 +211,9 @@ set golden_dir [file normalize "$repo_root/TEST/GoldenReference"]
 set_property -dict [list xsim.simulate.xsim.more_options "-testplusarg MEM_DIR=$golden_dir"] [get_filesets sim_1]
 
 # ------------------------------------------------------------------------------
-# 9. Attach DRC Crash Prevention Hook (disable_drc.tcl)
+# 9. Attach DRC Crash Prevention Hook (disable_drc.tcl) & Clear Stale Checkpoints
 # ------------------------------------------------------------------------------
 puts "==> Step 9: Attaching DRC loop & stack overflow crash prevention hook..."
-set proj_dir [get_property DIRECTORY [current_project]]
 set drc_hook [file normalize "$proj_dir/disable_drc.tcl"]
 if {![file exists $drc_hook]} {
     set drc_hook [file normalize "$repo_root/scripts/disable_drc.tcl"]
@@ -199,6 +227,18 @@ if {[file exists $drc_hook]} {
 } else {
     puts "    WARNING: disable_drc.tcl not found at $drc_hook!"
 }
+
+# Clear stale incremental checkpoints and reset runs for clean target migration
+catch {
+    set_property AUTO_INCREMENTAL_CHECKPOINT 0 [get_runs synth_1]
+    set_property INCREMENTAL_CHECKPOINT "" [get_runs synth_1]
+    set_property AUTO_INCREMENTAL_CHECKPOINT 0 [get_runs impl_1]
+    set_property INCREMENTAL_CHECKPOINT "" [get_runs impl_1]
+}
+foreach r [get_runs] {
+    catch { reset_run $r }
+}
+puts "    Cleared stale incremental checkpoints and reset synthesis/implementation/OOC runs."
 
 # Disable crash-prone post-opt DRC report on soft-fabric loops
 catch { set_property IS_ENABLED false [get_report_configs -quiet -of_objects [get_runs impl_1] impl_1_opt_report_drc_0] }
