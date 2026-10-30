@@ -63,7 +63,7 @@ module npu_min_addr_gen #(
         end
     endgenerate
 
-    always_ff @(posedge clk_i or negedge rst_n) begin
+    always_ff @(posedge clk_i) begin
         if (!rst_n) begin
             shift_reg <= '0;
         end else begin

@@ -55,7 +55,7 @@ module npu_min_addr_gen (
 			assign act_sram_addr_o[r * ACT_ADDR_WIDTH+:ACT_ADDR_WIDTH] = shift_reg[((ARRAY_HEIGHT - 1) >= 1 ? r : 1 - (r - (ARRAY_HEIGHT - 1))) * ACT_ADDR_WIDTH+:ACT_ADDR_WIDTH];
 		end
 	endgenerate
-	always @(posedge clk_i or negedge rst_n)
+	always @(posedge clk_i)
 		if (!rst_n)
 			shift_reg <= 1'sb0;
 		else begin
