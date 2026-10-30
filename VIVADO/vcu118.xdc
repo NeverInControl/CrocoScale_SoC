@@ -3,7 +3,7 @@
 ## Target Part: xcvu9p-flga2104-2L-e (Board: xilinx.com:vcu118:part0:2.4)
 ## ==============================================================================
 
-## 125 MHz Differential System Clock (Bank 64, SLR0 -> 8.000 ns period)
+## 125 MHz Differential System Clock (Bank 64, SLR1 -> 8.000 ns period)
 ## MMCME4_BASE inside soc_clk_rst_gen automatically derives the 10.000 MHz sys_clk_o
 create_clock -period 8.000 -name sys_clk_pin -waveform {0.000 4.000} -add [get_ports clk_p_i]
 
@@ -16,7 +16,7 @@ set_property IOSTANDARD  LVDS [get_ports clk_n_i]
 set_property PACKAGE_PIN L19      [get_ports rstn_i]
 set_property IOSTANDARD  LVCMOS12 [get_ports rstn_i]
 
-## USB-UART Bridge (Silicon Labs CP2105GM U34, Bank 64, SLR0)
+## USB-UART Bridge (Silicon Labs CP2105GM U34, Bank 64, SLR1)
 ## FPGA TX (BB21, net USB_UART_RX) -> CP2105 RXD
 set_property PACKAGE_PIN BB21     [get_ports uart0_txd_o]
 set_property IOSTANDARD  LVCMOS18 [get_ports uart0_txd_o]
@@ -24,7 +24,7 @@ set_property IOSTANDARD  LVCMOS18 [get_ports uart0_txd_o]
 set_property PACKAGE_PIN AW25     [get_ports uart0_rxd_i]
 set_property IOSTANDARD  LVCMOS18 [get_ports uart0_rxd_i]
 
-## User GPIO LEDs (DS6..DS13, Bank 67, SLR0)
+## User GPIO LEDs (DS6..DS13, Bank 67, SLR1)
 set_property PACKAGE_PIN AT32     [get_ports {gpio_o[0]}]
 set_property IOSTANDARD  LVCMOS12 [get_ports {gpio_o[0]}]
 set_property PACKAGE_PIN AV34     [get_ports {gpio_o[1]}]
@@ -42,7 +42,7 @@ set_property IOSTANDARD  LVCMOS12 [get_ports {gpio_o[6]}]
 set_property PACKAGE_PIN BA37     [get_ports {gpio_o[7]}]
 set_property IOSTANDARD  LVCMOS12 [get_ports {gpio_o[7]}]
 
-## Pmod Header J52 (PMOD0, Female Right-Angle: 8-bit Bidirectional eFPGA Fabric I/O, Bank 67, SLR0)
+## Pmod Header J52 (PMOD0, Female Right-Angle: 8-bit Bidirectional eFPGA Fabric I/O, Bank 67, SLR1)
 set_property PACKAGE_PIN AY14     [get_ports {ja[0]}]
 set_property IOSTANDARD  LVCMOS18 [get_ports {ja[0]}]
 set_property PACKAGE_PIN AY15     [get_ports {ja[1]}]
@@ -79,11 +79,11 @@ set_property IOSTANDARD  LVCMOS12 [get_ports {jb[6]}]
 set_property PACKAGE_PIN R29      [get_ports {jb[7]}]
 set_property IOSTANDARD  LVCMOS12 [get_ports {jb[7]}]
 
-## Single-Chiplet (SLR0) Floorplan Constraint
-## Keeps all SoC, CPU, Crossbar, NPU, and eFPGA soft-fabric logic inside SLR0 (matching Bank 64/67 I/Os)
+## Single-Chiplet (SLR1) Floorplan Constraint
+## Keeps all SoC, CPU, Crossbar, NPU, and eFPGA soft-fabric logic inside SLR1 (matching Bank 64/67 I/Os)
 ## without restricting top-level I/O buffers (IBUF/OBUF) from binding to their package pins.
 create_pblock pblock_single_slr
-resize_pblock [get_pblocks pblock_single_slr] -add {SLR0}
+resize_pblock [get_pblocks pblock_single_slr] -add {SLR1}
 add_cells_to_pblock [get_pblocks pblock_single_slr] [get_cells -quiet [list \
     u_crocoscale_soc/cpu_complex_inst \
     u_crocoscale_soc/axi_crossbar_inst \
