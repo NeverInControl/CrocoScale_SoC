@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """
-Generates hardware-exact INT8 test vectors and pre-packed 32-bit AXI4 memory
-streams for the 100% Full, Unpruned 9-Layer Tiny-YOLOv2 Cat Detection Testbench
-(tb_npu_flex_yolo_tiny.sv).
+Step 2 of 3 — Tiny-YOLOv2 Golden Reference & AXI4 .mem Generator (2_generate_yolo_mem.py)
 
-Source Model:
-  Official ONNX Model Zoo Pascal VOC Tiny-YOLOv2 (tinyyolov2-8.onnx, 20 classes)
-  with BatchNorm folded into Conv weights/biases and all 9 layers at full
-  unpruned channel counts ([16, 32, 64, 128, 256, 512, 1024, 1024, 125]),
-  including Layer 6's 2x2 stride-1 asymmetric MaxPool (pool_s1_en=1) and
-  up to 1,152 passes per output group (Cin=1024).
+Reads:
+  - TEST/GoldenReference/yolo_tiny/input_416x416.rgb
+  - TEST/GoldenReference/yolo_tiny/model/tinyyolov2-8.onnx
 
-Source Image:
-  Public COCO val2017 image 000000039769.jpg at full 416x416x3 resolution.
+Generates all pre-packed 32-bit AXI4 memory files for tb_npu_flex_yolo_tiny.sv:
+  - yolo_l1_in_axi.mem   (L1 416x416x3 input image in [C][ceil(H/4)][W_stride][4] format)
+  - yolo_weights_axi.mem (All 9 layers' weights, 3,964,672 words = 15.12 MB)
+  - yolo_bias_axi.mem    (All 9 layers' biases, 3,184 words)
+  - yolo_quant_axi.mem   (All 9 layers' requantizer configs, 3,184 words)
+  - yolo_lut_axi.mem     (256-entry LeakyReLU(0.1) LUT, 64 words)
+  - yolo_l1_out_axi.mem .. yolo_l9_out_axi.mem (Bit-exact golden outputs per layer)
+  - yolo_meta.mem        (Metadata for TB & renderer: [s_out_u6, top1_cls, anchor, gy, gx])
+
+Usage:
+  python3 TEST/GoldenReference/yolo_tiny/2_generate_yolo_mem.py
 """
 
+import argparse
 import os
 import struct
 import numpy as np
@@ -229,16 +234,6 @@ def get_w_stride(w_dim):
 
 
 def pack_3x3_weights_axi(w_out_in_kh_kw):
-    """
-    Vectorized packing of 3x3 weights [C_out_padded, C_in, 3, 3] (int8) into
-    32-bit AXI burst words matching npu_flex_axi_reader RD_WEIGHT_R:
-      For each Cout group g in 0 .. (C_out_padded/8 - 1):
-        For each pass p in 0 .. ceil(C_in * 9 / 8) - 1:
-          16 words (64 bytes):
-            b = 0..7 (col = 7 - b):
-              word[b]   = {r3, r2, r1, r0}
-              word[8+b] = {r7, r6, r5, r4}
-    """
     c_out_pad, c_in, _, _ = w_out_in_kh_kw.shape
     groups = c_out_pad // 8
     num_passes = (c_in * 9 + 7) // 8
@@ -253,15 +248,6 @@ def pack_3x3_weights_axi(w_out_in_kh_kw):
 
 
 def pack_1x1_weights_axi(w_out_in_1_1):
-    """
-    Vectorized packing of 1x1 weights [C_out_padded, C_in, 1, 1] (int8) into
-    32-bit AXI burst words matching npu_flex_axi_reader RD_WEIGHT_R (mode_1x1=1):
-      For each Cout group g in 0 .. (C_out_padded/8 - 1):
-        For each pass p in 0 .. ceil(C_in / 4) - 1:
-          8 words (32 bytes):
-            b = 0..7 (col = 7 - b):
-              word[b] = {r3, r2, r1, r0} where cin = p * 4 + r.
-    """
     c_out_pad, c_in, _, _ = w_out_in_1_1.shape
     groups = c_out_pad // 8
     num_passes = (c_in + 3) // 4
@@ -275,11 +261,6 @@ def pack_1x1_weights_axi(w_out_in_1_1):
 
 
 def pack_act_strips_axi(act_c_h_w):
-    """
-    Vectorized packing of activation tensor [C, H, W] (int8) into 32-bit words
-    of shape [C, ceil(H/4), W_stride] in System RAM layout:
-      word = {row3, row2, row1, row0}
-    """
     c_dim, h_dim, w_dim = act_c_h_w.shape
     num_strips = (h_dim + 3) // 4
     w_stride = get_w_stride(w_dim)
@@ -291,10 +272,34 @@ def pack_act_strips_axi(act_c_h_w):
 
 
 def main():
-    out_dir = "TEST/GoldenReference/yolo_tiny"
-    os.makedirs(out_dir, exist_ok=True)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    parser = argparse.ArgumentParser(description="Step 2: Generate Tiny-YOLOv2 AXI4 .mem vectors & golden outputs")
+    parser.add_argument("--rgb", type=str, default=os.path.join(base_dir, "input_416x416.rgb"),
+                        help="Path to 416x416x3 RGB input file from Step 1")
+    parser.add_argument("--onnx", type=str, default=os.path.join(base_dir, "model", "tinyyolov2-8.onnx"),
+                        help="Path to pretrained tinyyolov2-8.onnx model")
+    parser.add_argument("--out-dir", type=str, default=base_dir,
+                        help="Output directory for .mem files")
+    args = parser.parse_args()
 
-    tensors = parse_onnx_initializers("/tmp/tinyyolov2-8.onnx")
+    os.makedirs(args.out_dir, exist_ok=True)
+    onnx_path = args.onnx if os.path.isfile(args.onnx) else "/tmp/tinyyolov2-8.onnx"
+    if not os.path.isfile(onnx_path):
+        raise FileNotFoundError(f"ONNX model not found at {args.onnx}")
+
+    if not os.path.isfile(args.rgb):
+        raise FileNotFoundError(f"Prepared RGB file not found at {args.rgb}. Run 1_prepare_image.py first.")
+
+    # Remove stale xsim hardware dump if present so Step 3 renders fresh output
+    hw_dump = os.path.join(args.out_dir, "yolo_l9_hw_out_axi.mem")
+    if os.path.isfile(hw_dump):
+        os.remove(hw_dump)
+
+    print("=" * 80)
+    print("  [STEP 2/3] TINY-YOLOv2 INT8 QUANTIZATION & AXI4 .MEM GENERATOR")
+    print("=" * 80)
+
+    tensors = parse_onnx_initializers(onnx_path)
     layers = []
     for i in range(8):
         sfx = "" if i == 0 else str(i)
@@ -311,12 +316,9 @@ def main():
     B8 = tensors["convolution8_B"].astype(np.float32)
     layers.append((W8, B8, 1))
 
-    # Load full 416x416x3 tabby cat image from COCO val2017 000000039769.jpg
-    full_416 = np.fromfile("gemini_workspace/cat1_416.rgb", dtype=np.uint8).reshape(416, 416, 3)
-    full_416.tofile(os.path.join(out_dir, "cat_full_416x416.rgb"))
+    full_416 = np.fromfile(args.rgb, dtype=np.uint8).reshape(416, 416, 3)
     x_fp = full_416.transpose(2, 0, 1).astype(np.float32) / 255.0
 
-    # Build 256-entry LeakyReLU(0.1) LUT
     leaky_lut = np.zeros(256, dtype=np.int8)
     for u in range(256):
         s = u if u < 128 else (u - 256)
@@ -329,12 +331,9 @@ def main():
         b2 = int(leaky_lut[w * 4 + 2]) & 0xFF
         b3 = int(leaky_lut[w * 4 + 3]) & 0xFF
         lut_words.append((b3 << 24) | (b2 << 16) | (b1 << 8) | b0)
-    fast_savetxt_hex32(os.path.join(out_dir, "yolo_lut_axi.mem"), np.array(lut_words, dtype=np.uint32))
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_lut_axi.mem"), np.array(lut_words, dtype=np.uint32))
 
     def hw_requantize_layer(psum_3d, m0_arr, shift_arr, use_lut=True):
-        """
-        Vectorized per-channel hardware-exact requantization across [C, H, W].
-        """
         c_dim = psum_3d.shape[0]
         out = np.zeros_like(psum_3d, dtype=np.int8)
         for c in range(c_dim):
@@ -363,13 +362,12 @@ def main():
         m0 = int(np.clip(np.round(real_mult * (1 << shift_n)), 1, 32767))
         return m0, shift_n
 
-    # Quantize input image to INT8 [3, 416, 416]
     curr_q = np.clip(np.round(x_fp * 127.0), -128, 127).astype(np.int8)
     s_in = 1.0 / 127.0
 
     l1_in_words = pack_act_strips_axi(curr_q)
-    fast_savetxt_hex32(os.path.join(out_dir, "yolo_l1_in_axi.mem"), l1_in_words)
-    print(f"L1 Input [3x416x416] packed: {len(l1_in_words)} words ({len(l1_in_words)*4/1024:.1f} KB)")
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_l1_in_axi.mem"), l1_in_words)
+    print(f"  L1 Input [3x416x416] packed: {len(l1_in_words):,} words ({len(l1_in_words)*4/1024:.1f} KB)")
 
     all_w_words = []
     all_b_words = []
@@ -407,10 +405,8 @@ def main():
             w_q_pad[c] = w_q
             b_q_pad[c] = b_q
 
-        # Exact integer convolution across all c_out_pad channels via float64 BLAS GEMM (53-bit exact integer mantissa)
         psum_all = conv2d_np(curr_q.astype(np.float64), w_q_pad.astype(np.float64)).astype(np.int64) + b_q_pad[:, None, None].astype(np.int64)
 
-        # Sequential 99.90% percentile activation scale calibration on valid channels
         fp_pre = psum_all[:c_out].astype(np.float64) * (s_in * s_w_pad[:c_out, None, None])
         if idx < 8:
             max_abs_out = float(np.percentile(np.abs(fp_pre), 99.90))
@@ -425,7 +421,6 @@ def main():
                 m0, shift_n = 1, 20
             m0_arr[c] = m0
             shift_arr[c] = shift_n
-            # quant_cfg: [15:0]=m0, [21:16]=shift_n, [29:22]=zp(0)
             q_cfg_pad[c] = ((shift_n & 0x3F) << 16) | (m0 & 0xFFFF)
 
         out_q = hw_requantize_layer(psum_all, m0_arr, shift_arr, use_lut=(idx < 8))
@@ -435,7 +430,6 @@ def main():
         elif idx == 5:
             out_q = maxpool2x2_s1(out_q)
 
-        # Pack weights, biases, and quant configs (reversed per group of 8 for shift chain!)
         w_words = pack_1x1_weights_axi(w_q_pad) if k == 1 else pack_3x3_weights_axi(w_q_pad)
         b_words = b_q_pad.view(np.uint32)
         q_words = np.zeros(c_out_pad, dtype=np.uint32)
@@ -443,17 +437,13 @@ def main():
             for c in range(8):
                 q_words[g * 8 + c] = q_cfg_pad[g * 8 + (7 - c)]
 
-        # Save golden output in System RAM strip format [C_out_pad, ceil(H_out/4), W_stride]
         out_strip_words = pack_act_strips_axi(out_q)
-        fast_savetxt_hex32(os.path.join(out_dir, f"yolo_l{idx+1}_out_axi.mem"), out_strip_words)
+        fast_savetxt_hex32(os.path.join(args.out_dir, f"yolo_l{idx+1}_out_axi.mem"), out_strip_words)
 
         pool_str = "s2" if idx < 5 else ("s1" if idx == 5 else "--")
-        print(f"L{idx+1} ({k}x{k} pool={pool_str}): Cin={c_in:4d} Cout={c_out:4d}(pad {c_out_pad:4d}) | "
+        print(f"  L{idx+1} ({k}x{k} pool={pool_str}): Cin={c_in:4d} Cout={c_out:4d}(pad {c_out_pad:4d}) | "
               f"H_out={out_q.shape[1]:3d} W_out={out_q.shape[2]:3d} | "
-              f"Groups={groups:3d} Passes={num_passes:4d} | "
-              f"W_off=0x{w_word_offset*4:08x} ({len(w_words):7d} words) "
-              f"B_off=0x{b_word_offset*4:04x} Q_off=0x{q_word_offset*4:04x} "
-              f"Out_words={len(out_strip_words)}")
+              f"Groups={groups:3d} Passes={num_passes:4d} | Out_words={len(out_strip_words):,}")
 
         all_w_words.append(w_words)
         all_b_words.append(b_words)
@@ -463,7 +453,6 @@ def main():
         b_word_offset += len(b_words)
         q_word_offset += len(q_words)
 
-        # Next layer consumes only the valid c_out channels
         curr_q = out_q[:c_out]
         s_in = s_out
 
@@ -471,33 +460,28 @@ def main():
     all_b_arr = np.concatenate(all_b_words)
     all_q_arr = np.concatenate(all_q_words)
 
-    fast_savetxt_hex32(os.path.join(out_dir, "yolo_weights_axi.mem"), all_w_arr)
-    fast_savetxt_hex32(os.path.join(out_dir, "yolo_bias_axi.mem"), all_b_arr)
-    fast_savetxt_hex32(os.path.join(out_dir, "yolo_quant_axi.mem"), all_q_arr)
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_weights_axi.mem"), all_w_arr)
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_bias_axi.mem"), all_b_arr)
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_quant_axi.mem"), all_q_arr)
 
-    print(f"\nTotal Weight Words: {len(all_w_arr)} ({len(all_w_arr)*4/(1024*1024):.2f} MB)")
-    print(f"Total Bias Words:   {len(all_b_arr)}")
-    print(f"Total Quant Words:  {len(all_q_arr)}")
-    print(f"Final L9 Output Scale s_out = {s_in:.6f}")
-
-    # Decode final L9 output (13x13x125)
     grid_dequant = curr_q.astype(np.float32) * s_in
-    cls_id, cls_name, top_score, loc, cls_max, preds_int8 = decode_yolo_output(grid_dequant)
-    print(f"\n=== FINAL HARDWARE-EXACT INT8 FULL TINY-YOLOv2 (416x416) DETECTION RESULT ===")
-    print(f"Top-1 Predicted Class: #{cls_id} '{cls_name.upper()}' (Confidence = {top_score:.4f} at Anchor={loc[0]}, GridY={loc[1]}, GridX={loc[2]})")
-    ranked = np.argsort(cls_max)[::-1]
-    for rank, cid in enumerate(ranked[:5], 1):
-        print(f"  Rank {rank}: class #{cid:2d} ({VOC_CLASSES[cid]:11s}) score = {cls_max[cid]:.4f}")
-
-    # Print raw INT8 logits at the winning anchor/cell
+    cls_id, cls_name, top_score, loc, cls_max, _ = decode_yolo_output(grid_dequant)
     a_win, gy_win, gx_win = loc
-    raw_cell = curr_q[:125].reshape(5, 25, 13, 13)[a_win, :, gy_win, gx_win]
-    print(f"\nWinning Cell (Anchor={a_win}, Y={gy_win}, X={gx_win}) Raw INT8 Attributes:")
-    print(f"  tx={int(raw_cell[0])}, ty={int(raw_cell[1])}, tw={int(raw_cell[2])}, th={int(raw_cell[3])}, obj_logit={int(raw_cell[4])}")
-    cls_int8_scores = raw_cell[5:25]
-    for cid in ranked[:5]:
-        print(f"  Class #{cid:2d} ({VOC_CLASSES[cid]:11s}): raw_int8_logit = {int(cls_int8_scores[cid]):+4d}")
+
+    # Write yolo_meta.mem: [s_out_u6, exp_top1_cls, exp_anchor, exp_gy, exp_gx]
+    s_out_u6 = int(np.round(s_in * 1_000_000.0))
+    meta_words = np.array([s_out_u6, cls_id, a_win, gy_win, gx_win], dtype=np.uint32)
+    fast_savetxt_hex32(os.path.join(args.out_dir, "yolo_meta.mem"), meta_words)
+
+    print("-" * 80)
+    print(f"  Total Weight Words : {len(all_w_arr):,} ({len(all_w_arr)*4/(1024*1024):.2f} MB)")
+    print(f"  Total Bias Words   : {len(all_b_arr):,}")
+    print(f"  Total Quant Words  : {len(all_q_arr):,}")
+    print(f"  L9 Output Scale    : {s_in:.6f} (yolo_meta.mem[0] = 0x{s_out_u6:08x})")
+    print(f"  Expected Top-1     : Class #{cls_id} '{cls_name.upper()}' ({top_score*100:.2f}% at Anchor={a_win}, Y={gy_win}, X={gx_win})")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
     main()
+

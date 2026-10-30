@@ -1,17 +1,18 @@
 // =============================================================================
 // File: TEST/SoftLogic/flex/system/tb_npu_flex_yolo_tiny.sv
 // Module: tb_npu_flex_yolo_tiny
-// Project: CrocoScale SoC — Full Unpruned 9-Layer Tiny-YOLOv2 Cat Detection Suite
+// Project: CrocoScale SoC — Full Unpruned 9-Layer Tiny-YOLOv2 Object Detection Suite
 //
 // Description:
-//   End-to-end 100% full, unpruned 9-layer Pascal VOC Tiny-YOLOv2 object
-//   detection testbench (Vivado xsim target) running on the full
+//   End-to-end 100% full, unpruned 9-layer Pascal VOC Tiny-YOLOv2 (20-class)
+//   object detection testbench (Vivado xsim target) running on the full
 //   efpga_subsystem_top (with eFPGA_top_flex_harness) over the shared SoC AXI4
 //   interconnect and 32 MB System AXI4 RAM.
 //
-//   Input Image:
-//     Full 416x416x3 RGB tabby cat image from public COCO val2017 image
-//     000000039769.jpg (quantized to INT8 [3][104][512][4] strip layout).
+//   3-Step Image & Golden Reference Flow (TEST/GoldenReference/yolo_tiny/):
+//     1. 1_prepare_image.py     : Resizes input_image.{png,jpg,bmp} -> input_416x416.rgb
+//     2. 2_generate_yolo_mem.py : Generates all AXI4 .mem vectors + yolo_meta.mem
+//     3. 3_render_detections.py : Renders bounding boxes & stats -> output_detections.png
 //
 //   Pretrained Weights & Architecture (9 Chained Layers in System RAM):
 //     Official ONNX Model Zoo Pascal VOC Tiny-YOLOv2 (tinyyolov2-8.onnx, 20 classes)
@@ -35,8 +36,8 @@
 //       ACT_BUF_A_BASE (0x0000_0000) and ACT_BUF_B_BASE (0x0010_0000).
 //     - After each layer, S0 reads back the output tensor over AXI4 and verifies
 //       bit-exact agreement against the golden reference.
-//     - After Layer 9, S0 decodes the 13x13x125 (5 anchors x 25 Pascal VOC attrs)
-//       detection grid and asserts that Top-1 Predicted Class == "cat" (#7).
+//     - After Layer 9, S0 writes yolo_l9_hw_out_axi.mem for post-processing and
+//       decodes the 13x13x125 (5 anchors x 25 Pascal VOC attrs) detection grid.
 // =============================================================================
 
 `timescale 1ns / 1ps
@@ -51,7 +52,7 @@ module tb_npu_flex_yolo_tiny;
     localparam int AXI_ID_WIDTH = 8;
     localparam int M_ID_WIDTH   = AXI_ID_WIDTH;
     parameter  int RAM_ADDR_W   = 25; // 32 MB System AXI RAM (0x0000_0000 .. 0x01FF_FFFF)
-    localparam int WEIGHT_SPLIT = 64;
+    localparam int WEIGHT_SPLIT = 8;  // 8-bit row-wise weight_shift_en matching efpga_subsystem_top
 
     localparam logic [31:0] RAM_BASE_ADDR  = 32'h0000_0000;
     localparam logic [31:0] MGR_BASE_ADDR  = 32'h1000_0000;
@@ -815,6 +816,7 @@ module tb_npu_flex_yolo_tiny;
     logic [31:0] yolo_bias_mem    [0:TOTAL_BIAS_WORDS-1];
     logic [31:0] yolo_quant_mem   [0:TOTAL_QUANT_WORDS-1];
     logic [31:0] yolo_lut_mem     [0:TOTAL_LUT_WORDS-1];
+    logic [31:0] yolo_meta_mem    [0:4];
 
     logic [31:0] gold_l1_out [0:212992-1];
     logic [31:0] gold_l2_out [0:106496-1];
@@ -835,11 +837,11 @@ module tb_npu_flex_yolo_tiny;
         else                   return 512;
     endfunction
 
-    // Stream all model parameters and the L1 416x416x3 cat image into System RAM via S0 256-beat AXI4 bursts
+    // Stream all model parameters and the L1 416x416x3 input image into System RAM via S0 256-beat AXI4 bursts
     task automatic cpu_upload_yolo_model_and_image();
         int idx, chunk;
 
-        // Upload L1 Input Cat Image (159,744 words = 624 KB) into ACT_BUF_A_BASE
+        // Upload L1 Input Image (159,744 words = 624 KB) into ACT_BUF_A_BASE
         idx = 0;
         while (idx < TOTAL_L1_IN_WORDS) begin
             chunk = ((TOTAL_L1_IN_WORDS - idx) >= 256) ? 256 : (TOTAL_L1_IN_WORDS - idx);
@@ -1060,14 +1062,17 @@ module tb_npu_flex_yolo_tiny;
         real cls_best_score [0:19];
         real best_score;
         int  best_cls, best_anchor, best_gy, best_gx;
+        int  exp_top1_cls;
         int  used [0:19];
         logic signed [7:0] win_tx, win_ty, win_tw, win_th, win_obj;
 
-        anchor_w[0] = 1.08; anchor_w[1] = 3.42; anchor_w[2] = 6.63; anchor_w[3] = 9.42; anchor_w[4] = 16.62;
-        anchor_h[0] = 1.19; anchor_h[1] = 4.41; anchor_h[2] = 11.38; anchor_h[3] = 5.11; anchor_h[4] = 10.52;
-        s_out      = 0.119910;
-        best_score = -1.0;
-        best_cls   = -1;
+        anchor_w[0]  = 1.08; anchor_w[1] = 3.42; anchor_w[2] = 6.63; anchor_w[3] = 9.42; anchor_w[4] = 16.62;
+        anchor_h[0]  = 1.19; anchor_h[1] = 4.41; anchor_h[2] = 11.38; anchor_h[3] = 5.11; anchor_h[4] = 10.52;
+        s_out        = (yolo_meta_mem[0] != 32'd0 && ^yolo_meta_mem[0] !== 1'bx) ?
+                       (real'(yolo_meta_mem[0]) / 1000000.0) : 0.119910;
+        exp_top1_cls = (^yolo_meta_mem[1] !== 1'bx) ? int'(yolo_meta_mem[1]) : 7;
+        best_score   = -1.0;
+        best_cls     = -1;
         for (int c = 0; c < 20; c++) begin
             cls_best_score[c] = 0.0;
             used[c] = 0;
@@ -1120,7 +1125,7 @@ module tb_npu_flex_yolo_tiny;
         win_obj = get_l9_byte(best_anchor * 25 + 4, best_gy, best_gx);
 
         $display("\n=========================================================================================");
-        $display("   CROCSCALE NPU — FULL TINY-YOLOv2 PASCAL VOC DETECTION REPORT (416x416 CAT IMAGE)      ");
+        $display("   CROCSCALE NPU — FULL TINY-YOLOv2 PASCAL VOC OBJECT DETECTION REPORT (416x416)         ");
         $display("=========================================================================================");
         $display("  Winning Grid Cell : (GridY=%0d, GridX=%0d), Anchor=%0d (%.2fx%.2f)",
                  best_gy, best_gx, best_anchor, anchor_w[best_anchor], anchor_h[best_anchor]);
@@ -1149,9 +1154,9 @@ module tb_npu_flex_yolo_tiny;
         end
         $display("=========================================================================================");
 
-        if (best_cls != 7) begin
-            $fatal(1, "Tiny-YOLOv2 Detection FAILED: expected class #7 ('cat'), got #%0d ('%s')!",
-                   best_cls, get_voc_name(best_cls));
+        if (best_cls != exp_top1_cls) begin
+            $fatal(1, "Tiny-YOLOv2 Detection FAILED: expected class #%0d ('%s'), got #%0d ('%s')!",
+                   exp_top1_cls, get_voc_name(exp_top1_cls), best_cls, get_voc_name(best_cls));
         end
     endtask
 
@@ -1183,14 +1188,14 @@ module tb_npu_flex_yolo_tiny;
     endtask
 
     // =========================================================================
-    // Main 9-Layer Full Tiny-YOLOv2 Execution & Cat Detection Sequence
+    // Main 9-Layer Full Tiny-YOLOv2 Execution & Object Detection Sequence
     // =========================================================================
     initial begin
         string mem_dir;
         int err_l1, err_l2, err_l3, err_l4, err_l5, err_l6, err_l7, err_l8, err_l9;
 
         $display("\n=========================================================================================");
-        $display("   CrocoScale SoC — FULL UNPRUNED 9-LAYER TINY-YOLOv2 (416x416) CAT DETECTION SUITE      ");
+        $display("   CrocoScale SoC — FULL UNPRUNED 9-LAYER TINY-YOLOv2 (416x416) OBJECT DETECTION SUITE   ");
         $display("=========================================================================================");
 
         resolve_mem_dir("yolo_l1_in_axi.mem", mem_dir);
@@ -1201,6 +1206,7 @@ module tb_npu_flex_yolo_tiny;
         $readmemh({mem_dir, "yolo_bias_axi.mem"},    yolo_bias_mem);
         $readmemh({mem_dir, "yolo_quant_axi.mem"},   yolo_quant_mem);
         $readmemh({mem_dir, "yolo_lut_axi.mem"},     yolo_lut_mem);
+        $readmemh({mem_dir, "yolo_meta.mem"},        yolo_meta_mem);
 
         $readmemh({mem_dir, "yolo_l1_out_axi.mem"},  gold_l1_out);
         $readmemh({mem_dir, "yolo_l2_out_axi.mem"},  gold_l2_out);
@@ -1247,7 +1253,7 @@ module tb_npu_flex_yolo_tiny;
         cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
         repeat (4) @(negedge clk);
 
-        $display("\n--- [INIT] Uploading COCO Cat Image (416x416x3) & Full Tiny-YOLOv2 Weights (15.12 MB) via S0 AXI4 ---");
+        $display("\n--- [INIT] Uploading Input Image (416x416x3) & Full Tiny-YOLOv2 Weights (15.12 MB) via S0 AXI4 ---");
         cpu_upload_yolo_model_and_image();
         $display("  -> [OK] All 9 layers' weights, biases, quant configs, LUT & L1 image uploaded to 32 MB System RAM.");
 
@@ -1305,10 +1311,14 @@ module tb_npu_flex_yolo_tiny;
                            L9_W_BASE, L9_B_BASE, L9_Q_BASE, 13, 13, 1024, 16, 256, 8'h11);
         verify_yolo_layer_output(9, "L9_Conv1x1_Head", ACT_BUF_B_BASE, 13, 13, 128, err_l9);
 
-        // Decode 13x13x125 YOLO grid and verify Top-1 class == "cat" (#7)
+        // Dump Layer 9 hardware output words for Step 3 post-processor (3_render_detections.py)
+        $writememh({mem_dir, "yolo_l9_hw_out_axi.mem"}, l9_hw_out_words);
+        $display("  -> [DUMP] Wrote Layer 9 hardware output to '%syolo_l9_hw_out_axi.mem'", mem_dir);
+
+        // Decode 13x13x125 YOLO grid and verify Top-1 detection class
         decode_and_verify_yolo_detections();
 
-        $display("\n >>> ALL 9 FULL TINY-YOLOv2 LAYERS BIT-EXACT & TOP-1 DETECTION == \"cat\" PASSED! <<< \n");
+        $display("\n >>> ALL 9 FULL TINY-YOLOv2 LAYERS BIT-EXACT & OBJECT DETECTION VERIFIED! <<< \n");
         $finish;
     end
 

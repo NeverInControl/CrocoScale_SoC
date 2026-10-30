@@ -24,10 +24,10 @@ module npu_flex_psum #(
     input  wire                               lut_en_i,
     input  wire                               pool_en_i,
     input  wire                               pool_s1_en_i,
-    input  wire                        [4:0]  tile_y_i,
-    input  wire                        [4:0]  tile_x_i,
-    input  wire                        [8:0]  img_h_i,
-    input  wire                        [8:0]  img_w_i,
+    input  wire                        [4:0]  shared_end_x_i,
+    input  wire                        [3:0]  shared_row_lt_h_i,
+    output logic                       [1:0]  s1_ty_hi_o,
+    input  wire                               first_pass_i,
     input  wire                               prev_pass_drained_i,
 
     // AXI Reader Bias & LUT Write Inputs
@@ -51,57 +51,66 @@ module npu_flex_psum #(
     localparam logic [2:0] SEQ_LUT_LOAD = 3'd3;
     localparam logic [2:0] SEQ_DRAIN    = 3'd4;
 
-    // Alternating ping-pong flag ensuring final pass always lands in Bank A
-    wire swap_val       = (total_passes_i[0] == 1'b0) ? pass_cnt_i[0] : ~pass_cnt_i[0];
-    wire hold_bias_addr = (pass_cnt_i == 11'd0);
+    wire unused_ok = &{1'b0, pass_cnt_i[10:1], total_passes_i, drain_cnt_i[10]};
 
-    assign swap_val_o     = swap_val;
-    assign psum_lut_en_o  = (state_i == SEQ_DRAIN) && lut_en_i;
+    // Alternating ping-pong flag ensuring final pass (pass_cnt_i == 0) always lands in Bank A
+    wire swap_val       = ~pass_cnt_i[0];
+    wire hold_bias_addr = first_pass_i;
+
+    assign swap_val_o    = swap_val;
+    assign psum_lut_en_o = (state_i == SEQ_DRAIN) && lut_en_i;
 
     always_comb begin
         psum_A_wdata_o = bias_wdata_i;
-        psum_B_wdata_o = (state_i == SEQ_LUT_LOAD) ? $signed({24'd0, lut_wdata_i}) : bias_wdata_i;
+        psum_B_wdata_o = $signed({bias_wdata_i[31:8], lut_wdata_i});
     end
 
     // Skewed drain address generator:
     //   Unpooled (pool_en_i = 0, pool_s1_en_i = 0): {s_rel[1:0], r_sub[1:0], tx[3:0]}
     //   2x2 Stride-2 MaxPool (pool_en_i = 1):       {s_rel[0], r_sub[1:0], dy, px[2:0], dx}
     //   2x2 Stride-1 MaxPool (pool_s1_en_i = 1):    {ty_s1[3:0], tx_s1[3:0]} over 1024 cycles
-    wire [7:0] d_idx      = (drain_cnt_i < 11'd256)  ? drain_cnt_i[7:0] : 8'h00;
-    wire [9:0] d10        = (drain_cnt_i < 11'd1024) ? drain_cnt_i[9:0] : 10'd0;
+    wire [7:0] d_idx      = drain_cnt_i[7:0];
+    wire [9:0] d10        = drain_cnt_i[9:0];
     wire [3:0] base_ty    = {d10[9:8], d10[3:2]};
     wire [3:0] base_tx    = d10[7:4];
-    wire [9:0] gy_s1      = {1'b0, tile_y_i, base_ty};
-    wire [9:0] gx_s1      = {1'b0, tile_x_i, base_tx};
-    wire       can_inc_y  = (base_ty != 4'd15) && ((gy_s1 + 10'd1) < {1'b0, img_h_i});
-    wire       can_inc_x  = (base_tx != 4'd15) && ((gx_s1 + 10'd1) < {1'b0, img_w_i});
-    wire [3:0] ty_s1      = (d10[1] && can_inc_y) ? (base_ty + 4'd1) : base_ty;
-    wire [3:0] tx_s1      = (d10[0] && can_inc_x) ? (base_tx + 4'd1) : base_tx;
+    wire [3:0] base_ty_p1 = base_ty + 4'd1;
+    wire [3:0] base_tx_p1 = base_tx + 4'd1;
+    assign s1_ty_hi_o     = base_ty_p1[3:2];
+    wire       can_inc_y  = (base_ty != 4'd15) && shared_row_lt_h_i[base_ty_p1[1:0]];
+    wire       can_inc_x  = (base_tx != 4'd15) && (shared_end_x_i[4] || (base_tx_p1 < shared_end_x_i[3:0]));
+    wire [3:0] ty_s1      = (d10[1] && can_inc_y) ? base_ty_p1 : base_ty;
+    wire [3:0] tx_s1      = (d10[0] && can_inc_x) ? base_tx_p1 : base_tx;
 
     wire [7:0] drain_addr = pool_s1_en_i ? {ty_s1, tx_s1} :
                             pool_en_i    ? {d_idx[7], d_idx[3:2], d_idx[1], d_idx[6:4], d_idx[0]} :
                                            {d_idx[7:6], d_idx[1:0], d_idx[5:2]};
 
-    // Address routing for Bank A
-    assign psum_A_addr_o = (state_i == SEQ_DRAIN)   ? drain_addr :
-                           (state_i == SEQ_COMPUTE) ? (!swap_val ? (hold_bias_addr ? 8'h00 : ((k_cnt_i < 9'd256) ? k_cnt_i[7:0] : 8'h00)) :
-                                                                   ((k_cnt_i >= 9'd9 && (k_cnt_i - 9'd9) < 9'd256) ? 8'(k_cnt_i - 9'd9) : 8'h00)) : 8'h00;
+    // Shared compute read/write PSUM addresses and 9-cycle skew subtractor
+    wire [8:0] k_m9       = k_cnt_i - 9'd9;
+    wire       k_m9_hi_m1 = (k_m9[8:3] == 6'd0) || (k_m9[8] && (|k_m9[7:3]));
+    wire [7:0] rd_addr    = (hold_bias_addr || k_cnt_i[8]) ? 8'h00 : k_cnt_i[7:0];
+    wire [7:0] wr_addr    = k_m9[8] ? 8'h00 : k_m9[7:0];
 
-    // Address routing for Bank B (includes LUT load address sweep 0..255)
-    assign psum_B_addr_o = (state_i == SEQ_LUT_LOAD) ? drain_cnt_i[7:0] :
-                           (state_i == SEQ_COMPUTE)  ? (swap_val ? (hold_bias_addr ? 8'h00 : ((k_cnt_i < 9'd256) ? k_cnt_i[7:0] : 8'h00)) :
-                                                                   ((k_cnt_i >= 9'd9 && (k_cnt_i - 9'd9) < 9'd256) ? 8'(k_cnt_i - 9'd9) : 8'h00)) : 8'h00;
+    assign psum_A_addr_o = (state_i == SEQ_DRAIN)   ? drain_addr :
+                           (state_i == SEQ_COMPUTE) ? (swap_val ? wr_addr : rd_addr) : 8'h00;
+
+    assign psum_B_addr_o = (state_i == SEQ_LUT_LOAD) ? d_idx :
+                           (state_i == SEQ_COMPUTE)  ? (swap_val ? rd_addr : wr_addr) : 8'h00;
+
+    wire clr_en_base = (state_i == SEQ_COMPUTE) && !hold_bias_addr && !prev_pass_drained_i && (k_cnt_i[8:3] == 6'd0);
 
     // Write enables across ARRAY_WIDTH columns
     for (genvar gc = 0; gc < ARRAY_WIDTH; gc++) begin : gen_psum_we
-        assign psum_A_we_o[gc] = (state_i == SEQ_PRELOAD && !swap_val) ? bias_we_i[gc] :
-                                 (state_i == SEQ_COMPUTE && !swap_val && pass_cnt_i > 11'd0 && !prev_pass_drained_i && k_cnt_i < 9'(gc)) ? 1'b1 :
-                                 (state_i == SEQ_COMPUTE && swap_val && (k_cnt_i >= 9'(9 + gc) && (k_cnt_i - 9'(9 + gc)) < 9'd256)) ? 1'b1 : 1'b0;
+        wire borrow_gc = (k_m9[2:0] < 3'(gc));
+        wire wr_in_win = (state_i == SEQ_COMPUTE) && !(borrow_gc ? k_m9_hi_m1 : k_m9[8]);
+        wire clr_in_win = clr_en_base && (k_cnt_i[2:0] < 3'(gc));
 
-        assign psum_B_we_o[gc] = (state_i == SEQ_LUT_LOAD) ? lut_we_i :
+        assign psum_A_we_o[gc] = (state_i == SEQ_PRELOAD && !swap_val) ? bias_we_i[gc] :
+                                 (!swap_val ? clr_in_win : wr_in_win);
+
+        assign psum_B_we_o[gc] = (state_i == SEQ_LUT_LOAD)            ? lut_we_i :
                                  (state_i == SEQ_PRELOAD && swap_val) ? bias_we_i[gc] :
-                                 (state_i == SEQ_COMPUTE && swap_val && pass_cnt_i > 11'd0 && !prev_pass_drained_i && k_cnt_i < 9'(gc)) ? 1'b1 :
-                                 (state_i == SEQ_COMPUTE && !swap_val && (k_cnt_i >= 9'(9 + gc) && (k_cnt_i - 9'(9 + gc)) < 9'd256)) ? 1'b1 : 1'b0;
+                                 (swap_val ? clr_in_win : wr_in_win);
     end
 
 endmodule
