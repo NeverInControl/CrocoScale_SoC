@@ -204,11 +204,15 @@ set_property top crocoscale_soc_vcu118 [get_filesets sources_1]
 update_compile_order -fileset sources_1
 
 # ------------------------------------------------------------------------------
-# 8. Configure Dynamic Simulation MEM_DIR (Zero .mem copies in project)
+# 8. Configure Dynamic Simulation MEM_DIR & High-Speed xsim Defaults
 # ------------------------------------------------------------------------------
-puts "==> Step 8: Configuring portable simulation MEM_DIR plusarg..."
+puts "==> Step 8: Configuring portable simulation MEM_DIR plusarg and xsim performance flags..."
 set golden_dir [file normalize "$repo_root/TEST/GoldenReference"]
-set_property -dict [list xsim.simulate.xsim.more_options "-testplusarg MEM_DIR=$golden_dir"] [get_filesets sim_1]
+set_property -dict [list \
+    xsim.elaborate.debug_level {off} \
+    xsim.simulate.log_all_signals {false} \
+    xsim.simulate.xsim.more_options "-testplusarg MEM_DIR=$golden_dir" \
+] [get_filesets sim_1]
 
 # ------------------------------------------------------------------------------
 # 9. Attach DRC Crash Prevention Hook (disable_drc.tcl) & Clear Stale Checkpoints
