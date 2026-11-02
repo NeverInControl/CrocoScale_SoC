@@ -73,10 +73,11 @@ except ImportError:
 
 def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, flow: str = "simulation") -> Path:
     """
-    Dynamically finds the root filelist for any target across the 3 flow trees:
+    Dynamically finds the root filelist for any target across the 4 flow trees:
     - 'simulation': resolves FILE_LISTS/<target>.f
     - 'asic'      : resolves FILE_LISTS/asic/<target>_asic.f (falls back to FILE_LISTS/<target>.f)
     - 'vivado'    : resolves FILE_LISTS/vivado/<target>_vivado.f (falls back to FILE_LISTS/<target>.f)
+    - 'unified'   : resolves FILE_LISTS/unified/<target>_unified.f (falls back to FILE_LISTS/<target>.f)
     """
     if custom_flist:
         p = custom_flist if custom_flist.is_absolute() else repo_root / custom_flist
@@ -96,6 +97,12 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fl
             repo_root / "FILE_LISTS" / "vivado" / f"{target}_vivado.f",
             repo_root / "FILE_LISTS" / "vivado" / f"{target}_subsystem_vivado.f",
             repo_root / "FILE_LISTS" / "vivado" / f"{target}.f",
+        ])
+    elif flow == "unified":
+        candidates.extend([
+            repo_root / "FILE_LISTS" / "unified" / f"{target}_unified.f",
+            repo_root / "FILE_LISTS" / "unified" / f"{target}_subsystem_unified.f",
+            repo_root / "FILE_LISTS" / "unified" / f"{target}.f",
         ])
     candidates.extend([
         repo_root / "FILE_LISTS" / f"{target}.f",
@@ -118,7 +125,7 @@ def collect_included_flists(flist_path: Path, repo_root: Path, visited: set = No
     visited.add(real_path)
 
     stem = flist_path.stem
-    for sfx in ("_asic", "_vivado"):
+    for sfx in ("_asic", "_vivado", "_unified"):
         if stem.endswith(sfx):
             stem = stem[:-len(sfx)]
     names = {flist_path.name, f"{stem}.f"}
@@ -451,12 +458,35 @@ def export_subsystem(
                 curr_vivado_dir = output_dir / "VIVADO" if fmt != "both" else output_dir / "VIVADO" / f_fmt
                 rel_vivado = Path(*Path(norm_rel).parts[1:])
                 dst_file = curr_vivado_dir / rel_vivado.with_suffix(src_file.suffix)
+            elif norm_rel.startswith("UNIFIED/"):
+                curr_unified_dir = output_dir / "UNIFIED" if fmt != "both" else output_dir / "UNIFIED" / f_fmt
+                rel_unified = Path(*Path(norm_rel).parts[1:])
+                dst_file = curr_unified_dir / rel_unified.with_suffix(src_file.suffix)
             else:
                 rel_target = remap_export_path(rel_path, path_mappings, strip_prefixes)
                 dst_file = curr_rtl_dir / rel_target.with_suffix(src_file.suffix)
 
             dst_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_file, dst_file)
+
+            # In pure Verilog-2001 ('v') unified exports, restore the TARGET_VIVADO compiler directive
+            # around the sv2v-inlined target_config_pkg_TARGET_USE_LADDER_CLOCKS localparam
+            if flow == "unified" and f_fmt == "v" and dst_file.suffix == ".v":
+                try:
+                    content = dst_file.read_text(encoding="utf-8")
+                    inlined_param = "\tlocalparam signed [31:0] target_config_pkg_TARGET_USE_LADDER_CLOCKS = 1;"
+                    if inlined_param in content:
+                        ifdef_param = (
+                            "`ifdef TARGET_VIVADO\n"
+                            "\tlocalparam signed [31:0] target_config_pkg_TARGET_USE_LADDER_CLOCKS = 0;\n"
+                            "`else\n"
+                            "\tlocalparam signed [31:0] target_config_pkg_TARGET_USE_LADDER_CLOCKS = 1;\n"
+                            "`endif"
+                        )
+                        dst_file.write_text(content.replace(inlined_param, ifdef_param), encoding="utf-8", newline="\n")
+                except Exception:
+                    pass
+
             rel_entry = dst_file.relative_to(output_dir).as_posix()
             if rel_entry not in copied_rtl_entries:
                 copied_rtl_entries.append(rel_entry)
@@ -623,19 +653,41 @@ def export_subsystem(
             mf.write(f"* `MACROS/`: Foundry hard macro wrappers, blackbox models, and cell collaterals.\n")
         if any(e.startswith("VIVADO/") for e in copied_rtl_entries):
             mf.write(f"* `VIVADO/`: Vivado emulation primitive wrappers.\n")
+        if any(e.startswith("UNIFIED/") for e in copied_rtl_entries):
+            mf.write(f"* `UNIFIED/`: Compiler-directive switch wrappers dispatching across Simulation, Vivado, and ASIC flows.\n")
         if include_tb:
             mf.write(f"* `TEST/`: Verification testbenches ({copied_tb_count} files) and golden vectors ({copied_mem_count} `.mem` files).\n")
         if include_hal and copied_hal_count > 0:
             mf.write(f"* `HAL/`: C hardware abstraction layer drivers ({copied_hal_count} files).\n")
         mf.write("\n## Simulation / Synthesis Quickstart\n\n")
-        mf.write("```bash\n")
-        if include_lib:
-            mf.write("# Standalone compilation (AXI_LIB included in package):\n")
-            mf.write(f"iverilog -g2012 -f {global_flist_name} -o sim.vvp\n")
+        if flow == "unified":
+            mf.write("This unified package supports all target flows from a single filelist via standard compiler directives:\n\n")
+            mf.write("| Target Flow | Compiler Directives | Description |\n")
+            mf.write("| :--- | :--- | :--- |\n")
+            mf.write("| **Behavioral Simulation** | *(Default — no defines)* | Behavioral `sram_bank` & `cg_cell`, `USE_LADDER_CLOCKS=1`, full FABulous `eFPGA_top` |\n")
+            mf.write("| **Vivado Emulation** | `+define+TARGET_VIVADO` | Xilinx `BUFGCE` `cg_cell`, `USE_LADDER_CLOCKS=0`, BRAM-inferred `sram_bank`, full `eFPGA_top` |\n")
+            mf.write("| **ASIC (Flat / Tier-1)** | `+define+TARGET_ASIC` | IHP 130nm `sg13cmos5l_lgcp_1` `cg_cell`, `RM_IHPSG13_1P_*` SRAM macros, blackbox `eFPGA_top` |\n")
+            mf.write("| **ASIC (Tier-2 Subsystem)** | `+define+TARGET_ASIC +define+TARGET_ASIC_CONTAINERS` | Same as `TARGET_ASIC`, plus hardened Tier-1 blackboxes for `act_bank_container` & `psum_requant_container` |\n\n")
+            mf.write("```bash\n")
+            lib_flag = "" if include_lib else "-y <path/to/axi_lib> "
+            mf.write("# Behavioral Simulation (Default):\n")
+            mf.write(f"iverilog -g2012 {lib_flag}-f {global_flist_name} -o sim.vvp\n\n")
+            mf.write("# Vivado FPGA Emulation Flow:\n")
+            mf.write(f"iverilog -g2012 -DTARGET_VIVADO {lib_flag}-f {global_flist_name} -o sim_vivado.vvp\n\n")
+            mf.write("# ASIC Flow (Flat / Tier-1 Container Synthesis):\n")
+            mf.write(f"iverilog -g2012 -DTARGET_ASIC {lib_flag}-f {global_flist_name} -o sim_asic_flat.vvp\n\n")
+            mf.write("# ASIC Flow (Tier-2 Hierarchical Subsystem Synthesis with Container Blackboxes):\n")
+            mf.write(f"iverilog -g2012 -DTARGET_ASIC -DTARGET_ASIC_CONTAINERS {lib_flag}-f {global_flist_name} -o sim_asic_hier.vvp\n")
+            mf.write("```\n")
         else:
-            mf.write("# Pass external AXI library via -y <path/to/axi_lib>:\n")
-            mf.write(f"iverilog -g2012 -y <path/to/axi_lib> -f {global_flist_name} -o sim.vvp\n")
-        mf.write("```\n")
+            mf.write("```bash\n")
+            if include_lib:
+                mf.write("# Standalone compilation (AXI_LIB included in package):\n")
+                mf.write(f"iverilog -g2012 -f {global_flist_name} -o sim.vvp\n")
+            else:
+                mf.write("# Pass external AXI library via -y <path/to/axi_lib>:\n")
+                mf.write(f"iverilog -g2012 -y <path/to/axi_lib> -f {global_flist_name} -o sim.vvp\n")
+            mf.write("```\n")
 
     print(f"[INFO] Generated manifest: {manifest_path}")
     print("=" * 80)
@@ -658,9 +710,9 @@ def main():
         "--platform",
         dest="flow",
         type=str,
-        choices=["simulation", "sim", "asic", "vivado"],
+        choices=["simulation", "sim", "asic", "vivado", "unified"],
         default=None,
-        help="Filelist flow tree to walk: 'simulation' (FILE_LISTS/<target>.f), 'asic' (FILE_LISTS/asic/<target>_asic.f), or 'vivado' (FILE_LISTS/vivado/<target>_vivado.f).",
+        help="Filelist flow tree to walk: 'simulation' (FILE_LISTS/<target>.f), 'asic' (FILE_LISTS/asic/<target>_asic.f), 'vivado' (FILE_LISTS/vivado/<target>_vivado.f), or 'unified' (FILE_LISTS/unified/<target>_unified.f).",
     )
     parser.add_argument(
         "--filelist",
@@ -719,7 +771,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine flow ('simulation', 'asic', or 'vivado')
+    # Determine flow ('simulation', 'asic', 'vivado', or 'unified')
     if args.flow:
         flow_name = "simulation" if args.flow == "sim" else args.flow
     elif args.filelist:
@@ -728,15 +780,17 @@ def main():
             flow_name = "asic"
         elif "vivado" in fl_parts or args.filelist.stem.endswith("_vivado"):
             flow_name = "vivado"
+        elif "unified" in fl_parts or args.filelist.stem.endswith("_unified"):
+            flow_name = "unified"
         else:
             flow_name = "simulation"
     else:
         flow_name = "asic" if args.format == "sv" else "simulation"
 
-    # Normalize target name (strip _asic / _vivado if derived from --filelist)
+    # Normalize target name (strip _asic / _vivado / _unified if derived from --filelist)
     if args.filelist:
         target_name = args.filelist.stem
-        for sfx in ("_asic", "_vivado"):
+        for sfx in ("_asic", "_vivado", "_unified"):
             if target_name.endswith(sfx):
                 target_name = target_name[:-len(sfx)]
     else:

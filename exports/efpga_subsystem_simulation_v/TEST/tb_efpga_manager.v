@@ -305,6 +305,45 @@ module tb_efpga_manager;
 		end
 		else
 			$display("[PASS] CONFIG_COUNT (0x000C): Word counter accurately incremented to 2");
+		axi_read(32'h00008000, rdata);
+		if (rdata !== 32'hbad00003) begin
+			$display("[FAIL] Old 0x08000 offset expected 0xBAD00003 (unmapped), got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axi_write(32'h00010000, 32'h01020304);
+		if (efpga_config_data_o !== 32'h04030201) begin
+			$display("[FAIL] CONFIG_DMA_WINDOW (0x10000): efpga_config_data_o mismatch! Got 0x%08X (expected 0x04030201)", efpga_config_data_o);
+			errors = errors + 1;
+		end
+		axi_write(32'h00010004, 32'h55667788);
+		if (efpga_config_data_o !== 32'h88776655) begin
+			$display("[FAIL] CONFIG_DMA_WINDOW (0x10004): efpga_config_data_o mismatch! Got 0x%08X (expected 0x88776655)", efpga_config_data_o);
+			errors = errors + 1;
+		end
+		axi_write(32'h0001fffc, 32'hdeadcafe);
+		if (efpga_config_data_o !== 32'hfecaadde) begin
+			$display("[FAIL] CONFIG_DMA_WINDOW (0x1FFFC): efpga_config_data_o mismatch! Got 0x%08X (expected 0xFECAADDE)", efpga_config_data_o);
+			errors = errors + 1;
+		end
+		axi_read(32'h0000000c, rdata);
+		if (rdata !== 32'd5) begin
+			$display("[FAIL] CONFIG_COUNT after 3 DMA window writes expected 5, got %0d", rdata);
+			errors = errors + 1;
+		end
+		else
+			$display("[PASS] CONFIG_DMA_WINDOW (0x10000-0x1FFFF): Incrementing writes byte-swapped and counted (CONFIG_COUNT=5)");
+		axi_read(32'h00010000, rdata);
+		if (rdata !== 32'h00000000) begin
+			$display("[FAIL] CONFIG_DMA_WINDOW readback @ 0x10000 expected 0x00000000, got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		axi_read(32'h0001fffc, rdata);
+		if (rdata !== 32'h00000000) begin
+			$display("[FAIL] CONFIG_DMA_WINDOW readback @ 0x1FFFC expected 0x00000000, got 0x%08X", rdata);
+			errors = errors + 1;
+		end
+		else
+			$display("[PASS] CONFIG_DMA_WINDOW (0x10000-0x1FFFF): Write-only window reads back 0x00000000");
 		if ((slot_usr_irq_en_o[0] !== 1'b0) || (slot_pmod_en_o[0] !== 1'b0)) begin
 			$display("[FAIL] SLOT_CTRL Reset Default: slot_usr_irq_en_o=%b, slot_pmod_en_o=%b (expected 0, 0)", slot_usr_irq_en_o[0], slot_pmod_en_o[0]);
 			errors = errors + 1;

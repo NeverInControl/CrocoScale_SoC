@@ -136,14 +136,14 @@ module efpga_manager (
 	localparam [0:0] PMP_ACTIVE = ENABLE_PMP & (NUM_PMP_REGIONS > 0);
 	localparam signed [31:0] ADDR_SHIFT = (PAGE_GRANULARITY ? 12 : 2);
 	localparam signed [31:0] COMP_WIDTH = ADDR_WIDTH - ADDR_SHIFT;
-	wire [15:0] local_awaddr = s_axil_awaddr[15:0];
-	wire [15:0] local_araddr = s_axil_araddr[15:0];
+	wire [17:0] local_awaddr = s_axil_awaddr[17:0];
+	wire [17:0] local_araddr = s_axil_araddr[17:0];
 	function automatic [3:0] sv2v_cast_4;
 		input reg [3:0] inp;
 		sv2v_cast_4 = inp;
 	endfunction
-	wire [3:0] aw_slot_idx = sv2v_cast_4((local_awaddr - 16'h1000) >> 12);
-	wire [3:0] ar_slot_idx = sv2v_cast_4((local_araddr - 16'h1000) >> 12);
+	wire [3:0] aw_slot_idx = sv2v_cast_4((local_awaddr[15:0] - 16'h1000) >> 12);
+	wire [3:0] ar_slot_idx = sv2v_cast_4((local_araddr[15:0] - 16'h1000) >> 12);
 	localparam signed [31:0] SLOT_IDX_W = (NUM_SLOTS > 1 ? $clog2(NUM_SLOTS) : 1);
 	wire [SLOT_IDX_W - 1:0] aw_slot_sel = aw_slot_idx[SLOT_IDX_W - 1:0];
 	wire [SLOT_IDX_W - 1:0] ar_slot_sel = ar_slot_idx[SLOT_IDX_W - 1:0];
@@ -180,11 +180,15 @@ module efpga_manager (
 	assign slot_dma_awprot_o = dma_awprot_reg;
 	assign slot_dma_arprot_o = dma_arprot_reg;
 	wire axi_write_en = (((s_axil_awvalid && s_axil_wvalid) && !axi_awready) && !axi_wready) && !axi_bvalid;
+	wire is_config_dma_write = local_awaddr[17:16] == 2'b01;
+	wire is_config_dma_read = local_araddr[17:16] == 2'b01;
+	wire is_low_64k_write = local_awaddr[17:16] == 2'b00;
+	wire is_low_64k_read = local_araddr[17:16] == 2'b00;
 	function automatic signed [3:0] sv2v_cast_4_signed;
 		input reg signed [3:0] inp;
 		sv2v_cast_4_signed = inp;
 	endfunction
-	wire is_slot_write = (axi_write_en && (local_awaddr >= 16'h1000)) && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS));
+	wire is_slot_write = ((axi_write_en && is_low_64k_write) && (local_awaddr[15:0] >= 16'h1000)) && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS));
 	wire [11:0] slot_aw_offset = local_awaddr[11:0] & 12'hffc;
 	wire [11:0] pmp_aw_offset = (local_awaddr[11:0] & 12'hffc) - 12'h018;
 	wire [7:0] pmp_aw_region_idx = pmp_aw_offset[10:3];
@@ -535,7 +539,13 @@ module efpga_manager (
 				axi_awready <= 1'b1;
 				axi_wready <= 1'b1;
 				axi_bvalid <= 1'b1;
-				if (local_awaddr < 16'h1000)
+				if (is_config_dma_write) begin
+					config_count_reg <= config_count_reg + 32'd1;
+					efpga_config_data_o <= {s_axil_wdata[7:0], s_axil_wdata[15:8], s_axil_wdata[23:16], s_axil_wdata[31:24]};
+					efpga_config_we_o <= 1'b1;
+					user_design_loaded_reg <= 1'b1;
+				end
+				else if (is_low_64k_write && (local_awaddr[15:0] < 16'h1000))
 					case (local_awaddr[11:0] & 12'hffc)
 						12'h004:
 							if (s_axil_wstrb[0]) begin
@@ -552,7 +562,7 @@ module efpga_manager (
 						default:
 							;
 					endcase
-				else if (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))
+				else if (is_low_64k_write && (aw_slot_idx < sv2v_cast_4_signed(NUM_SLOTS)))
 					case (slot_aw_offset)
 						12'h000:
 							;
@@ -598,7 +608,9 @@ module efpga_manager (
 		else if ((s_axil_arvalid && !axi_arready) && !axi_rvalid) begin
 			axi_arready <= 1'b1;
 			axi_rvalid <= 1'b1;
-			if (local_araddr < 16'h1000)
+			if (is_config_dma_read)
+				axi_rdata <= 32'h00000000;
+			else if (is_low_64k_read && (local_araddr[15:0] < 16'h1000))
 				case (local_araddr[11:0] & 12'hffc)
 					12'h000: axi_rdata <= HW_VERSION;
 					12'h004: axi_rdata <= {27'd0, bitbang_sticky_reg, efpga_bitbang_active_i, user_design_loaded_reg, efpga_com_active_i, 1'b0};
@@ -606,7 +618,7 @@ module efpga_manager (
 					12'h00c: axi_rdata <= config_count_reg;
 					default: axi_rdata <= 32'hbad00000;
 				endcase
-			else if (ar_slot_idx < sv2v_cast_4_signed(NUM_SLOTS)) begin
+			else if (is_low_64k_read && (ar_slot_idx < sv2v_cast_4_signed(NUM_SLOTS))) begin
 				if ((local_araddr[11:0] & 12'hffc) < 12'h018)
 					case (local_araddr[11:0] & 12'hffc)
 						12'h000: axi_rdata <= 32'h00000000;

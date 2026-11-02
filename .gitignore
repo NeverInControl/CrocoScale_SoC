@@ -66,3 +66,6 @@ desktop.ini
 # Generated Mirrors (reproducible from scripts/generate_verilog_mirror.sh)
 VERILOG_MIRROR_GENERATED/
 
+# bin files
+*.bin
+

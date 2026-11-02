@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SRC_RTL="${REPO_ROOT}/RTL"
 SRC_MACROS="${REPO_ROOT}/MACROS"
 SRC_VIVADO="${REPO_ROOT}/VIVADO"
+SRC_UNIFIED="${REPO_ROOT}/UNIFIED"
 SRC_SOFT_LOGIC="${REPO_ROOT}/SOFT_LOGIC"
 SRC_TEST="${REPO_ROOT}/TEST"
 SRC_FLISTS="${REPO_ROOT}/FILE_LISTS"
@@ -15,6 +16,7 @@ OUT_DIR="${REPO_ROOT}/VERILOG_MIRROR_GENERATED"
 OUT_RTL="${OUT_DIR}/RTL"
 OUT_MACROS="${OUT_DIR}/MACROS"
 OUT_VIVADO="${OUT_DIR}/VIVADO"
+OUT_UNIFIED="${OUT_DIR}/UNIFIED"
 OUT_SOFT_LOGIC="${OUT_DIR}/SOFT_LOGIC"
 OUT_TEST="${OUT_DIR}/TEST"
 OUT_FLISTS="${OUT_DIR}/FILE_LISTS"
@@ -180,7 +182,7 @@ fi
 if [[ -z "${TARGET_SUBDIR}" ]]; then
     # Full Tree Mode: Clean and prepare output directory structure
     rm -rf "${OUT_DIR}"
-    mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_VIVADO}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
+    mkdir -p "${OUT_RTL}" "${OUT_MACROS}" "${OUT_VIVADO}" "${OUT_UNIFIED}" "${OUT_SOFT_LOGIC}" "${OUT_TEST}" "${OUT_FLISTS}"
     ln -sfn "${REPO_ROOT}/FABulousProject" "${OUT_DIR}/FABulousProject"
 
     # Document auto-generated nature of the mirror directory
@@ -282,6 +284,30 @@ EOF
             echo "Transpiled Vivado Primitive: ${rel_path} -> $(basename "${out_v}")"
         done
         echo "VIVADO SystemVerilog transpilation complete."
+    fi
+
+    # Recreate UNIFIED directory hierarchy in output mirror (pure Verilog .v switch files copied untouched)
+    if [[ -d "${SRC_UNIFIED}" ]]; then
+        find "${SRC_UNIFIED}" -type d | while read -r dir; do
+            rel_dir="${dir#"${SRC_UNIFIED}"}"
+            if [[ -n "${rel_dir}" ]]; then
+                mkdir -p "${OUT_UNIFIED}${rel_dir}"
+            fi
+        done
+
+        find "${SRC_UNIFIED}" -type f \( -name "*.v" -o -name "*.vh" -o -name "*.svh" -o -name "*.md" \) | while read -r src_file; do
+            rel_path="${src_file#"${SRC_UNIFIED}/"}"
+            mkdir -p "$(dirname "${OUT_UNIFIED}/${rel_path}")"
+            cp -p "${src_file}" "${OUT_UNIFIED}/${rel_path}"
+        done
+
+        find "${SRC_UNIFIED}" -type f -name "*.sv" | while read -r sv_file; do
+            rel_path="${sv_file#"${SRC_UNIFIED}/"}"
+            out_v="${OUT_UNIFIED}/${rel_path%.sv}.v"
+            mkdir -p "$(dirname "${out_v}")"
+            "${SV2V_BIN}" "${sv_file}" > "${out_v}"
+            echo "Transpiled Unified Package: ${rel_path} -> $(basename "${out_v}")"
+        done
     fi
 
     # Recreate SOFT_LOGIC directory hierarchy in output mirror

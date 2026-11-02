@@ -3,9 +3,9 @@
 /* ===============================================================================================
  * eFPGA Manager Register Map
  * ===============================================================================================
- * Total Address Space: 64 KB
+ * Total Address Space: 256 KB (18-bit Aperture: 0x00000 - 0x3FFFF)
  *
- * GLOBAL REGISTERS (Base Address: 0x0000)
+ * GLOBAL REGISTERS (Base Address: 0x00000)
  * -----------------------------------------------------------------------------------------------
  * Offset | Register Name  | R/W | Description / Bit Mapping
  * -------|----------------|-----|----------------------------------------------------------------
@@ -14,7 +14,7 @@
  * 0x008  | CONFIG_DATA    | W   | [31:0]: Config Payload (translates little-endian CPU words to big-endian fabric frames)
  * 0x00C  | CONFIG_COUNT   | R   | [31:0]: Number of words written to CONFIG_DATA
  *
- * PER-SLOT REGISTERS (Base Address: 0x1000 + (Slot_Index * 0x1000))
+ * PER-SLOT REGISTERS (Base Address: 0x01000 + (Slot_Index * 0x1000), up to 15 Slots: 0x01000 - 0x0FFFF)
  * -----------------------------------------------------------------------------------------------
  * Offset | Register Name  | R/W | Description / Bit Mapping
  * -------|----------------|-----|----------------------------------------------------------------
@@ -25,7 +25,7 @@
  * 0x010  | DEBUG_OUT      | R/W | [31:0]: Static output wires driven to the eFPGA fabric
  * 0x014  | DEBUG_IN       | R   | [31:0]: Static input wires read from the eFPGA fabric
  *
- * DYNAMIC PMP REGISTERS (Base Address: 0x1000 + (Slot_Index * 0x1000) + 0x018)
+ * DYNAMIC PMP REGISTERS (Base Address: 0x01000 + (Slot_Index * 0x1000) + 0x018)
  * Security Lock: PMP registers are READ-ONLY unless the slot is actively decoupled.
  * -----------------------------------------------------------------------------------------------
  * Offset | Register Name  | R/W | Description / Bit Mapping
@@ -34,6 +34,12 @@
  * 0x01C  | PMP_LIMIT_0    | R/W*| [31:0]: Limit address for PMP Region 0 (Lower bits overloaded for PROT)
  * 0x020  | PMP_BASE_1     | R/W*| [31:0]: Base address for PMP Region 1
  * 0x024  | PMP_LIMIT_1    | R/W*| [31:0]: Limit address for PMP Region 1 (Lower bits overloaded for PROT)
+ *
+ * BITSTREAM DMA WINDOW (Base Address: 0x10000 - 0x1FFFF, 64 KB)
+ * -----------------------------------------------------------------------------------------------
+ * Offset          | Register Name     | R/W | Description / Bit Mapping
+ * ----------------|-------------------|-----|----------------------------------------------------
+ * 0x10000-0x1FFFF | CONFIG_DMA_WINDOW | W   | [31:0]: Wildcarded INCR DMA Bitstream Window (16,384 words; aliases CONFIG_DATA)
  * =============================================================================================== */
 
 module efpga_manager #(
@@ -109,10 +115,10 @@ module efpga_manager #(
     localparam int ADDR_SHIFT = PAGE_GRANULARITY ? 12 : 2;
     localparam int COMP_WIDTH = ADDR_WIDTH - ADDR_SHIFT;
 
-    wire [15:0] local_awaddr = s_axil_awaddr[15:0];
-    wire [15:0] local_araddr = s_axil_araddr[15:0];
-    wire [3:0]  aw_slot_idx  = 4'((local_awaddr - 16'h1000) >> 12);
-    wire [3:0]  ar_slot_idx  = 4'((local_araddr - 16'h1000) >> 12);
+    wire [17:0] local_awaddr = s_axil_awaddr[17:0];
+    wire [17:0] local_araddr = s_axil_araddr[17:0];
+    wire [3:0]  aw_slot_idx  = 4'((local_awaddr[15:0] - 16'h1000) >> 12);
+    wire [3:0]  ar_slot_idx  = 4'((local_araddr[15:0] - 16'h1000) >> 12);
 
     localparam int SLOT_IDX_W = (NUM_SLOTS > 1) ? $clog2(NUM_SLOTS) : 1;
     wire [SLOT_IDX_W-1:0] aw_slot_sel = aw_slot_idx[SLOT_IDX_W-1:0];
@@ -144,8 +150,12 @@ module efpga_manager #(
     assign slot_dma_arprot_o  = dma_arprot_reg;
 
     // AXI Write Handshake
-    wire axi_write_en = (s_axil_awvalid && s_axil_wvalid && !axi_awready && !axi_wready && !axi_bvalid);
-    wire is_slot_write = axi_write_en && (local_awaddr >= 16'h1000) && (aw_slot_idx < 4'(NUM_SLOTS));
+    wire axi_write_en        = (s_axil_awvalid && s_axil_wvalid && !axi_awready && !axi_wready && !axi_bvalid);
+    wire is_config_dma_write = (local_awaddr[17:16] == 2'b01);
+    wire is_config_dma_read  = (local_araddr[17:16] == 2'b01);
+    wire is_low_64k_write    = (local_awaddr[17:16] == 2'b00);
+    wire is_low_64k_read     = (local_araddr[17:16] == 2'b00);
+    wire is_slot_write       = axi_write_en && is_low_64k_write && (local_awaddr[15:0] >= 16'h1000) && (aw_slot_idx < 4'(NUM_SLOTS));
     wire [11:0] slot_aw_offset = local_awaddr[11:0] & 12'hFFC;
 
     // PMP Register Address Decoding
@@ -524,7 +534,12 @@ module efpga_manager #(
                 axi_wready  <= 1'b1;
                 axi_bvalid  <= 1'b1;
 
-                if (local_awaddr < 16'h1000) begin
+                if (is_config_dma_write) begin
+                    config_count_reg       <= config_count_reg + 32'd1;
+                    efpga_config_data_o    <= {s_axil_wdata[7:0], s_axil_wdata[15:8], s_axil_wdata[23:16], s_axil_wdata[31:24]};
+                    efpga_config_we_o      <= 1'b1;
+                    user_design_loaded_reg <= 1'b1;
+                end else if (is_low_64k_write && (local_awaddr[15:0] < 16'h1000)) begin
                     case (local_awaddr[11:0] & 12'hFFC)
                         12'h004: begin
                             if (s_axil_wstrb[0]) begin
@@ -540,7 +555,7 @@ module efpga_manager #(
                         end
                         default: ;
                     endcase
-                end else if (aw_slot_idx < 4'(NUM_SLOTS)) begin
+                end else if (is_low_64k_write && (aw_slot_idx < 4'(NUM_SLOTS))) begin
                     case (slot_aw_offset)
                         12'h000: ; // Reserved (Legacy SLOT_RESET — handled by external Reset Controller)
                         12'h004: begin
@@ -586,7 +601,9 @@ module efpga_manager #(
                 axi_arready <= 1'b1;
                 axi_rvalid  <= 1'b1;
 
-                if (local_araddr < 16'h1000) begin
+                if (is_config_dma_read) begin
+                    axi_rdata <= 32'h00000000;
+                end else if (is_low_64k_read && (local_araddr[15:0] < 16'h1000)) begin
                     case (local_araddr[11:0] & 12'hFFC)
                         12'h000: axi_rdata <= HW_VERSION;
                         12'h004: axi_rdata <= {27'd0, bitbang_sticky_reg, efpga_bitbang_active_i, user_design_loaded_reg, efpga_com_active_i, 1'b0};
@@ -594,7 +611,7 @@ module efpga_manager #(
                         12'h00C: axi_rdata <= config_count_reg;
                         default: axi_rdata <= 32'hBAD00000;
                     endcase
-                end else if (ar_slot_idx < 4'(NUM_SLOTS)) begin
+                end else if (is_low_64k_read && (ar_slot_idx < 4'(NUM_SLOTS))) begin
                     if ((local_araddr[11:0] & 12'hFFC) < 12'h018) begin
                         case (local_araddr[11:0] & 12'hFFC)
                             12'h000: axi_rdata <= 32'h00000000;

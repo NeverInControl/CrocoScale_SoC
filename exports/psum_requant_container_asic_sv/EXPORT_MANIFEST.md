@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `psum_requant_container` (`asic`)
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `e261e76`
+* **Commit**: `e9e98b9`
 * **Target Flow**: `asic` (`FILE_LISTS/asic/psum_requant_container_asic.f`)
 * **Format**: `sv`
 * **RTL Modules**: 4 files in `psum_requant_container_global.f`

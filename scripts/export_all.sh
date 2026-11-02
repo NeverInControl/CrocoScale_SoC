@@ -12,6 +12,9 @@ set -euo pipefail
 #      - exports/psum_requant_container_asic_sv/ (with SRAM macros + requantizer lane)
 #   4. Exports Tier-2 ASIC eFPGA Subsystem Macro (exports/efpga_subsystem_asic_sv/)
 #      - Uses the hardened Tier-1 container blackboxes + eFPGA_top blackbox + AXI_LIB
+#   5. Exports Unified Compiler-Directive Packages:
+#      - exports/efpga_subsystem_unified_sv/ (SystemVerilog + pure Verilog UNIFIED/ switches)
+#      - exports/efpga_subsystem_unified_v/  (Pure Verilog-2001 + pure Verilog UNIFIED/ switches)
 #
 # Usage:
 #   ./scripts/export_all.sh [MIRROR_OPTIONS]
@@ -22,13 +25,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "================================================================================"
-echo "[1/5] Running Verilog Mirror Generation & Verification..."
+echo "[1/7] Running Verilog Mirror Generation & Verification..."
 echo "================================================================================"
 "${SCRIPT_DIR}/generate_verilog_mirror.sh" "$@"
 
 echo ""
 echo "================================================================================"
-echo "[2/5] Exporting Icarus Simulation Package (exports/efpga_subsystem_simulation_v/)..."
+echo "[2/7] Exporting Icarus Simulation Package (exports/efpga_subsystem_simulation_v/)..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target efpga_subsystem \
@@ -39,7 +42,7 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
 
 echo ""
 echo "================================================================================"
-echo "[3/5] Exporting Tier-1 ASIC Container Macro: act_bank_container_asic_sv..."
+echo "[3/7] Exporting Tier-1 ASIC Container Macro: act_bank_container_asic_sv..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target act_bank_container \
@@ -48,7 +51,7 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
 
 echo ""
 echo "================================================================================"
-echo "[4/5] Exporting Tier-1 ASIC Container Macro: psum_requant_container_asic_sv..."
+echo "[4/7] Exporting Tier-1 ASIC Container Macro: psum_requant_container_asic_sv..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target psum_requant_container \
@@ -57,7 +60,7 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
 
 echo ""
 echo "================================================================================"
-echo "[5/5] Exporting Tier-2 ASIC eFPGA Subsystem Package (exports/efpga_subsystem_asic_sv/)..."
+echo "[5/7] Exporting Tier-2 ASIC eFPGA Subsystem Package (exports/efpga_subsystem_asic_sv/)..."
 echo "================================================================================"
 python3 "${SCRIPT_DIR}/export_subsystem.py" \
     --target efpga_subsystem \
@@ -68,10 +71,36 @@ python3 "${SCRIPT_DIR}/export_subsystem.py" \
 
 echo ""
 echo "================================================================================"
+echo "[6/7] Exporting Unified Multi-Target Package (exports/efpga_subsystem_unified_sv/)..."
+echo "================================================================================"
+python3 "${SCRIPT_DIR}/export_subsystem.py" \
+    --target efpga_subsystem \
+    --flow unified \
+    --format sv \
+    --include-tb \
+    --include-hal \
+    --include-lib
+
+echo ""
+echo "================================================================================"
+echo "[7/7] Exporting Unified Multi-Target Package (exports/efpga_subsystem_unified_v/)..."
+echo "================================================================================"
+python3 "${SCRIPT_DIR}/export_subsystem.py" \
+    --target efpga_subsystem \
+    --flow unified \
+    --format v \
+    --include-tb \
+    --include-hal \
+    --include-lib
+
+echo ""
+echo "================================================================================"
 echo "All exports complete:"
 echo "  - Icarus Simulation (Verilog-2001, TBs, HAL):  ${REPO_ROOT}/exports/efpga_subsystem_simulation_v/"
 echo "  - ASIC Tier-1 Container (Activation Bank):     ${REPO_ROOT}/exports/act_bank_container_asic_sv/"
 echo "  - ASIC Tier-1 Container (PSUM + Requantizer):  ${REPO_ROOT}/exports/psum_requant_container_asic_sv/"
 echo "  - ASIC Tier-2 Subsystem (eFPGA + NPU + Lib):   ${REPO_ROOT}/exports/efpga_subsystem_asic_sv/"
+echo "  - Unified All-Flows Package (SystemVerilog):   ${REPO_ROOT}/exports/efpga_subsystem_unified_sv/"
+echo "  - Unified All-Flows Package (Verilog-2001):    ${REPO_ROOT}/exports/efpga_subsystem_unified_v/"
 echo "  - Vivado Emulation: Uses original RTL/ + VIVADO/ tree directly."
 echo "================================================================================"

@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `efpga_subsystem` (`asic`)
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `e261e76`
+* **Commit**: `e9e98b9`
 * **Target Flow**: `asic` (`FILE_LISTS/asic/efpga_subsystem_asic.f`)
 * **Format**: `sv`
 * **RTL Modules**: 32 files in `efpga_subsystem_global.f`
@@ -11,7 +11,7 @@
 * `efpga_subsystem_global.f`: Flat, standalone filelist (all paths relative to package root).
 * `RTL/`: Synthesizable module sources (including `RTL/AXI_LIB/`).
 * `MACROS/`: Foundry hard macro wrappers, blackbox models, and cell collaterals.
-* `TEST/`: Verification testbenches (5 files) and golden vectors (70 `.mem` files).
+* `TEST/`: Verification testbenches (5 files) and golden vectors (92 `.mem` files).
 
 ## Simulation / Synthesis Quickstart
 
