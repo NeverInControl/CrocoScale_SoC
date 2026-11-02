@@ -69,7 +69,7 @@ module tb_npu_flex_crossbar_stress;
     localparam logic [31:0] CTRL_BASE_ADDR = 32'h2000_0000;
 
     localparam logic [M_COUNT*32-1:0] CROSSBAR_BASE_ADDRS  = {CTRL_BASE_ADDR, MGR_BASE_ADDR, RAM_BASE_ADDR};
-    localparam logic [M_COUNT*32-1:0] CROSSBAR_ADDR_WIDTHS = {32'd16, 32'd16, 32'(RAM_ADDR_W)};
+    localparam logic [M_COUNT*32-1:0] CROSSBAR_ADDR_WIDTHS = {32'd18, 32'd18, 32'(RAM_ADDR_W)};
 
     // eFPGA Manager Slot 0 Register Offsets (Accessed by CPU at MGR_BASE_ADDR + MGR_*)
     localparam logic [31:0] MGR_SLOT0_CTRL   = 32'h0000_1004;

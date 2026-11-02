@@ -55,9 +55,9 @@ module crocoscale_soc #(
     function automatic logic [M_COUNT*32-1:0] get_m_addr_widths();
         logic [M_COUNT*32-1:0] map;
         map[0*32 +: 32] = $clog2(MEM_SIZE); // M0: RAM
-        map[1*32 +: 32] = 32'd16;           // M1: Global Manager (64KB)
+        map[1*32 +: 32] = 32'd18;           // M1: Global Manager (256KB)
         for (int i = 0; i < NUM_SLOTS; i++) begin
-            map[(2+i)*32 +: 32] = 32'd16;   // M2+: Slot Controls (64KB each)
+            map[(2+i)*32 +: 32] = 32'd18;   // M2+: Slot Controls (256KB each)
         end
         return map;
     endfunction
