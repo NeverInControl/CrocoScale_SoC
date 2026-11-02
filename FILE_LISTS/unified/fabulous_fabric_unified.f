@@ -1,5 +1,5 @@
 # =============================================================================
-# CrocoScale SoC -- FABulous Fabric Assembly & Configuration Logic (Unified Flow)
+# CrocoScale SoC -- FABulous Fabric Assembly & Configuration Logic (9x16)
 # =============================================================================
 FABulousProject/CrocoScale_Fabric/Fabric/ConfigFSM.v
 FABulousProject/CrocoScale_Fabric/Fabric/config_UART.v
@@ -8,5 +8,5 @@ FABulousProject/CrocoScale_Fabric/Fabric/Frame_Data_Reg.v
 FABulousProject/CrocoScale_Fabric/Fabric/Frame_Select.v
 FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_Config.v
 FABulousProject/CrocoScale_Fabric/Fabric/eFPGA.v
-UNIFIED/eFPGA_top.v
+UNIFIED_GENERATED/eFPGA_top.v
 

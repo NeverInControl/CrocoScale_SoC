@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `efpga_subsystem` (`unified`)
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `e9e98b9`
+* **Commit**: `6b2ab0f`
 * **Target Flow**: `unified` (`FILE_LISTS/unified/efpga_subsystem_unified.f`)
 * **Format**: `v`
 * **RTL Modules**: 175 files in `efpga_subsystem_global.f`

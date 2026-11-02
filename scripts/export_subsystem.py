@@ -458,7 +458,7 @@ def export_subsystem(
                 curr_vivado_dir = output_dir / "VIVADO" if fmt != "both" else output_dir / "VIVADO" / f_fmt
                 rel_vivado = Path(*Path(norm_rel).parts[1:])
                 dst_file = curr_vivado_dir / rel_vivado.with_suffix(src_file.suffix)
-            elif norm_rel.startswith("UNIFIED/"):
+            elif norm_rel.startswith(("UNIFIED/", "UNIFIED_GENERATED/")):
                 curr_unified_dir = output_dir / "UNIFIED" if fmt != "both" else output_dir / "UNIFIED" / f_fmt
                 rel_unified = Path(*Path(norm_rel).parts[1:])
                 dst_file = curr_unified_dir / rel_unified.with_suffix(src_file.suffix)
