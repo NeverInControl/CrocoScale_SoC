@@ -1,189 +1,150 @@
-# Project Automation, Build & IP Exporter Scripts
+# Project Automation, Build & IP Exporter Scripts (`docs/Scripts.md`)
 
-All project automation, code generation, verification, and IP export scripts are located in the `scripts/` directory.
+All project automation, code generation, formal verification, and standalone IP packaging scripts are located in [`scripts/`](file:///c:/Users/Niels/Documents/nct/MyProjects/CrocoScale_SoC/scripts/). Every script provides a built-in `--help` (`-h`) page with examples.
 
 ---
 
-## 🚀 Standalone IP Subsystem Export Workflow
+## ⚡ Quick Cheat-Sheet: Which Command Do I Run?
 
-CrocoScale SoC serves not only as a tapeout-ready Edge AI SoC, but fundamentally as a **test vehicle and modular IP library consortium**. Core subsystems (such as the eFPGA Subsystem, NPU Complex, and Soft-Logic Sequencers) are designed for frequent extraction and integration into external partner projects, research chips, or third-party SoCs.
-
-### One-Command Full Export (`./scripts/export_all.sh`)
-
-To regenerate the Verilog-2001 mirror and package both downstream export targets in one step:
-
-```bash
-source ~/custom_functions/custom_functions.sh && pyenv Yosys
-./scripts/export_all.sh
-```
-
-This runs:
-1. `./scripts/generate_verilog_mirror.sh` (transpilation + formal SAT equivalence proofs).
-2. `exports/efpga_subsystem_simulation_v/` (Icarus Simulation Verilog: `--flow simulation --format v --include-tb --include-hal`).
-3. `exports/efpga_subsystem_asic_sv/` (Macro-Backend SystemVerilog: `--flow asic --format sv --include-tb --include-lib --include-macros`).
-
-### Manual 2-Step Export Sequence
-
-Exporting pure, formally verified IEEE 1364-2001 Verilog manually:
-
-```bash
-# Step 1: Transpile SystemVerilog to Verilog-2001 and run formal SAT proofs
-source ~/custom_functions/custom_functions.sh && pyenv Yosys
-./scripts/generate_verilog_mirror.sh
-
-# Step 2: Package standalone subsystem into exports/<target>_<flow>_<format>/
-python3 scripts/export_subsystem.py --target efpga_subsystem --flow simulation --format v --include-tb --include-hal
-python3 scripts/export_subsystem.py --target efpga_subsystem --flow asic --format sv --include-tb --include-lib --include-macros
-```
-
-> **Why Step 1 is required before Step 2:**
-> When exporting with `--format v` (the default), `export_subsystem.py` pulls `.v` files directly from `VERILOG_MIRROR_GENERATED/`. Running `generate_verilog_mirror.sh` beforehand guarantees that all exported Verilog files have passed all 29 Yosys formal SAT equivalence proofs and structural audits before packaging.
+| Goal | Command to Run (in WSL) |
+| :--- | :--- |
+| **Build everything & export all 6 IP packages** (Full formal SAT proofs) | `source ~/custom_functions/custom_functions.sh && pyenv Yosys && ./scripts/export_all.sh` |
+| **Fast export of all 6 IP packages** (~10s, skips SAT proofs) | `source ~/custom_functions/custom_functions.sh && pyenv Yosys && ./scripts/export_all.sh -e none` |
+| **Export Icarus Simulation package** (`.v` + TBs + C HAL) | `python3 scripts/export_subsystem.py --target efpga_subsystem --flow simulation --format v --include-tb --include-hal` |
+| **Export Tier-1 ASIC Container Macros** (`act_bank` / `psum_requant`) | `python3 scripts/export_subsystem.py --target act_bank_container --flow asic --format sv`<br>`python3 scripts/export_subsystem.py --target psum_requant_container --flow asic --format sv` |
+| **Export Tier-2 ASIC eFPGA Subsystem** (`.sv` + TBs + `AXI_LIB`) | `python3 scripts/export_subsystem.py --target efpga_subsystem --flow asic --format sv --include-tb --include-lib` |
+| **Export Unified Multi-Target package** (`+define+` switched, `.sv` or `.v`) | `python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format sv --include-tb --include-hal --include-lib`<br>`python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format v --include-tb --include-hal --include-lib` |
+| **Regenerate `UNIFIED_GENERATED/` & `FILE_LISTS/unified/`** | `python3 scripts/generate_unified_switches.py` |
+| **Sync `MACROS/FABulous/eFPGA_top.v` blackbox after FABulous regen** | `python3 scripts/generate_blackbox_stub.py` |
+| **Regenerate `VERILOG_MIRROR_GENERATED/` only** | `./scripts/generate_verilog_mirror.sh` *(or `-e none` for fast mode)* |
+| **Flatten a nested `.f` filelist into a single file** | `python3 scripts/flatten_filelists.py -f FILE_LISTS/soc.f -o gemini_workspace/soc_flat.f` |
+| **Strip Windows CRLF line endings from all `.f` files** | `python3 scripts/clean_filelists_crlf.py` |
 
 ---
 
 ## 🛠️ Complete Scripts Reference
 
-### 1. `export_subsystem.py` — Subsystem & IP Packaging Tool
+### 1. `export_subsystem.py` — Standalone Subsystem & IP Packaging Tool
 
-Traverses a subsystem's dependency tree and packages it into an isolated, self-contained directory under `exports/<target>/`. It generates a root-level flat filelist (`<target>_global.f`) with **zero external library dependencies**, ready for drag-and-drop integration into external toolchains.
+Resolves a subsystem's filelist tree, rebases submodule paths (via `scripts/export_config.yaml`), and packages a self-contained directory under `exports/<target>_<flow>_<format>/` with a flat `<target>_global.f` filelist and an `EXPORT_MANIFEST.md`.
 
-#### Syntax & Options
 ```bash
-python3 scripts/export_subsystem.py [OPTIONS]
+python3 scripts/export_subsystem.py --help
 ```
 
-| Argument | Type | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `--target` | `str` | `efpga_subsystem` | Target subsystem name. Automatically maps to `FILE_LISTS/<target>.f`. |
-| `--filelist` | `path` | `None` | Optional path to export any custom `.f` filelist instead of predefined targets. |
-| `--format` | `choice` | `v` | HDL format to package: `v` (pure Verilog from mirror), `sv` (SystemVerilog), or `both`. |
-| `--include-tb` | `flag` | `False` | Dynamically discover and bundle associated testbenches, test filelists, and `.mem` vectors into `TEST/`. |
-| `--include-hal`| `flag` | `False` | Dynamically discover and bundle matching C driver headers/sources into `HAL/`. |
-| `--config` | `path` | `scripts/export_config.yaml` | Path to YAML configuration defining external submodule path mappings and prefix stripping. |
-| `--output-dir` | `path` | `exports/<target>_<format>/` | Custom destination directory for the exported package. |
-| `--no-clean` | `flag` | `False` | Do not wipe the destination directory before exporting. |
+#### Target & Flow Selection
+| Flag | Choices / Default | Description |
+| :--- | :--- | :--- |
+| `-t`, `--target <NAME>` | `efpga_subsystem` *(default)*, `npu`, `soc`, `act_bank_container`, `psum_requant_container` | Predefined subsystem target to export. |
+| `--flow <FLOW>` | `simulation` (`sim`), `asic`, `vivado`, `unified` | Filelist flow tree to walk (`FILE_LISTS/`, `FILE_LISTS/asic/`, `FILE_LISTS/vivado/`, or `FILE_LISTS/unified/`). Defaults to `simulation` when `--format v` and `asic` when `--format sv`. |
+| `-f`, `--filelist <PATH>` | `None` | Export any custom `.f` filelist instead of a named `--target`. |
 
-#### HAL Automatic Detection Naming Rule
-For C driver files in `HAL/` to be automatically detected and bundled when `--include-hal` is used:
-* **The filename in `HAL/` must match the target name or its tokens** (e.g. `HAL/efpga_subsystem_hal.h` matches `--target efpga_subsystem`).
-* Alternatively, the filename must match a prominent Verilog module name contained in the exported RTL filelist (e.g. `efpga_manager`).
+#### Output Format & Destination
+| Flag | Choices / Default | Description |
+| :--- | :--- | :--- |
+| `--format <FMT>` | `v` *(default)*, `sv`, `both` | `v`: pure IEEE 1364-2001 Verilog from `VERILOG_MIRROR_GENERATED/`.<br>`sv`: SystemVerilog from `RTL/` & `MACROS/`.<br>`both`: exports both `.sv` and `.v` side-by-side. |
+| `-o`, `--output-dir <DIR>` | `exports/<target>_<flow>_<format>/` | Custom output directory path. |
+| `--config <YAML>` | `scripts/export_config.yaml` | YAML file mapping external submodules (e.g. `FABulousProject/`) into clean export subdirectories. |
+| `--no-clean` | `False` | Keep existing files in the output directory instead of wiping first. |
 
-#### Testbench Auto-Detection
-When `--include-tb` is set, the exporter automatically searches `FILE_LISTS/tb/*.f` and testbench directories for files matching the target name tokens or RTL modules, rewriting paths to be self-contained within `exports/<target>/TEST/`.
+#### Optional Bundling Flags
+| Flag | Default | Description |
+| :--- | :---: | :--- |
+| `--include-tb` | `False` | Auto-detects and bundles matching testbenches, test filelists, and `.mem` vectors into `TEST/`. |
+| `--include-hal` | `False` | Auto-detects and bundles matching C HAL headers/sources into `HAL/`. |
+| `--include-lib` | `False` | Bundles `RTL/AXI_LIB/` into the package and appends required register-slice modules to `<target>_global.f`. |
+| `--include-macros` | `False` | Bundles the entire `MACROS/` directory into the exported package. |
 
-#### Examples
+---
+
+### 2. `export_all.sh` — Full Pipeline & Multi-Tier Export Wrapper
+
+Runs `generate_unified_switches.py`, `generate_verilog_mirror.sh`, and exports all 6 standard packages (`efpga_subsystem_simulation_v`, `act_bank_container_asic_sv`, `psum_requant_container_asic_sv`, `efpga_subsystem_asic_sv`, `efpga_subsystem_unified_sv`, `efpga_subsystem_unified_v`).
+
 ```bash
-# Default: export eFPGA subsystem as pure Verilog (RTL + root filelist, no tests, no HAL)
-python3 scripts/export_subsystem.py
-
-# Export NPU Complex with testbenches and golden .mem tensors
-python3 scripts/export_subsystem.py --target npu --include-tb
-
-# Export eFPGA Subsystem with both SystemVerilog and Verilog, plus C HAL drivers
-python3 scripts/export_subsystem.py --target efpga_subsystem --format both --include-hal
-
-# Export a custom filelist to an arbitrary directory
-python3 scripts/export_subsystem.py --filelist FILE_LISTS/soft_logic_full.f --output-dir exports/custom_sequencer/
+./scripts/export_all.sh --help
+./scripts/export_all.sh           # Full run with Yosys SAT equivalence proofs
+./scripts/export_all.sh -e none   # Fast run without SAT proofs
 ```
 
 ---
 
-### 2. `generate_verilog_mirror.sh` — Verilog Transpilation & Formal Verification
+### 3. `generate_unified_switches.py` — Multi-Target Compiler-Directive Generator
 
-Generates an IEEE Verilog-2001 compliant mirror in `VERILOG_MIRROR_GENERATED/` from SystemVerilog sources (`RTL/*.sv`) and the VHDL CPU complex (`RTL/CPU/neorv32_axi_wrapper.vhd`). Runs formal SAT equivalence checks to prove mathematical equality between SystemVerilog and transpiled Verilog.
+Automatically diffs module/package definitions across `FILE_LISTS/soc.f`, `FILE_LISTS/vivado/soc_vivado.f`, and `FILE_LISTS/asic/*.f`, transpiles `.sv` variants to Verilog-2001 via `sv2v`, wraps them in `` `ifdef `` switches in `UNIFIED_GENERATED/`, and generates `FILE_LISTS/unified/*_unified.f`.
 
-#### Required Toolchain (Must be in `$PATH`)
-Inside WSL Ubuntu, activate the OSS-CAD-Suite environment:
 ```bash
-source ~/custom_functions/custom_functions.sh && pyenv Yosys
+python3 scripts/generate_unified_switches.py --help
+python3 scripts/generate_unified_switches.py
 ```
-Required tools:
-* **`sv2v`**: SystemVerilog to Verilog transpiler (`~/.local/bin/sv2v`).
-* **`yosys`**: Synthesis suite with `ghdl` plugin (for VHDL NEORV32 CPU synthesis) and `slang` plugin (SystemVerilog parsing during formal equivalence checks).
-* **`iverilog`** & **`vvp`**: Icarus Verilog for structural linting and full-SoC elaboration.
 
-#### Usage & Options
+#### Supported Compiler Directives in Unified Packages
+* *(Default — no defines)*: Behavioral Simulation
+* `+define+TARGET_VIVADO`: Xilinx Vivado Emulation
+* `+define+TARGET_ASIC`: IHP 130nm CMOS5L ASIC (`sg13cmos5l_lgcp_1`, `RM_IHPSG13_1P_*` SRAMs, `eFPGA_top` blackbox)
+* `+define+TARGET_ASIC_CONTAINERS`: Tier-2 Hierarchical ASIC (blackboxes `act_bank_container` & `psum_requant_container`)
+
+---
+
+### 4. `generate_blackbox_stub.py` — Hard Macro Blackbox Stub Generator
+
+Parses a structural/RTL Verilog or SystemVerilog module header and generates a synthesis/lint-ready `(* blackbox *)` Verilog stub with all parameters, ports, and deterministic output tie-offs.
+
 ```bash
-./scripts/generate_verilog_mirror.sh [OPTIONS]
+python3 scripts/generate_blackbox_stub.py --help
+
+# Default: updates MACROS/FABulous/eFPGA_top.v from FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_top.v
+python3 scripts/generate_blackbox_stub.py
+
+# Custom module:
+python3 scripts/generate_blackbox_stub.py -i <src.v> -o <dst_blackbox.v>
+```
+
+---
+
+### 5. `generate_verilog_mirror.sh` — Verilog-2001 Mirror & Formal LEC Runner
+
+Transpiles SystemVerilog sources (`RTL/`, `MACROS/`, `VIVADO/`, `SOFT_LOGIC/`, `TEST/`) into `VERILOG_MIRROR_GENERATED/`, synthesizes the VHDL NEORV32 CPU wrapper via Yosys GHDL, and runs formal SAT equivalence checking.
+
+```bash
+./scripts/generate_verilog_mirror.sh --help
 ```
 
 | Flag | Description |
 | :--- | :--- |
-| *(no flags)* | Runs full mirror generation, GHDL VHDL synthesis, 29 formal SAT proofs, and Icarus SoC elaboration. |
-| `--clean` | Deletes `VERILOG_MIRROR_GENERATED/` before rebuilding from scratch. |
-| `--skip-transpile` | Skips `sv2v` conversion and only runs verification checks. |
-| `--equiv leaf` | (Default) Runs formal SAT equivalence checking across leaf modules. |
-| `--equiv none` | Skips formal equivalence proofs (faster run). |
-
-#### Execution Pipeline
-1. **Directory Mirroring**: Mirrors the directory tree under `VERILOG_MIRROR_GENERATED/RTL/`.
-2. **Static File Passthrough**: Copies static Verilog (`.v`), headers (`.vh`, `.svh`), and memory tables (`.hex`, `.mem`, `.csv`).
-3. **SystemVerilog Transpilation**: Converts `.sv` files to Verilog-2001 using `sv2v`.
-4. **VHDL CPU Synthesis**: Synthesizes `neorv32_axi_wrapper.vhd` into a standalone Verilog module via Yosys GHDL.
-5. **Mirrored File Lists**: Translates all `FILE_LISTS/*.f` into `VERILOG_MIRROR_GENERATED/FILE_LISTS/`, updating `.sv` references to `.v`.
-6. **Two-Tier Verification**:
-   * **Tier 1 (Formal SAT Proof)**: Automated per-file logical equivalence checking (LEC) via Yosys Minisat on all computational leaf modules and state controllers.
-   * **Tier 2 (Structural Hierarchy Audit)**: Structural elaboration and port binding validation via Icarus Verilog on composite and structural top-level modules.
-7. **Full-SoC Elaboration**: Runs end-to-end Icarus Verilog elaboration on the full chip (`iverilog -g2012 -D__ICARUS__ -f FILE_LISTS/soc.f`), verifying zero unresolved wires or port mismatches across the entire SoC.
+| `-e`, `--equiv <mode>` | `leaf` *(default)*: Yosys formal SAT proofs on leaf modules + structural audit fallback.<br>`none`: Fast transpilation only (skips formal verification and lints).<br>`full`: Full hierarchical formal equivalence checking. |
+| `-d`, `--dir <path>` | Scope transpilation and verification to a single subdirectory (e.g. `-d SOFT_LOGIC/full`). |
+| `-h`, `--help` | Show help message and examples. |
 
 ---
 
-### 3. `flatten_filelists.py` — Recursive Filelist Flattener
+### 6. `flatten_filelists.py` — Recursive Filelist Flattener
 
-Recursively traverses nested `-f` and `-c` filelist directives and outputs a single, flat list of unique files. Essential for simulators, synthesis tools, or third-party environments that do not support nested filelist includes.
+Resolves nested `-f` / `-c` directives into a single deduplicated flat filelist.
 
-#### Syntax & Options
 ```bash
-python3 scripts/flatten_filelists.py [OPTIONS]
-```
-
-| Argument | Type | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `-f`, `--filelist` | `path` | `FILE_LISTS/soc.f` | Root filelist to parse and recursively flatten. |
-| `-o`, `--output` | `path` | `stdout` | Destination file (e.g. `FILE_LISTS/soc_global.f`). |
-| `--repo-root` | `path` | Repository root | Root directory used for resolving relative paths. |
-
-#### Examples
-```bash
-# Generate flat filelist for eFPGA subsystem:
-python3 scripts/flatten_filelists.py -f FILE_LISTS/efpga_subsystem.f -o FILE_LISTS/efpga_subsystem_global.f
-
-# Output flattened SoC filelist directly to console:
-python3 scripts/flatten_filelists.py -f FILE_LISTS/soc.f
+python3 scripts/flatten_filelists.py --help
+python3 scripts/flatten_filelists.py -f FILE_LISTS/efpga_subsystem.f -o gemini_workspace/efpga_flat.f
 ```
 
 ---
 
-### 4. `rebase_filelist.py` — Filelist Path Root Rebaser
+### 7. `rebase_filelist.py` — Filelist Path Prefix Rebaser
 
-Rebases all relative file paths inside a `.f` filelist from one working directory to another (e.g. converting paths from `.` to `..` or to a target simulator execution directory).
+Rebases path prefixes inside a `.f` filelist without touching the underlying hardware files.
 
-#### Syntax & Options
 ```bash
-python3 scripts/rebase_filelist.py [OPTIONS]
-```
-
-| Argument | Type | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `-f`, `--filelist` | `path` | *(required)* | Filelist to rebase. |
-| `--old-root` | `path` | `.` | Current base directory of paths in the filelist. |
-| `--new-root` | `path` | *(required)* | New base directory that paths should be relative to. |
-| `-o`, `--output` | `path` | `None` | Write rebased filelist to a new file (if omitted, modifies in-place). |
-
-#### Examples
-```bash
-# Rebase a filelist so paths are relative to a testbench run directory (one level up):
-python3 scripts/rebase_filelist.py -f FILE_LISTS/tb/run.f --old-root . --new-root ..
+python3 scripts/rebase_filelist.py --help
+python3 scripts/rebase_filelist.py <filelist.f> <rebase_prefix> [output_file.f]
 ```
 
 ---
 
-### 5. `clean_filelists_crlf.py` — Filelist Line-Ending Sanitizer
+### 8. `clean_filelists_crlf.py` — Filelist Line-Ending Sanitizer
 
-Strips Windows carriage returns (`\r\n` $\to$ `\n`) and ensures a clean trailing newline on every `.f` filelist across the repository. Prevents Icarus Verilog's command-line parser from throwing `ERROR: File name not terminated.`
+Converts Windows CRLF (`\r\n`) to Unix LF (`\n`) across `.f` and `.flist` files.
 
-#### Syntax
 ```bash
+python3 scripts/clean_filelists_crlf.py --help
 python3 scripts/clean_filelists_crlf.py
 ```
-*(Scans `FILE_LISTS/` and subdirectories recursively, sanitizing files in-place and reporting any modifications).*

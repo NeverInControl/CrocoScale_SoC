@@ -1,5 +1,5 @@
 # Sub-modules (Xilinx Artix-7 Vivado Emulation)
--f ../fabulous.f
--f npu_vivado.f
--f ../efpga_connector.f
+-f ../internal/fabulous.f
+-f internal/npu_vivado.f
+-f ../internal/efpga_connector.f
 

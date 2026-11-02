@@ -167,8 +167,8 @@ def flist_contains_replaced_files(flist_path: Path, repo_root: Path, replaced_fi
 
 def generate_unified_filelists(repo_root: Path, flist_out_dir: Path, replaced_files: dict, bundled_helpers: set):
     """
-    Auto-generates FILE_LISTS/unified/*_unified.f from base filelists in FILE_LISTS/
-    and Tier-1 container filelists in FILE_LISTS/asic/.
+    Auto-generates FILE_LISTS/unified/*_unified.f (and FILE_LISTS/unified/internal/*_unified.f)
+    from base filelists in FILE_LISTS/ and Tier-1 container filelists in FILE_LISTS/asic/.
     """
     flist_root = repo_root / "FILE_LISTS"
     if flist_out_dir.exists():
@@ -177,12 +177,20 @@ def generate_unified_filelists(repo_root: Path, flist_out_dir: Path, replaced_fi
 
     generated_flists = []
 
-    # 1. Process root FILE_LISTS/*.f that contain switched files
-    for base_flist in sorted(flist_root.glob("*.f")):
+    # Collect candidate base filelists from root FILE_LISTS/*.f and FILE_LISTS/internal/*.f
+    base_candidates = sorted(flist_root.glob("*.f"))
+    internal_dir = flist_root / "internal"
+    if internal_dir.exists():
+        base_candidates.extend(sorted(internal_dir.glob("*.f")))
+
+    for base_flist in base_candidates:
         if not flist_contains_replaced_files(base_flist, repo_root, replaced_files, bundled_helpers):
             continue
 
-        out_flist = flist_out_dir / f"{base_flist.stem}_unified.f"
+        rel_parent = base_flist.relative_to(flist_root).parent
+        target_dir = flist_out_dir / rel_parent
+        target_dir.mkdir(parents=True, exist_ok=True)
+        out_flist = target_dir / f"{base_flist.stem}_unified.f"
         out_lines = []
         seen_entries = set()
 
@@ -200,11 +208,17 @@ def generate_unified_filelists(repo_root: Path, flist_out_dir: Path, replaced_fi
                     sub_path = (base_flist.parent / sub_rel).resolve()
                     if not sub_path.exists():
                         sub_path = (flist_root / sub_rel).resolve()
+                    if not sub_path.exists():
+                        sub_path = (flist_root / "internal" / Path(sub_rel).name).resolve()
 
                     if sub_path.exists() and flist_contains_replaced_files(sub_path, repo_root, replaced_files, bundled_helpers):
-                        new_entry = f"{parts[0]} {sub_path.stem}_unified.f"
+                        sub_rel_parent = sub_path.relative_to(flist_root).parent
+                        target_sub = flist_out_dir / sub_rel_parent / f"{sub_path.stem}_unified.f"
                     else:
-                        new_entry = f"{parts[0]} ../{sub_rel}"
+                        target_sub = sub_path
+
+                    rel_target = os.path.relpath(target_sub, start=out_flist.parent).replace("\\", "/")
+                    new_entry = f"{parts[0]} {rel_target}"
 
                     if new_entry not in seen_entries:
                         out_lines.append(new_entry)
@@ -222,7 +236,7 @@ def generate_unified_filelists(repo_root: Path, flist_out_dir: Path, replaced_fi
         out_flist.write_text("\n".join(out_lines), encoding="utf-8", newline="\n")
         generated_flists.append(out_flist)
 
-    # 2. Process Tier-1 container filelists from FILE_LISTS/asic/*container*_asic.f
+    # Process Tier-1 container filelists from FILE_LISTS/asic/*container*_asic.f
     asic_flist_dir = flist_root / "asic"
     if asic_flist_dir.exists():
         for container_flist in sorted(asic_flist_dir.glob("*container*_asic.f")):
@@ -465,19 +479,47 @@ def generate_unified_switches(repo_root: Path, out_dir: Path, flist_out_dir: Pat
 
 
 def main():
+    epilog_text = """
+How It Works:
+  - Scans FILE_LISTS/soc.f, FILE_LISTS/vivado/soc_vivado.f, and FILE_LISTS/asic/*.f
+    to automatically detect modules/packages that have target-specific implementations.
+  - Transpiles .sv variants to pure Verilog-2001 (.v) via sv2v and wraps each switched
+    module in `ifdef / `elsif / `else compiler directives inside UNIFIED_GENERATED/.
+  - Auto-generates unified filelists in FILE_LISTS/unified/*_unified.f.
+
+Compiler Directives Supported by Generated Switch Files:
+  (Default — no defines)          Behavioral Simulation
+  +define+TARGET_VIVADO           Xilinx Vivado FPGA Emulation
+  +define+TARGET_ASIC             IHP 130nm CMOS5L ASIC (hard SRAMs, clock gates, eFPGA blackbox)
+  +define+TARGET_ASIC_CONTAINERS  Tier-2 Hierarchical ASIC (blackboxes act_bank & psum_requant containers)
+
+Examples:
+  # Default run (writes to UNIFIED_GENERATED/ and FILE_LISTS/unified/):
+  python3 scripts/generate_unified_switches.py
+
+  # Compile unified eFPGA subsystem in Icarus Verilog for ASIC Tier-2:
+  iverilog -g2012 -DTARGET_ASIC -DTARGET_ASIC_CONTAINERS -y RTL/AXI_LIB \\
+      -f FILE_LISTS/unified/efpga_subsystem_unified.f -s efpga_subsystem_top -o /dev/null
+"""
     parser = argparse.ArgumentParser(
-        description="Auto-discover flow overrides and generate unified compiler-directive switch wrappers."
+        prog="python3 scripts/generate_unified_switches.py",
+        description="CrocoScale SoC — Automated Multi-Target Unified Switch & Filelist Generator.",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "-o",
         "--output-dir",
         type=Path,
         default=REPO_ROOT / "UNIFIED_GENERATED",
+        metavar="DIR",
         help="Destination directory for generated unified switch files (default: UNIFIED_GENERATED/).",
     )
     parser.add_argument(
         "--flist-dir",
         type=Path,
         default=REPO_ROOT / "FILE_LISTS" / "unified",
+        metavar="DIR",
         help="Destination directory for generated unified filelists (default: FILE_LISTS/unified/).",
     )
     args = parser.parse_args()

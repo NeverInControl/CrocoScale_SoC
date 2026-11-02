@@ -83,6 +83,9 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fl
         p = custom_flist if custom_flist.is_absolute() else repo_root / custom_flist
         if p.exists():
             return p
+        alt_p = repo_root / "FILE_LISTS" / "internal" / custom_flist.name
+        if alt_p.exists():
+            return alt_p
         raise FileNotFoundError(f"Custom filelist not found: {p}")
 
     candidates = []
@@ -91,22 +94,26 @@ def resolve_target_filelist(target: str, custom_flist: Path, repo_root: Path, fl
             repo_root / "FILE_LISTS" / "asic" / f"{target}_asic.f",
             repo_root / "FILE_LISTS" / "asic" / f"{target}_subsystem_asic.f",
             repo_root / "FILE_LISTS" / "asic" / f"{target}.f",
+            repo_root / "FILE_LISTS" / "asic" / "internal" / f"{target}_asic.f",
         ])
     elif flow == "vivado":
         candidates.extend([
             repo_root / "FILE_LISTS" / "vivado" / f"{target}_vivado.f",
             repo_root / "FILE_LISTS" / "vivado" / f"{target}_subsystem_vivado.f",
             repo_root / "FILE_LISTS" / "vivado" / f"{target}.f",
+            repo_root / "FILE_LISTS" / "vivado" / "internal" / f"{target}_vivado.f",
         ])
     elif flow == "unified":
         candidates.extend([
             repo_root / "FILE_LISTS" / "unified" / f"{target}_unified.f",
             repo_root / "FILE_LISTS" / "unified" / f"{target}_subsystem_unified.f",
             repo_root / "FILE_LISTS" / "unified" / f"{target}.f",
+            repo_root / "FILE_LISTS" / "unified" / "internal" / f"{target}_unified.f",
         ])
     candidates.extend([
         repo_root / "FILE_LISTS" / f"{target}.f",
         repo_root / "FILE_LISTS" / f"{target}_subsystem.f",
+        repo_root / "FILE_LISTS" / "internal" / f"{target}.f",
         repo_root / "FILE_LISTS" / target,
     ])
     for c in candidates:
@@ -141,6 +148,8 @@ def collect_included_flists(flist_path: Path, repo_root: Path, visited: set = No
                 sub_path = (flist_path.parent / sub_name).resolve()
                 if not sub_path.exists():
                     sub_path = (repo_root / "FILE_LISTS" / sub_name).resolve()
+                if not sub_path.exists():
+                    sub_path = (repo_root / "FILE_LISTS" / "internal" / Path(sub_name).name).resolve()
                 if not sub_path.exists():
                     sub_path = (repo_root / sub_name).resolve()
                 names |= collect_included_flists(sub_path, repo_root, visited)
@@ -696,77 +705,130 @@ def export_subsystem(
 
 
 def main():
+    epilog_text = """
+Available Targets (--target):
+  efpga_subsystem         Standalone eFPGA + NPU Subsystem (default)
+  npu                     Standalone NPU Complex
+  soc                     Full CrocoScale SoC
+  act_bank_container      Tier-1 ASIC Activation SRAM Container Macro
+  psum_requant_container  Tier-1 ASIC Partial-Sum & Requantizer Container Macro
+
+Available Flows (--flow):
+  simulation (or sim)     Walks FILE_LISTS/<target>.f (behavioral simulation models)
+  asic                    Walks FILE_LISTS/asic/<target>_asic.f (IHP 130nm hard macros & blackboxes)
+  vivado                  Walks FILE_LISTS/vivado/<target>_vivado.f (Xilinx FPGA primitives)
+  unified                 Walks FILE_LISTS/unified/<target>_unified.f (single codebase switched via +define+)
+                            - Default (no defines)            : Behavioral Simulation
+                            - +define+TARGET_VIVADO           : Xilinx Vivado Emulation
+                            - +define+TARGET_ASIC             : IHP 130nm CMOS5L ASIC
+                            - +define+TARGET_ASIC_CONTAINERS  : Tier-2 Hierarchical ASIC Containers
+
+Common Export Recipes:
+  # Icarus Verilog Simulation Package (pure Verilog-2001 + testbenches + C HAL):
+  python3 scripts/export_subsystem.py --target efpga_subsystem --flow simulation --format v --include-tb --include-hal
+
+  # Tier-1 ASIC Container Macros (SystemVerilog for OpenROAD/Yosys macro hardening):
+  python3 scripts/export_subsystem.py --target act_bank_container --flow asic --format sv
+  python3 scripts/export_subsystem.py --target psum_requant_container --flow asic --format sv
+
+  # Tier-2 ASIC eFPGA Subsystem Package (SystemVerilog + bundled AXI_LIB + testbenches):
+  python3 scripts/export_subsystem.py --target efpga_subsystem --flow asic --format sv --include-tb --include-lib
+
+  # Unified Multi-Target Package (all flows via +define+, in SystemVerilog or Verilog-2001):
+  python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format sv --include-tb --include-hal --include-lib
+  python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format v  --include-tb --include-hal --include-lib
+
+  # Export any custom .f filelist to a custom directory:
+  python3 scripts/export_subsystem.py --filelist FILE_LISTS/internal/soft_logic_full.f --format sv --output-dir exports/soft_sequencer
+"""
     parser = argparse.ArgumentParser(
-        description="Export standalone subsystems from CrocoScale SoC into self-contained packages."
+        prog="python3 scripts/export_subsystem.py",
+        description="CrocoScale SoC — Standalone Subsystem & IP Packaging Tool.\n"
+                    "Resolves filelist dependencies, rebases paths, and exports self-contained IP packages into exports/.",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
+
+    grp_sel = parser.add_argument_group("Target & Flow Selection")
+    grp_sel.add_argument(
+        "-t",
         "--target",
         type=str,
         default="efpga_subsystem",
-        help="Subsystem target name (default: 'efpga_subsystem').",
+        metavar="NAME",
+        help="Subsystem target name (default: 'efpga_subsystem'). See Available Targets below.",
     )
-    parser.add_argument(
+    grp_sel.add_argument(
         "--flow",
         "--platform",
         dest="flow",
         type=str,
         choices=["simulation", "sim", "asic", "vivado", "unified"],
         default=None,
-        help="Filelist flow tree to walk: 'simulation' (FILE_LISTS/<target>.f), 'asic' (FILE_LISTS/asic/<target>_asic.f), 'vivado' (FILE_LISTS/vivado/<target>_vivado.f), or 'unified' (FILE_LISTS/unified/<target>_unified.f).",
+        help="Filelist flow tree: 'simulation', 'asic', 'vivado', or 'unified' (default: 'simulation' for -format v, 'asic' for --format sv).",
     )
-    parser.add_argument(
+    grp_sel.add_argument(
+        "-f",
         "--filelist",
         type=Path,
         default=None,
-        help="Optional path to a custom .f filelist to export.",
+        metavar="PATH",
+        help="Optional path to a custom .f filelist to export instead of a named --target.",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Destination directory for the exported package (default: exports/<target>_<flow>_<format>/).",
-    )
-    parser.add_argument(
+
+    grp_out = parser.add_argument_group("Output Format & Destination")
+    grp_out.add_argument(
         "--format",
         type=str,
         choices=["v", "sv", "both"],
         default="v",
-        help="HDL format to export: 'v' (pure Verilog from mirror, default), 'sv' (SystemVerilog), or 'both'.",
+        help="HDL format: 'v' (pure Verilog-2001 from VERILOG_MIRROR_GENERATED, default), 'sv' (SystemVerilog), or 'both'.",
     )
-    parser.add_argument(
-        "--include-tb",
-        action="store_true",
-        default=False,
-        help="Include TEST/ directory with testbenches and .mem vectors (default: False).",
+    grp_out.add_argument(
+        "-o",
+        "--output-dir",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Destination directory (default: exports/<target>_<flow>_<format>/).",
     )
-    parser.add_argument(
-        "--include-hal",
-        action="store_true",
-        default=False,
-        help="Include HAL/ directory with C driver files (default: False).",
-    )
-    parser.add_argument(
-        "--include-lib",
-        action="store_true",
-        default=False,
-        help="Include RTL/AXI_LIB directory and register slice modules for standalone macro synthesis (default: False).",
-    )
-    parser.add_argument(
-        "--include-macros",
-        action="store_true",
-        default=False,
-        help="Include complete MACROS/ directory with all hard macro blackboxes and models (default: False).",
-    )
-    parser.add_argument(
+    grp_out.add_argument(
         "--config",
         type=Path,
         default=None,
-        help="Optional path to exporter YAML configuration file (default: scripts/export_config.yaml).",
+        metavar="YAML",
+        help="Optional YAML config for submodule path rebasing (default: scripts/export_config.yaml).",
     )
-    parser.add_argument(
+    grp_out.add_argument(
         "--no-clean",
         action="store_true",
-        help="Do not delete existing output directory before exporting.",
+        help="Keep existing files in the destination directory instead of wiping before export.",
+    )
+
+    grp_bundle = parser.add_argument_group("Optional Bundling Flags")
+    grp_bundle.add_argument(
+        "--include-tb",
+        action="store_true",
+        default=False,
+        help="Bundle matching testbenches, test filelists, and .mem vectors into TEST/.",
+    )
+    grp_bundle.add_argument(
+        "--include-hal",
+        action="store_true",
+        default=False,
+        help="Bundle matching C HAL driver headers/sources into HAL/.",
+    )
+    grp_bundle.add_argument(
+        "--include-lib",
+        action="store_true",
+        default=False,
+        help="Bundle RTL/AXI_LIB into the package for zero-external-dependency synthesis/simulation.",
+    )
+    grp_bundle.add_argument(
+        "--include-macros",
+        action="store_true",
+        default=False,
+        help="Bundle the complete MACROS/ directory (all hard macro blackboxes and models) into the package.",
     )
 
     args = parser.parse_args()

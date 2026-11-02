@@ -42,10 +42,12 @@ def parse_flist(flist_path: Path, repo_root: Path, visited: set = None) -> list[
                     continue
                 sub_name = parts[1]
 
-                # Resolve include path relative to current flist dir, then FILE_LISTS, then repo root
+                # Resolve include path relative to current flist dir, then FILE_LISTS, then FILE_LISTS/internal, then repo root
                 sub_path = flist_path.parent / sub_name
                 if not sub_path.exists():
                     sub_path = repo_root / "FILE_LISTS" / sub_name
+                if not sub_path.exists():
+                    sub_path = repo_root / "FILE_LISTS" / "internal" / Path(sub_name).name
                 if not sub_path.exists():
                     sub_path = repo_root / sub_name
 
@@ -90,19 +92,57 @@ def generate_flat_filelist(input_flist: Path, output_flist: Path, repo_root: Pat
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Flatten nested filelists for EDA tools.")
-    parser.add_argument("input", nargs="?", default="FILE_LISTS/efpga_subsystem.f",
-                        help="Input file list (default: FILE_LISTS/efpga_subsystem.f)")
-    parser.add_argument("-o", "--output", default=None,
-                        help="Output flat file list path")
-    parser.add_argument("--repo-root", default=None,
-                        help="Repository root directory")
+    epilog_text = """
+Examples:
+  # Flatten default filelist (FILE_LISTS/efpga_subsystem.f -> FILE_LISTS/efpga_subsystem_global.f):
+  python3 scripts/flatten_filelists.py
+
+  # Flatten a specific filelist using -f or positional argument:
+  python3 scripts/flatten_filelists.py -f FILE_LISTS/soc.f -o gemini_workspace/soc_flat.f
+  python3 scripts/flatten_filelists.py FILE_LISTS/asic/efpga_subsystem_asic.f -o gemini_workspace/asic_flat.f
+"""
+    parser = argparse.ArgumentParser(
+        prog="python3 scripts/flatten_filelists.py",
+        description="CrocoScale SoC — Recursive Filelist Flattener.\n"
+                    "Resolves nested -f / -c includes into a single deduplicated flat filelist.",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "input_pos",
+        nargs="?",
+        default=None,
+        metavar="FILELIST",
+        help="Input .f filelist path (default: FILE_LISTS/efpga_subsystem.f).",
+    )
+    parser.add_argument(
+        "-f",
+        "--filelist",
+        dest="input_flag",
+        default=None,
+        metavar="FILELIST",
+        help="Input .f filelist path (alternative flag syntax).",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        metavar="OUT_FILE",
+        help="Output flat filelist path (default: FILE_LISTS/<input_stem>_global.f).",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        metavar="DIR",
+        help="Repository root directory used to resolve relative paths.",
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent
     repo_root = Path(args.repo_root).resolve() if args.repo_root else script_dir.parent
 
-    input_path = Path(args.input)
+    raw_input = args.input_flag or args.input_pos or "FILE_LISTS/efpga_subsystem.f"
+    input_path = Path(raw_input)
     if not input_path.is_absolute():
         input_path = repo_root / input_path
 

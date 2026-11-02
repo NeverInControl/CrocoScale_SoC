@@ -1,7 +1,7 @@
 # CrocoScale IP Package: `act_bank_container` (`asic`)
 
 * **Source Repository**: [CrocoScale SoC](https://github.com/NeverInControl/CrocoScale_SoC)
-* **Commit**: `6b2ab0f`
+* **Commit**: `3419b26`
 * **Target Flow**: `asic` (`FILE_LISTS/asic/act_bank_container_asic.f`)
 * **Format**: `sv`
 * **RTL Modules**: 3 files in `act_bank_container_global.f`

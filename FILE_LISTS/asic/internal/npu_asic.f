@@ -8,5 +8,5 @@ MACROS/act_buffer/act_bank_container.v
 MACROS/psum_requant/psum_requant_container.v
 
 # NPU Core & Wrapper
--f ../npu_core.f
+-f ../../internal/npu_core.f
 

@@ -644,14 +644,14 @@ if [[ -z "${TARGET_SUBDIR}" && "${EQUIV_MODE}" != "none" ]]; then
     echo "Running automated Icarus Verilog linter on ASIC macros..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/macros.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/internal/macros.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: ASIC macros elaboration successful."
 
     echo "Running automated Icarus Verilog linter on eFPGA soft-logic..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/soft_logic_full.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/internal/soft_logic_full.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
 

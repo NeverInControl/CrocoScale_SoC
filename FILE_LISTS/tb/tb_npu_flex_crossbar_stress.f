@@ -1,6 +1,6 @@
--f ../fabulous_flex_harness.f
+-f ../internal/fabulous_flex_harness.f
 -f ../npu.f
--f ../efpga_connector.f
+-f ../internal/efpga_connector.f
 RTL/AXI_LIB/arbiter.v
 RTL/AXI_LIB/priority_encoder.v
 RTL/AXI_LIB/axi_interconnect.v

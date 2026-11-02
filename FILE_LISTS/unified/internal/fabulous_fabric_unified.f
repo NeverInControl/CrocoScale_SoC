@@ -9,4 +9,3 @@ FABulousProject/CrocoScale_Fabric/Fabric/Frame_Select.v
 FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_Config.v
 FABulousProject/CrocoScale_Fabric/Fabric/eFPGA.v
 UNIFIED_GENERATED/eFPGA_top.v
-

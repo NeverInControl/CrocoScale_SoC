@@ -8,6 +8,7 @@ Prevents Icarus Verilog parser errors ("ERROR: File name not terminated.").
 """
 
 import sys
+import argparse
 from pathlib import Path
 
 
@@ -50,12 +51,36 @@ def clean_directory(dir_path: Path) -> tuple[int, int]:
 
 
 def main():
+    epilog_text = """
+Examples:
+  # Default: recursively sanitize all .f and .flist files in FILE_LISTS/:
+  python3 scripts/clean_filelists_crlf.py
+
+  # Sanitize specific directories or files:
+  python3 scripts/clean_filelists_crlf.py FILE_LISTS exports
+"""
+    parser = argparse.ArgumentParser(
+        prog="python3 scripts/clean_filelists_crlf.py",
+        description="CrocoScale SoC — Filelist Line-Ending Sanitizer (CRLF -> Unix LF).\n"
+                    "Strips Windows carriage returns (\\r\\n) across .f and .flist files to prevent\n"
+                    "Icarus Verilog 'File name not terminated' parser errors.",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "targets",
+        nargs="*",
+        metavar="PATH",
+        help="Directories or .f files to sanitize (default: FILE_LISTS/).",
+    )
+    args = parser.parse_args()
+
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent
 
     target_dirs = []
-    if len(sys.argv) > 1:
-        for arg in sys.argv[1:]:
+    if args.targets:
+        for arg in args.targets:
             p = Path(arg)
             if not p.is_absolute():
                 p = repo_root / p

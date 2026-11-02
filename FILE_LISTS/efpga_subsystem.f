@@ -1,4 +1,4 @@
 # Sub-modules
--f fabulous.f
+-f internal/fabulous.f
 -f npu.f
--f efpga_connector.f
+-f internal/efpga_connector.f

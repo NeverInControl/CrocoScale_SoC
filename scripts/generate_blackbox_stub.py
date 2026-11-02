@@ -143,14 +143,30 @@ def generate_blackbox_stub(src_path: Path, dst_path: Path):
 
 
 def main():
+    epilog_text = """
+Examples:
+  # Default: sync MACROS/FABulous/eFPGA_top.v from FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_top.v
+  python3 scripts/generate_blackbox_stub.py
+
+  # Generate a blackbox stub for any custom module:
+  python3 scripts/generate_blackbox_stub.py \\
+      -i RTL/eFPGA_Subsystem/NPU_complex/act_buffer/containers/act_bank_container.sv \\
+      -o MACROS/act_buffer/act_bank_container.v
+"""
     parser = argparse.ArgumentParser(
-        description="Generate a (* blackbox *) Verilog stub from an RTL/structural module file."
+        prog="python3 scripts/generate_blackbox_stub.py",
+        description="CrocoScale SoC — Automated (* blackbox *) Verilog Stub Generator for Hardened Macros.\n"
+                    "Parses module parameters and ports from an RTL/structural source file and emits a\n"
+                    "synthesis/lint-ready blackbox stub with deterministic output tie-offs.",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "-i",
         "--input",
         type=Path,
         default=REPO_ROOT / "FABulousProject" / "CrocoScale_Fabric" / "Fabric" / "eFPGA_top.v",
+        metavar="SRC_FILE",
         help="Input Verilog/SystemVerilog source file (default: FABulousProject/CrocoScale_Fabric/Fabric/eFPGA_top.v).",
     )
     parser.add_argument(
@@ -158,6 +174,7 @@ def main():
         "--output",
         type=Path,
         default=REPO_ROOT / "MACROS" / "FABulous" / "eFPGA_top.v",
+        metavar="DST_FILE",
         help="Output blackbox Verilog stub file (default: MACROS/FABulous/eFPGA_top.v).",
     )
     args = parser.parse_args()
