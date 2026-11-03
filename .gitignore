@@ -56,6 +56,7 @@ pyenv/
 *.so
 *.dll
 build/
+SOFT_LOGIC/.tools/
 
 # OS Artifacts & Editor Backups
 .DS_Store

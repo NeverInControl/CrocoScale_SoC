@@ -115,10 +115,6 @@ module fabulous_top_wrapper;
         .m_axi_rvalid(m_axi_rvalid),
         .m_axi_rready(m_axi_rready),
         .usr_irq_o(efpga_usr_irq_o),
-        .busy_o(),
-        .done_o(),
-        .current_pass_o(),
-        .cycle_in_pass_o(),
         .array_en_o(npu_array_en),
         .psum_systolic_en_o(npu_psum_systolic_en),
         .psum_skew_en_o(npu_psum_skew_en),
@@ -140,13 +136,7 @@ module fabulous_top_wrapper;
         .psum_A_wdata_o(npu_psum_A_wdata),
         .psum_B_addr_o(npu_psum_B_addr),
         .psum_B_we_o(npu_psum_B_we),
-        .psum_B_wdata_o(npu_psum_B_wdata),
-        .preload_phase_o(),
-        .dma_channel_to_load_o(),
-        .dma_bank_ptr_o(),
-        .lut_phase_o(),
-        .drain_phase_o(),
-        .drain_step_o()
+        .psum_B_wdata_o(npu_psum_B_wdata)
     );
 
     (* keep, BEL = "X0Y16.A" *)

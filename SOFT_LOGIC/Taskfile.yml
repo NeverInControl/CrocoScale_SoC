@@ -1,0 +1,150 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+# https://taskfile.dev
+#
+# Map, route and bitstream-generate the NPU soft-logic controllers for the
+# CrocoScale fabric with FAB-mapper.
+#   go-task build-flex            # or build-full, build-flex-unoptimized, all
+#   go-task build DESIGN=flex TOP=npu_flex_sequencer
+#   go-task sim-flex-stress       # system tb on the real fabric with that bitstream
+version: "3"
+
+vars:
+  ROOT: "{{.TASKFILE_DIR}}/.."
+  FAB_PROJ_ROOT: "{{.ROOT}}/FABulousProject/CrocoScale_Fabric"
+  BUILD_DIR: '{{.BUILD_DIR | default (printf "%s/build" .TASKFILE_DIR)}}'
+  # Bitstreams for this fabric are 39316 bytes (all 517 frames, border rows included).
+  # Must match load_fabric_bitstream.svh.
+  MAX_BITBYTES: '{{.MAX_BITBYTES | default "40960"}}'
+  # The OWAS fork of bit_gen (pinned by FABulous-OWAS). The upstream `bit_gen`
+  # (fabulous-bit-gen 0.2.0) crashes with IndexError on this fabric's spec.
+  BIT_GEN: '{{.BIT_GEN | default "uvx --from git+ssh://git@github.com/FPGA-Research/FABulous-bit-gen-OWAS.git bit_gen"}}'
+  FAB_MAPPER: '{{.FAB_MAPPER | default "uvx --refresh --python 3.13 --from git+ssh://git@github.com/FPGA-Research/FAB-mapper.git sat-fab-flut5"}}'
+  # Routing needs upstream nextpnr with the constant-driver fix; oss-cad-suite's 0.10 lacks
+  # it. `task nextpnr` builds the known-good commit into .tools/ unless NEXTPNR (a path or
+  # command) is already usable. Absolute: the mapper runs it from its own cwd.
+  NEXTPNR_REV: '{{.NEXTPNR_REV | default "42fc4d5b"}}'
+  NEXTPNR: '{{.NEXTPNR | default (printf "%s/.tools/nextpnr/build/nextpnr-generic" .TASKFILE_DIR)}}'
+  MAPPER_WORKERS: '{{.MAPPER_WORKERS | default "12"}}'
+  MAPPER_SELECTION_SECONDS: '{{.MAPPER_SELECTION_SECONDS | default "300"}}'
+  # 144 FLUT51PSDM tiles x 8 FLUTs.
+  MAPPER_CAPACITY: '{{.MAPPER_CAPACITY | default "1152"}}'
+  MAPPER_PRIMS:
+    sh: echo "$(yosys-config --datdir)/fabulous/prims.v {{.FAB_PROJ_ROOT}}/user_design/custom_prims.v"
+
+tasks:
+  all:
+    desc: Build every soft-logic design that has a fabric wrapper
+    cmds:
+      - task: build-flex
+      - task: build-flex-unoptimized
+      - task: build-full
+
+  build-flex:
+    desc: Dual-mode (3x3 & 1x1) flex NPU controller
+    cmds:
+      - task: build
+        vars: { DESIGN: flex, TOP: npu_flex_sequencer }
+
+  build-flex-unoptimized:
+    desc: Unoptimized flex controller (same interface, uses the flex wrapper)
+    cmds:
+      - task: build
+        vars: { DESIGN: flex_unoptimized, TOP: npu_flex_sequencer, WRAPPER: flex/fabulous_top_wrapper.v }
+
+  build-full:
+    desc: Full NPU controller
+    cmds:
+      - task: build
+        vars: { DESIGN: full, TOP: npu_full_controller }
+
+  build:
+    desc: Map DESIGN (a subdir) with FAB-mapper, route it, and emit .bin/.hex
+    requires:
+      vars: [DESIGN, TOP]
+    vars:
+      WRAPPER: '{{.WRAPPER | default (printf "%s/fabulous_top_wrapper.v" .DESIGN)}}'
+      OUT: "{{.BUILD_DIR}}/{{.DESIGN}}"
+    deps: [nextpnr]
+    cmds:
+      # The router refuses to overwrite a previous run.
+      - rm -rf {{.OUT}} && mkdir -p {{.OUT}}
+      - >-
+        {{.FAB_MAPPER}}
+        '{{.DESIGN}}/*.sv'
+        --top-module {{.TOP}}
+        --merge-top-wrapper {{.WRAPPER}}
+        --results-dir {{.OUT}}/fab_mapper
+        --bel-v3-file {{.FAB_PROJ_ROOT}}/.FABulous/bel.v3.txt
+        --pips-file {{.FAB_PROJ_ROOT}}/.FABulous/pips.txt
+        --placement-estimate-file {{.FAB_PROJ_ROOT}}/.FABulous/placement_estimate.txt
+        --custom-primitives {{.MAPPER_PRIMS}}
+        --workers {{.MAPPER_WORKERS}}
+        --selection-seconds {{.MAPPER_SELECTION_SECONDS}}
+        --source-lut-size 4
+        --capacity {{.MAPPER_CAPACITY}}
+        --nextpnr-executable {{.NEXTPNR}}
+        {{.MAPPER_EXTRA_ARGS | default ""}}
+      - '{{.BIT_GEN}} -genBitstream {{.OUT}}/fab_mapper/routing/design.fasm {{.FAB_PROJ_ROOT}}/.FABulous/bitStreamSpec.bin {{.OUT}}/{{.DESIGN}}.bin'
+      - python3 {{.FAB_PROJ_ROOT}}/Test/makehex.py {{.OUT}}/{{.DESIGN}}.bin {{.MAX_BITBYTES}} {{.OUT}}/{{.DESIGN}}.hex
+
+  # Fabric-level system tests: TEST/SoftLogic system tbs with the real eFPGA_top
+  # (FILE_LISTS/tb/<TB>_fabric.f) instead of the RTL harness, configured with the
+  # bitstream through efpga_manager (TEST/SoftLogic/common/load_fabric_bitstream.svh).
+  sim-flex-stress:
+    desc: Crossbar stress tb on the fabric running the flex bitstream
+    cmds:
+      - task: sim
+        vars: { DESIGN: flex, TB: tb_npu_flex_crossbar_stress }
+
+  sim-flex-yolo:
+    desc: Full Tiny-YOLOv2 tb on the fabric running the flex bitstream (very slow)
+    cmds:
+      - task: sim
+        vars: { DESIGN: flex, TB: tb_npu_flex_yolo_tiny }
+
+  sim:
+    desc: Run system tb TB with the real fabric loaded with DESIGN's bitstream (xsim)
+    requires:
+      vars: [DESIGN, TB]
+    vars:
+      HEX: "{{.BUILD_DIR}}/{{.DESIGN}}/{{.DESIGN}}.hex"
+      SIM_DIR: "{{.BUILD_DIR}}/{{.DESIGN}}/{{.TB}}"
+    preconditions:
+      - sh: test -f "{{.HEX}}"
+        msg: "{{.HEX}} missing; run the build for {{.DESIGN}} first"
+    cmds:
+      - rm -rf {{.SIM_DIR}} && mkdir -p {{.SIM_DIR}}
+      - python3 {{.ROOT}}/scripts/flatten_filelists.py {{.ROOT}}/FILE_LISTS/tb/{{.TB}}_fabric.f -o {{.SIM_DIR}}/files.f --repo-root {{.ROOT}}
+      # Like the Vivado project: .v as Verilog, .sv as SystemVerilog.
+      - cd {{.SIM_DIR}} && xvlog --nolog $(grep '\.v$' files.f | sed 's|^|{{.ROOT}}/|')
+      - cd {{.SIM_DIR}} && xvlog --nolog -sv -d FABRIC_SIM -i {{.ROOT}}/TEST/SoftLogic/common $(grep '\.sv$' files.f | sed 's|^|{{.ROOT}}/|')
+      # xsim rejects a design where only some modules carry a `timescale. The snapshot
+      # must not share the top's name (xelab: "No design top(s) specified").
+      - cd {{.SIM_DIR}} && xelab --nolog -timescale 1ns/1ps -s {{.TB}}_xsim {{.TB}}
+      - >-
+        cd {{.SIM_DIR}} && xsim {{.TB}}_xsim -R --log sim.log
+        --testplusarg MEM_DIR={{.ROOT}}/TEST/GoldenReference
+        --testplusarg bitstream_hex={{.HEX}}
+      # xsim exits 0 even after $fatal, and the tbs $finish after a watchdog [ERROR];
+      # only their final '>>> ALL ... <<<' banner means pass.
+      - "! grep -qE '^Fatal:|\\[ERROR\\]' {{.SIM_DIR}}/sim.log"
+      - "grep -q '>>> ALL .*<<<' {{.SIM_DIR}}/sim.log"
+
+  nextpnr:
+    desc: Build upstream nextpnr-generic (NEXTPNR_REV) into .tools/ unless NEXTPNR is usable
+    status:
+      - command -v "{{.NEXTPNR}}"
+    vars:
+      SRC: "{{.TASKFILE_DIR}}/.tools/nextpnr"
+    cmds:
+      - rm -rf {{.SRC}} && git clone https://github.com/YosysHQ/nextpnr.git {{.SRC}}
+      - git -C {{.SRC}} checkout {{.NEXTPNR_REV}}
+      - cmake -S {{.SRC}} -B {{.SRC}}/build -DARCH=generic -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF
+      - cmake --build {{.SRC}}/build --target nextpnr-generic --parallel
+      # Fails if NEXTPNR was set to something else that doesn't exist.
+      - command -v "{{.NEXTPNR}}"
+
+  clean:
+    desc: Remove build outputs
+    cmds:
+      - rm -rf {{.BUILD_DIR}}

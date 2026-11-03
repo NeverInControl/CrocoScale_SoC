@@ -1443,6 +1443,9 @@ module tb_npu_flex_crossbar_stress;
         rst_n = 1'b1;
         repeat (10) @(negedge clk);
 
+        `ifdef FABRIC_SIM
+        `include "load_fabric_bitstream.svh"
+        `endif
         // Un-decouple Slot 0 & enable user IRQs via Global eFPGA Manager (M1 @ 0x1000_0000)
         cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
         repeat (4) @(negedge clk);
