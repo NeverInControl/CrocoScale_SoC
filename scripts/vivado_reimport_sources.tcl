@@ -127,17 +127,14 @@ if {[llength $vhdl_integ] > 0} {
 puts "==> Step 5: Adding Soft-Logic controllers, boundary harness, and testbenches to sim_1..."
 set sim_only_files [concat \
     [glob -nocomplain "$repo_root/SOFT_LOGIC/minimal/*.sv"] \
-    [glob -nocomplain "$repo_root/SOFT_LOGIC/full/*.sv"] \
     [glob -nocomplain "$repo_root/SOFT_LOGIC/flex/*.sv"] \
     [glob -nocomplain "$repo_root/TEST/NPU/TestBenches/*.sv"] \
     [list \
         [file normalize "$repo_root/TEST/SoftLogic/common/efpga_boundary_harness.sv"] \
+        [file normalize "$repo_root/TEST/SoftLogic/common/load_fabric_bitstream.svh"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/eFPGA_top_flex_harness.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_functional.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/minimal/system/tb_npu_minimal_benchmark.sv"] \
-        [file normalize "$repo_root/TEST/SoftLogic/full/modules/tb_npu_full_sequencer.sv"] \
-        [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_functional.sv"] \
-        [file normalize "$repo_root/TEST/SoftLogic/full/system/tb_npu_full_sys_3x3_benchmark.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_functional.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_crossbar_stress.sv"] \
         [file normalize "$repo_root/TEST/SoftLogic/flex/system/tb_npu_flex_3x3_benchmark.sv"] \
@@ -150,6 +147,7 @@ foreach sf $sim_only_files {
         add_files -fileset sim_1 -norecurse $sf
     }
 }
+set_property include_dirs [list [file normalize "$repo_root/TEST/SoftLogic/common"]] [get_filesets sim_1]
 puts "    Added Soft-Logic controllers, boundary harness, and all testbenches to sim_1."
 
 # Exclude full FABulous fabric top from simulation so sim_1 resolves eFPGA_top to eFPGA_top_flex_harness.sv

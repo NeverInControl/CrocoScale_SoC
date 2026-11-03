@@ -33,7 +33,9 @@
 
 module tb_npu_flex_crossbar_stress;
 
-    parameter int ARRAY_HEIGHT     = 8;
+    parameter bit    FABRIC_SIM       = 1'b0;
+    parameter string BITSTREAM_HEX    = "SOFT_LOGIC/build/flex/flex.hex";
+    parameter int    ARRAY_HEIGHT     = 8;
     parameter int ARRAY_WIDTH      = 8;
     parameter int TILE_SIZE        = 16;
     parameter int ACT_HALO_PAD     = 2;
@@ -1362,6 +1364,8 @@ module tb_npu_flex_crossbar_stress;
         end
     endtask
 
+    `include "load_fabric_bitstream.svh"
+
     // Watchdog timer
     initial begin
         #300_000_000;
@@ -1443,9 +1447,9 @@ module tb_npu_flex_crossbar_stress;
         rst_n = 1'b1;
         repeat (10) @(negedge clk);
 
-        `ifdef FABRIC_SIM
-        `include "load_fabric_bitstream.svh"
-        `endif
+        if (FABRIC_SIM) begin
+            cpu_load_fabric_bitstream(BITSTREAM_HEX);
+        end
         // Un-decouple Slot 0 & enable user IRQs via Global eFPGA Manager (M1 @ 0x1000_0000)
         cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
         repeat (4) @(negedge clk);

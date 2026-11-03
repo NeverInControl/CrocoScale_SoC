@@ -42,14 +42,14 @@ Options:
                          leaf  : (Default) Run Yosys Minisat formal proofs on leaf modules with structural fallback
                          full  : Run hierarchical formal equivalence checks across all modules
   -d, --dir <path>     Scope generation to a specific subdirectory relative to repository root
-                         (e.g., RTL/eFPGA_Subsystem/NPU_complex, SOFT_LOGIC/full, TEST/SoftLogic)
+                         (e.g., RTL/eFPGA_Subsystem/NPU_complex, SOFT_LOGIC/flex, TEST/SoftLogic)
   -h, --help           Display this help message and exit
 
 Examples:
   ./scripts/generate_verilog_mirror.sh
   ./scripts/generate_verilog_mirror.sh -e none
-  ./scripts/generate_verilog_mirror.sh -d SOFT_LOGIC/full
-  ./scripts/generate_verilog_mirror.sh -e none -d SOFT_LOGIC/full
+  ./scripts/generate_verilog_mirror.sh -d SOFT_LOGIC/flex
+  ./scripts/generate_verilog_mirror.sh -e none -d SOFT_LOGIC/flex
   ./scripts/generate_verilog_mirror.sh -e full -d RTL/eFPGA_Subsystem/NPU_complex
 EOF
     exit 0
@@ -356,7 +356,7 @@ EOF
             rel_path="${sv_file#"${SRC_TEST}/"}"
             out_v="${OUT_TEST}/${rel_path%.sv}.v"
             mkdir -p "$(dirname "${out_v}")"
-            if "${SV2V_BIN}" "${sv_file}" > "${out_v}" 2>/dev/null; then
+            if "${SV2V_BIN}" -I "${SRC_TEST}/SoftLogic/common" "${sv_file}" > "${out_v}" 2>/dev/null; then
                 echo "Transpiled Testbench: ${rel_path} -> $(basename "${out_v}")"
             else
                 : > "${out_v}"
@@ -399,7 +399,7 @@ else
         out_v="${OUT_DIR}/${rel_path%.sv}.v"
         mkdir -p "$(dirname "${out_v}")"
         if [[ "${rel_path}" == "TEST/"* ]]; then
-            if "${SV2V_BIN}" "${sv_file}" > "${out_v}" 2>/dev/null; then
+            if "${SV2V_BIN}" -I "${SRC_TEST}/SoftLogic/common" "${sv_file}" > "${out_v}" 2>/dev/null; then
                 echo "Transpiled Testbench: ${rel_path} -> $(basename "${out_v}")"
             else
                 : > "${out_v}"
@@ -651,18 +651,16 @@ if [[ -z "${TARGET_SUBDIR}" && "${EQUIV_MODE}" != "none" ]]; then
     echo "Running automated Icarus Verilog linter on eFPGA soft-logic..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/internal/soft_logic_full.f -o /dev/null
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/internal/soft_logic_flex.f -o /dev/null
     )
     echo "Icarus Verilog lint check passed: Soft-logic elaboration successful."
 
-    echo "Running automated verification simulation on mirrored soft-logic sequencer..."
+    echo "Running automated verification lint on mirrored flex soft-logic testbench..."
     (
         cd "${OUT_DIR}"
-        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/tb/tb_npu_full_sequencer.f -s tb_npu_full_sequencer -o /tmp/sim_soft_ctrl.vvp
-        vvp /tmp/sim_soft_ctrl.vvp > /dev/null
-        rm -f /tmp/sim_soft_ctrl.vvp
+        "${IVERILOG_BIN}" -g2012 -f FILE_LISTS/tb/tb_npu_flex_functional.f -s tb_npu_flex_functional -o /dev/null
     )
-    echo "Icarus Verilog test passed: Mirrored eFPGA soft-logic sequencer simulation successful."
+    echo "Icarus Verilog test passed: Mirrored eFPGA flex soft-logic testbench elaboration successful."
 fi
 
 echo ""

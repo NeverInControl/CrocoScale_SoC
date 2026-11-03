@@ -1,7 +1,7 @@
-# tb_npu_flex_crossbar_stress on the real FABulous fabric (configure with +bitstream_hex, -d FABRIC_SIM).
--f ../fabulous.f
+# tb_npu_flex_crossbar_stress on the real FABulous fabric (set parameter FABRIC_SIM=1).
+-f ../internal/fabulous.f
 -f ../npu.f
--f ../efpga_connector.f
+-f ../internal/efpga_connector.f
 RTL/AXI_LIB/arbiter.v
 RTL/AXI_LIB/priority_encoder.v
 RTL/AXI_LIB/axi_interconnect.v

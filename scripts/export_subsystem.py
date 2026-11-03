@@ -620,7 +620,7 @@ def export_subsystem(
                                 copied_tb_count += 1
                             df.write(f"TEST/{dst_tb.name}\n")
 
-        # Copy GoldenReference .mem vectors if NPU/SoftLogic testbenches are included
+        # Copy GoldenReference .mem vectors and shared .svh headers if NPU/SoftLogic testbenches are included
         if needs_golden_mem:
             gold_src_dir = repo_root / "TEST" / "GoldenReference"
             gold_out_dir = test_out_dir / "GoldenReference"
@@ -629,6 +629,10 @@ def export_subsystem(
                 for mem_file in sorted(gold_src_dir.glob("*.mem")):
                     shutil.copy2(mem_file, gold_out_dir / mem_file.name)
                     copied_mem_count += 1
+            common_svh_dir = repo_root / "TEST" / "SoftLogic" / "common"
+            if common_svh_dir.exists():
+                for svh_file in sorted(common_svh_dir.glob("*.svh")):
+                    shutil.copy2(svh_file, test_out_dir / svh_file.name)
 
         print(f"[INFO] Bundled TEST/: {copied_tb_count} testbenches and {copied_mem_count} .mem vectors.")
 
@@ -739,7 +743,7 @@ Common Export Recipes:
   python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format v  --include-tb --include-hal --include-lib
 
   # Export any custom .f filelist to a custom directory:
-  python3 scripts/export_subsystem.py --filelist FILE_LISTS/internal/soft_logic_full.f --format sv --output-dir exports/soft_sequencer
+  python3 scripts/export_subsystem.py --filelist FILE_LISTS/internal/soft_logic_flex.f --format sv --output-dir exports/soft_sequencer
 """
     parser = argparse.ArgumentParser(
         prog="python3 scripts/export_subsystem.py",

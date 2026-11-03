@@ -16,6 +16,8 @@ All project automation, code generation, formal verification, and standalone IP 
 | **Export Unified Multi-Target package** (`+define+` switched, `.sv` or `.v`) | `python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format sv --include-tb --include-hal --include-lib`<br>`python3 scripts/export_subsystem.py --target efpga_subsystem --flow unified --format v --include-tb --include-hal --include-lib` |
 | **Regenerate `UNIFIED_GENERATED/` & `FILE_LISTS/unified/`** | `python3 scripts/generate_unified_switches.py` |
 | **Sync `MACROS/FABulous/eFPGA_top.v` blackbox after FABulous regen** | `python3 scripts/generate_blackbox_stub.py` |
+| **Install/update bitstream tools in `tools/` & compile `flex` bitstream** | `python3 scripts/generate_bitstream.py --install-tools`<br>`python3 scripts/generate_bitstream.py` |
+| **Run full-fabric bitstream simulation in Vivado `xsim`** | `python3 scripts/run_fabric_sim.py` |
 | **Regenerate `VERILOG_MIRROR_GENERATED/` only** | `./scripts/generate_verilog_mirror.sh` *(or `-e none` for fast mode)* |
 | **Flatten a nested `.f` filelist into a single file** | `python3 scripts/flatten_filelists.py -f FILE_LISTS/soc.f -o gemini_workspace/soc_flat.f` |
 | **Strip Windows CRLF line endings from all `.f` files** | `python3 scripts/clean_filelists_crlf.py` |
@@ -113,12 +115,35 @@ Transpiles SystemVerilog sources (`RTL/`, `MACROS/`, `VIVADO/`, `SOFT_LOGIC/`, `
 | Flag | Description |
 | :--- | :--- |
 | `-e`, `--equiv <mode>` | `leaf` *(default)*: Yosys formal SAT proofs on leaf modules + structural audit fallback.<br>`none`: Fast transpilation only (skips formal verification and lints).<br>`full`: Full hierarchical formal equivalence checking. |
-| `-d`, `--dir <path>` | Scope transpilation and verification to a single subdirectory (e.g. `-d SOFT_LOGIC/full`). |
+| `-d`, `--dir <path>` | Scope transpilation and verification to a single subdirectory (e.g. `-d SOFT_LOGIC/flex`). |
 | `-h`, `--help` | Show help message and examples. |
 
 ---
 
-### 6. `flatten_filelists.py` — Recursive Filelist Flattener
+### 6. `generate_bitstream.py` — Soft-Logic Bitstream Compiler
+
+Maps, packs, routes, and generates bitstreams (`SOFT_LOGIC/build/<design>/<design>.bin` and `.hex`) for soft-logic controllers targeting the CrocoScale FABulous eFPGA fabric. Never downloads external tools unless `--install-tools` is explicitly passed.
+
+```bash
+python3 scripts/generate_bitstream.py --help
+python3 scripts/generate_bitstream.py --install-tools
+python3 scripts/generate_bitstream.py
+```
+
+---
+
+### 7. `run_fabric_sim.py` — Full-Fabric Bitstream Simulation Runner
+
+Compiles and runs a system testbench (`FILE_LISTS/tb/<tb>_fabric.f`) on the real `eFPGA_top` fabric in Vivado `xsim`, preloading `SOFT_LOGIC/build/flex/flex.hex` via `efpga_manager`.
+
+```bash
+python3 scripts/run_fabric_sim.py --help
+python3 scripts/run_fabric_sim.py --tb tb_npu_flex_crossbar_stress
+```
+
+---
+
+### 8. `flatten_filelists.py` — Recursive Filelist Flattener
 
 Resolves nested `-f` / `-c` directives into a single deduplicated flat filelist.
 
@@ -129,7 +154,7 @@ python3 scripts/flatten_filelists.py -f FILE_LISTS/efpga_subsystem.f -o gemini_w
 
 ---
 
-### 7. `rebase_filelist.py` — Filelist Path Prefix Rebaser
+### 9. `rebase_filelist.py` — Filelist Path Prefix Rebaser
 
 Rebases path prefixes inside a `.f` filelist without touching the underlying hardware files.
 
@@ -140,7 +165,7 @@ python3 scripts/rebase_filelist.py <filelist.f> <rebase_prefix> [output_file.f]
 
 ---
 
-### 8. `clean_filelists_crlf.py` — Filelist Line-Ending Sanitizer
+### 10. `clean_filelists_crlf.py` — Filelist Line-Ending Sanitizer
 
 Converts Windows CRLF (`\r\n`) to Unix LF (`\n`) across `.f` and `.flist` files.
 

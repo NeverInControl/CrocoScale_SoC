@@ -1,25 +1,32 @@
-// Statement block for system testbenches running on the real FABulous fabric
-// (FILE_LISTS/tb/*_fabric.f, -d FABRIC_SIM). Loads +bitstream_hex=<file> (from
-// SOFT_LOGIC/Taskfile.yml) through efpga_manager CONFIG_DATA, like firmware does.
-// Needs the tb's cpu_axi_write_word(), MGR_BASE_ADDR, clk and rst_n.
-begin : load_fabric_bitstream
-    localparam int MAX_BITBYTES = 40960; // must match MAX_BITBYTES in SOFT_LOGIC/Taskfile.yml
+// =============================================================================
+// File: TEST/SoftLogic/common/load_fabric_bitstream.svh
+// Description:
+//   Shared, soft-logic agnostic bitstream loader task for system testbenches.
+//   Streams a generated FABulous bitstream (.hex, overridden via +bitstream_hex=
+//   or defaulting to default_hex_file) through the efpga_manager CONFIG_DATA
+//   register (0x1000_0008), then pulses rst_n to reset the newly configured
+//   fabric flip-flops.
+// =============================================================================
+
+task automatic cpu_load_fabric_bitstream(input string default_hex_file);
+    localparam int MAX_BITBYTES = 39316; // Must match MAX_BITBYTES in scripts/generate_bitstream.py
     string      hex_file;
-    logic [7:0] bs [MAX_BITBYTES];
-    if (!$value$plusargs("bitstream_hex=%s", hex_file))
-        $fatal(1, "FABRIC_SIM: no +bitstream_hex=<file> given");
+    logic [7:0] bs [0:MAX_BITBYTES-1];
+
+    if (!$value$plusargs("bitstream_hex=%s", hex_file)) begin
+        hex_file = default_hex_file;
+    end
     $readmemh(hex_file, bs);
-    $display("--- [INIT] Loading fabric bitstream %s via eFPGA Manager CONFIG_DATA ---", hex_file);
-    // The manager byte-swaps CPU words into big-endian fabric frames.
-    for (int n = 0; n < MAX_BITBYTES; n += 4)
+    $display("--- [INIT] Loading fabric bitstream '%s' via eFPGA Manager CONFIG_DATA ---", hex_file);
+    // efpga_manager byte-swaps little-endian CPU words into big-endian fabric frames
+    for (int n = 0; n < MAX_BITBYTES; n += 4) begin
         cpu_axi_write_word(MGR_BASE_ADDR + 32'h0000_0008, {bs[n+3], bs[n+2], bs[n+1], bs[n]});
+    end
     $display("  -> [OK] Bitstream loaded (%0d words).", MAX_BITBYTES / 4);
-    // The tb released rst_n before the soft logic existed, so its flops never saw a
-    // reset. Pulse rst_n again (it also drives the slot soft-reset); configuration
-    // survives, only the ConfigFSM resets. Not force/release on the slot-reset port:
-    // xsim keeps the forced 0 there, as {4{rst_n}} is not re-evaluated on release.
+    // Pulse rst_n so newly configured soft-logic flip-flops see a clean reset;
+    // fabric configuration latches survive resetn (only ConfigFSM resets).
     rst_n = 1'b0;
     repeat (10) @(negedge clk);
     rst_n = 1'b1;
     repeat (10) @(negedge clk);
-end
+endtask

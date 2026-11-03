@@ -44,6 +44,9 @@
 
 module tb_npu_flex_yolo_tiny;
 
+    parameter bit    FABRIC_SIM    = 1'b0;
+    parameter string BITSTREAM_HEX = "SOFT_LOGIC/build/flex/flex.hex";
+
     // =========================================================================
     // Crossbar & 32 MB System RAM Parameters
     // =========================================================================
@@ -1183,6 +1186,8 @@ module tb_npu_flex_yolo_tiny;
         end
     endtask
 
+    `include "load_fabric_bitstream.svh"
+
     // =========================================================================
     // Main 9-Layer Full Tiny-YOLOv2 Execution & Object Detection Sequence
     // =========================================================================
@@ -1245,9 +1250,9 @@ module tb_npu_flex_yolo_tiny;
         rst_n = 1'b1;
         repeat (10) @(negedge clk);
 
-        `ifdef FABRIC_SIM
-        `include "load_fabric_bitstream.svh"
-        `endif
+        if (FABRIC_SIM) begin
+            cpu_load_fabric_bitstream(BITSTREAM_HEX);
+        end
         // Un-decouple Slot 0 & enable user IRQs via Global eFPGA Manager (M1 @ 0x1000_0000)
         cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
         repeat (4) @(negedge clk);
