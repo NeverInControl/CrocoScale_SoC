@@ -34,6 +34,7 @@
 module tb_npu_flex_crossbar_stress;
 
     parameter bit    FABRIC_SIM       = 1'b0;
+    parameter bit    QUICK_SMOKE      = 1'b0;
     parameter string BITSTREAM_HEX    = "SOFT_LOGIC/build/flex/flex.hex";
     parameter int    ARRAY_HEIGHT     = 8;
     parameter int ARRAY_WIDTH      = 8;
@@ -1366,6 +1367,117 @@ module tb_npu_flex_crossbar_stress;
 
     `include "load_fabric_bitstream.svh"
 
+    // =========================================================================
+    // Fast Single-Tile Smoke Test Mode (--quick / QUICK_SMOKE=1)
+    // Uploads only Layer 1 Tile (0,0) Group 0 inputs/weights, runs 1 full tile
+    // (6 passes of 3x3 Conv + Requant + Auto-Drain) on the fabric, and verifies
+    // all 16x16x8 = 2,048 output bytes against golden reference.
+    // =========================================================================
+    task automatic run_quick_smoke_test();
+        int num_strips, w_stride, wait_cycles, exact_cnt, tol_cnt, err_cnt, total_elems;
+        logic [31:0] byte_addr, strip_addr;
+        logic [7:0]  b0, b1, b2, b3;
+
+        num_strips = (L1_H + 3) / 4; // 13 strips
+        w_stride   = get_w_stride(L1_W); // 128 words/strip
+
+        $display("\n--- [QUICK SMOKE] Uploading L1 Tile (0,0) Group 0 Inputs & Weights via S0 ---");
+        // Tile (0,0) 3x3 Conv needs strips 0..4 (rows 0..19) and words 0..19 (cols 0..19) across 5 input channels
+        for (int c = 0; c < L1_CIN; c++) begin
+            for (int strip = 0; strip < 5; strip++) begin
+                for (int gx = 0; gx < 20; gx++) begin
+                    b0 = ((strip * 4 + 0) < L1_H) ? l1_in_act[((strip * 4 + 0) * L1_W * L1_CIN) + (gx * L1_CIN) + c] : 8'hAA;
+                    b1 = ((strip * 4 + 1) < L1_H) ? l1_in_act[((strip * 4 + 1) * L1_W * L1_CIN) + (gx * L1_CIN) + c] : 8'hAA;
+                    b2 = ((strip * 4 + 2) < L1_H) ? l1_in_act[((strip * 4 + 2) * L1_W * L1_CIN) + (gx * L1_CIN) + c] : 8'hAA;
+                    b3 = ((strip * 4 + 3) < L1_H) ? l1_in_act[((strip * 4 + 3) * L1_W * L1_CIN) + (gx * L1_CIN) + c] : 8'hAA;
+                    cpu_burst_wbuf[gx] = {b3, b2, b1, b0};
+                end
+                byte_addr = ACT_BUF_A_BASE + ((c * (num_strips * w_stride) + strip * w_stride) << 2);
+                cpu_axi_write_burst(byte_addr, 20);
+            end
+        end
+
+        // Upload L1 Group 0 Weights (6 passes * 16 words = 96 words), Biases (8 words), and Quant (8 words)
+        cpu_upload_3x3_weights(1, L1_W_BASE, 1, L1_CIN, L1_PASSES);
+        for (int c = 0; c < 8; c++) cpu_burst_wbuf[c] = l1_b[c];
+        cpu_axi_write_burst(L1_B_BASE, 8);
+        for (int c = 0; c < 8; c++) cpu_burst_wbuf[c] = l1_cfg[7 - c];
+        cpu_axi_write_burst(L1_Q_BASE, 8);
+
+        $display("  -> [OK] Quick-smoke parameters uploaded at t=%0t. Launching L1 Tile (0,0) Group 0...", $time);
+
+        cpu_csr_write(REG_ACT_BASE,    ACT_BUF_A_BASE);
+        cpu_csr_write(REG_LUT_BASE,    LUT_BASE_ADDR);
+        cpu_csr_write(REG_WEIGHT_BASE, L1_W_BASE);
+        cpu_csr_write(REG_BIAS_BASE,   L1_B_BASE);
+        cpu_csr_write(REG_QUANT_BASE,  L1_Q_BASE);
+        cpu_csr_write(REG_OUT_BASE,    ACT_BUF_B_BASE);
+        cpu_csr_write(REG_GEOM,        {8'(L1_CIN), 8'(L1_H), 8'(L1_W), 4'd0, 4'd0});
+        cpu_csr_write(REG_CONFIG,      {16'd0, 8'(L1_PASSES), 8'h03}); // START=1 + Auto-Drain, Mode A Linear
+
+        wait_cycles = 0;
+        @(posedge clk);
+        while (soc_usr_irq[0] !== 1'b1) begin
+            @(posedge clk);
+            wait_cycles++;
+            if ((wait_cycles % 500) == 0) begin
+                $display("  [PROGRESS] Tile (0,0) executing... +%0d cycles (t=%0t)", wait_cycles, $time);
+            end
+        end
+        $display("  -> [IRQ] Tile (0,0) Group 0 completed in %0d cycles (t=%0t)! Fetching 2,048 output bytes...", wait_cycles, $time);
+
+        // Fetch strips 0..3 (rows 0..15), words 0..15 (cols 0..15) for channels 0..7
+        for (int c = 0; c < 8; c++) begin
+            for (int s = 0; s < 4; s++) begin
+                strip_addr = ACT_BUF_B_BASE + ((c * num_strips * w_stride + s * w_stride) << 2);
+                cpu_axi_read_burst(strip_addr, 16);
+                for (int gx = 0; gx < 16; gx++) begin
+                    int word_idx;
+                    word_idx = c * (num_strips * w_stride) + s * w_stride + gx;
+                    cpu_fetched_strip_words[word_idx] = cpu_burst_rbuf[gx];
+                end
+            end
+        end
+
+        err_cnt     = 0;
+        tol_cnt     = 0;
+        exact_cnt   = 0;
+        total_elems = 16 * 16 * 8;
+        for (int y = 0; y < 16; y++) begin
+            for (int x = 0; x < 16; x++) begin
+                for (int c = 0; c < 8; c++) begin
+                    int flat_idx, diff_v;
+                    logic signed [7:0] exp_v, got_v;
+                    flat_idx = (y * L1_W * L1_COUT) + (x * L1_COUT) + c;
+                    exp_v    = l1_gold_out[flat_idx];
+                    got_v    = get_fetched_strip_byte(L1_H, L1_W, c, y, x);
+                    diff_v   = (got_v > exp_v) ? (got_v - exp_v) : (exp_v - got_v);
+                    if (diff_v == 0) begin
+                        exact_cnt++;
+                    end else if (diff_v <= 1) begin
+                        tol_cnt++;
+                    end else begin
+                        if (err_cnt < 10)
+                            $display("     [ERR QUICK_L1] Y=%0d X=%0d C=%0d | Exp: %0d | Got: %0d",
+                                     y, x, c, exp_v, got_v);
+                        err_cnt++;
+                    end
+                end
+            end
+        end
+
+        $display("  -> [%s] L1_Tile0_0_Quick (16x16x8): %0d/%0d matches (exact: %0d, tol: %0d, err: %0d)",
+                 (err_cnt == 0) ? "PASS" : "FAIL",
+                 exact_cnt + tol_cnt, total_elems, exact_cnt, tol_cnt, err_cnt);
+        if (err_cnt != 0)
+            $fatal(1, "Quick Smoke Verification FAILED with %0d errors!", err_cnt);
+
+        $display("\n=========================================================================================");
+        $display(" >>> ALL QUICK SMOKE BITSTREAM CHECKS PASSED (100%%) <<< ");
+        $display("=========================================================================================\n");
+        $finish;
+    endtask
+
     // Watchdog timer
     initial begin
         #300_000_000;
@@ -1453,6 +1565,10 @@ module tb_npu_flex_crossbar_stress;
         // Un-decouple Slot 0 & enable user IRQs via Global eFPGA Manager (M1 @ 0x1000_0000)
         cpu_axi_write_word(MGR_BASE_ADDR + MGR_SLOT0_CTRL, 32'h0000_0004);
         repeat (4) @(negedge clk);
+
+        if (QUICK_SMOKE || $test$plusargs("quick_smoke")) begin
+            run_quick_smoke_test();
+        end
 
         cpu_init_scratchpad_ram();
 

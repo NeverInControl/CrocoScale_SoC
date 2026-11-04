@@ -94,11 +94,14 @@ Available Fabric Testbenches (-t / --tb):
   tb_npu_flex_yolo_tiny         Full 9-layer Tiny-YOLOv2 end-to-end network test
 
 Examples:
-  # Run crossbar stress test on the real fabric using SOFT_LOGIC/build/flex/flex.hex:
+  # Fast single-tile smoke verification of SOFT_LOGIC/build/flex/flex.hex (~6-10 min):
+  python3 scripts/run_fabric_sim.py --quick
+
+  # Run full 5-layer crossbar stress test on the real fabric:
   python3 scripts/run_fabric_sim.py
 
   # Run with a custom .bin or .hex bitstream file:
-  python3 scripts/run_fabric_sim.py --tb tb_npu_flex_crossbar_stress --bitstream SOFT_LOGIC/build/flex/flex.bin
+  python3 scripts/run_fabric_sim.py --tb tb_npu_flex_crossbar_stress --bitstream SOFT_LOGIC/build/flex/flex.bin --quick
 """
     parser = argparse.ArgumentParser(
         prog="python3 scripts/run_fabric_sim.py",
@@ -119,6 +122,12 @@ Examples:
         default=REPO_ROOT / "SOFT_LOGIC" / "build" / "flex" / "flex.hex",
         metavar="FILE",
         help="Bitstream .hex or .bin file to load (default: SOFT_LOGIC/build/flex/flex.hex).",
+    )
+    parser.add_argument(
+        "-q",
+        "--quick",
+        action="store_true",
+        help="Fast single-tile smoke test mode (QUICK_SMOKE=1): verifies 1 tile (2,048 golden outputs) in minutes instead of hours.",
     )
     parser.add_argument(
         "-o",
@@ -166,6 +175,7 @@ Examples:
 
     print("=" * 80)
     print(f"[SIM] Compiling & running '{args.tb}' on real eFPGA_top fabric")
+    print(f"      Mode      : {'QUICK SMOKE (1 tile, 2,048 golden outputs)' if args.quick else 'FULL SUITE'}")
     print(f"      Bitstream : {bs_src}")
     print(f"      Work Dir  : {sim_dir.relative_to(REPO_ROOT)}")
     print("=" * 80)
@@ -185,12 +195,19 @@ Examples:
         )
 
     snap_name = f"{args.tb}_xsim"
+    xelab_lines = [
+        "--nolog",
+        "-debug off",
+        "-O3",
+        "-timescale 1ns/1ps",
+        "-generic_top FABRIC_SIM=1",
+    ]
+    if args.quick:
+        xelab_lines.append("-generic_top QUICK_SMOKE=1")
+    xelab_lines.extend([f"-s {snap_name}", args.tb])
+
     xelab_opt = sim_dir / "xelab.opt"
-    xelab_opt.write_text(
-        f"--nolog\n-timescale 1ns/1ps\n-generic_top FABRIC_SIM=1\n-s {snap_name}\n{args.tb}\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    xelab_opt.write_text("\n".join(xelab_lines) + "\n", encoding="utf-8", newline="\n")
     subprocess.run(
         xelab_cmd + ["-f", "xelab.opt"],
         cwd=sim_dir,
@@ -199,12 +216,18 @@ Examples:
     )
 
     sim_log = sim_dir / "sim.log"
+    xsim_lines = [
+        snap_name,
+        "-R",
+        "--log sim.log",
+        f"--testplusarg MEM_DIR={mem_dir}",
+        f"--testplusarg bitstream_hex={hex_arg}",
+    ]
+    if args.quick:
+        xsim_lines.append("--testplusarg quick_smoke")
+
     xsim_opt = sim_dir / "xsim.opt"
-    xsim_opt.write_text(
-        f"{snap_name}\n-R\n--log sim.log\n--testplusarg MEM_DIR={mem_dir}\n--testplusarg bitstream_hex={hex_arg}\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    xsim_opt.write_text("\n".join(xsim_lines) + "\n", encoding="utf-8", newline="\n")
     subprocess.run(
         xsim_cmd + ["-f", "xsim.opt"],
         cwd=sim_dir,

@@ -65,9 +65,10 @@ Thumbs.db
 desktop.ini
 *.swp
 
-# Generated Mirrors & Switch Wrappers (reproducible from scripts/)
+# Generated Mirrors, Switch Wrappers & Subsystem Exports (reproducible from scripts/)
 VERILOG_MIRROR_GENERATED/
 UNIFIED_GENERATED/
+exports/
 
 # bin files
 *.bin

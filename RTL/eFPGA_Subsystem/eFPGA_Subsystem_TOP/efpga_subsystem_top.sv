@@ -519,17 +519,19 @@ module efpga_subsystem_top #(
         .quant_shift_in      (npu_quant_shift_in),
         .quant_shift_en      (npu_quant_shift_en),
 
-        .psum_A_addr         (npu_addr[7:0]),
-        .psum_A_we           (npu_we[7:0]),
-        .psum_A_wdata        (npu_wdata[31:0]),
-        .psum_A_read_bank_sel(npu_read_bank_sel[2:0]),
-        .psum_A_rdata        (npu_rdata[31:0]),
+        // North (Tile_X5Y0_NPU_ACCUM_N) occupies the upper slice of eFPGA_top;
+        // South (Tile_X5Y17_NPU_ACCUM_S) occupies the lower slice.
+        .psum_A_addr         (npu_addr[15:8]),
+        .psum_A_we           (npu_we[15:8]),
+        .psum_A_wdata        (npu_wdata[63:32]),
+        .psum_A_read_bank_sel(npu_read_bank_sel[5:3]),
+        .psum_A_rdata        (npu_rdata[63:32]),
 
-        .psum_B_addr         (npu_addr[15:8]),
-        .psum_B_we           (npu_we[15:8]),
-        .psum_B_wdata        (npu_wdata[63:32]),
-        .psum_B_read_bank_sel(npu_read_bank_sel[5:3]),
-        .psum_B_rdata        (npu_rdata[63:32]),
+        .psum_B_addr         (npu_addr[7:0]),
+        .psum_B_we           (npu_we[7:0]),
+        .psum_B_wdata        (npu_wdata[31:0]),
+        .psum_B_read_bank_sel(npu_read_bank_sel[2:0]),
+        .psum_B_rdata        (npu_rdata[31:0]),
 
         .ext_act_sram_we     (npu_act_we),
         .ext_act_sram_addr   (npu_act_addr),

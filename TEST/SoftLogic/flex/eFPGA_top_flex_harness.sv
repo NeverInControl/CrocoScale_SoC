@@ -296,16 +296,18 @@ module eFPGA_top #(
         .npu_ext_act_sram_wdata  (NPU_ACT_WDATA),
         .npu_act_sram_rdata      (NPU_ACT_RDATA),
         .npu_out_act             (NPU_OUT_ACT),
-        .npu_psum_A_addr         (NPU_ADDR[7:0]),
-        .npu_psum_A_we           (NPU_WE[7:0]),
-        .npu_psum_A_wdata        (NPU_WDATA[31:0]),
-        .npu_psum_A_read_bank_sel(NPU_READ_BANK_SEL[2:0]),
-        .npu_psum_A_rdata        (NPU_RDATA[31:0]),
-        .npu_psum_B_addr         (NPU_ADDR[15:8]),
-        .npu_psum_B_we           (NPU_WE[15:8]),
-        .npu_psum_B_wdata        (NPU_WDATA[63:32]),
-        .npu_psum_B_read_bank_sel(NPU_READ_BANK_SEL[5:3]),
-        .npu_psum_B_rdata        (NPU_RDATA[63:32]),
+        // North (Tile_X5Y0_NPU_ACCUM_N) occupies the upper slice of eFPGA_top;
+        // South (Tile_X5Y17_NPU_ACCUM_S) occupies the lower slice.
+        .npu_psum_A_addr         (NPU_ADDR[15:8]),
+        .npu_psum_A_we           (NPU_WE[15:8]),
+        .npu_psum_A_wdata        (NPU_WDATA[63:32]),
+        .npu_psum_A_read_bank_sel(NPU_READ_BANK_SEL[5:3]),
+        .npu_psum_A_rdata        (NPU_RDATA[63:32]),
+        .npu_psum_B_addr         (NPU_ADDR[7:0]),
+        .npu_psum_B_we           (NPU_WE[7:0]),
+        .npu_psum_B_wdata        (NPU_WDATA[31:0]),
+        .npu_psum_B_read_bank_sel(NPU_READ_BANK_SEL[2:0]),
+        .npu_psum_B_rdata        (NPU_RDATA[31:0]),
 
         // Fabric Facing Ports
         .fab_axil_awaddr         (fab_axil_awaddr),
