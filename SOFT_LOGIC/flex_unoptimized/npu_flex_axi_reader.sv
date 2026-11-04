@@ -319,8 +319,8 @@ module npu_flex_axi_reader #(
     assign quant_shift_in_o  = m_axi_rdata[29:0];
     assign quant_shift_en_o  = (rd_state == RD_QUANT_R) && m_axi_rvalid;
 
-    assign bias_wdata_o      = $signed(m_axi_rdata);
     always_comb begin
+        bias_wdata_o = $signed(m_axi_rdata);
         for (int c = 0; c < ARRAY_WIDTH; c++) begin
             bias_we_o[c] = (rd_state == RD_BIAS_R) && m_axi_rvalid && (beat_idx[2:0] == 3'(c));
         end

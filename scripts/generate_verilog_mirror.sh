@@ -608,7 +608,8 @@ else
         else
             # Tier 2: Structural elaboration, parameter resolution, and interface audit via Icarus Verilog
             tier2_log=$(mktemp)
-            if "${IVERILOG_BIN}" -g2012 -t null "${iv_lib_args[@]}" "${shared_models[@]}" "${v_file}" > "${tier2_log}" 2>&1; then
+            v_dir="$(dirname "${v_file}")"
+            if "${IVERILOG_BIN}" -g2012 -t null -y "${v_dir}" -I "${v_dir}" "${iv_lib_args[@]}" "${shared_models[@]}" "${v_file}" > "${tier2_log}" 2>&1; then
                 echo "  [STRUCT PASS] ${rel_path} (${mod_name})"
                 struct_passed=$((struct_passed + 1))
             else
