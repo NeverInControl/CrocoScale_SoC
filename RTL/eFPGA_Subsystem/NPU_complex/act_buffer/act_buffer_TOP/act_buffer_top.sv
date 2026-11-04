@@ -37,12 +37,7 @@ module act_buffer_top #(
     genvar i;
     generate
         for (i = 0; i < NUM_ACT_BANKS; i++) begin : gen_containers
-            act_bank_container #(
-                .ACTIVATION_WIDTH(ACTIVATION_WIDTH),
-                .ACT_WORDS       (ACT_WORDS),
-                .WEIGHT_WIDTH    (WEIGHT_WIDTH),
-                .XBAR_SEL_WIDTH  (XBAR_SEL_WIDTH)
-            ) container_inst (
+            act_bank_container container_inst (
                 .clk_i               (act_clk_i[i]),
                 .act_we              (ext_act_sram_we[i]),
                 .act_addr            (ext_act_sram_addr[i]),
